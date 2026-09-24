@@ -58,12 +58,15 @@ async def list_messages(conversation_id: int) -> list[Message]:
 
 
 async def search_faq(keyword: str) -> list[Faq]:
-    """Match the supplied text literally in FAQ questions (no semantic rewrite)."""
+    """Match text literally and return at most ten FAQ rows in stable order."""
 
     literal = keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_")
     async with db.async_session() as session:
         result = await session.execute(
-            select(Faq).where(Faq.question.like(f"%{literal}%", escape="!")).order_by(Faq.id)
+            select(Faq)
+            .where(Faq.question.like(f"%{literal}%", escape="!"))
+            .order_by(Faq.id)
+            .limit(10)
         )
         return list(result.scalars())
 

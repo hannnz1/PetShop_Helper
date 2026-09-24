@@ -49,6 +49,18 @@ async def test_search_faq_literal_like_hit_and_miss(db_session_factory, db_clean
 
 
 @pytest.mark.asyncio
+async def test_search_faq_caps_matching_rows(db_session_factory, db_clean):
+    async with db_session_factory() as session:
+        session.add_all(
+            [Faq(question=f"退货问题 {number}", answer="联系客户服务", category="售后") for number in range(15)]
+        )
+        await session.commit()
+    rows = await repo.search_faq("退货")
+    assert len(rows) == 10
+    assert [row.question for row in rows] == [f"退货问题 {number}" for number in range(10)]
+
+
+@pytest.mark.asyncio
 async def test_create_ticket_writes_and_flips_conversation_status(db_session_factory, db_clean):
     cid = await repo.create_conversation("u1")
     no = await repo.create_ticket(cid, "要退货", "售后")
