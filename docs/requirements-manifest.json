@@ -1,0 +1,82 @@
+[
+  {
+    "chapter": 1,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\1\\实战演练：动手实现对话模块.md",
+    "sha256": "746293C404AEB37AB8B2AAEB9BB552A3C1DEB326D4E7B3BD8196DBA20CCD0D60",
+    "has_spec": true,
+    "has_plan": true,
+    "characters": 33664
+  },
+  {
+    "chapter": 2,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\2\\实战演练：动手实现业务工具.md",
+    "sha256": "764FF1A74BB68379D785B8E3DF9DDBAA3C251B68B41AC0F5D2758D7B8DABA312",
+    "has_spec": true,
+    "has_plan": true,
+    "characters": 78837
+  },
+  {
+    "chapter": 3,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\3\\实战演练：动手跑通 RAG 链路.md",
+    "sha256": "4F1BC5BA2B2274CD7E8265C4DD6F002572E819E122D140D901E07670718F5D54",
+    "has_spec": true,
+    "has_plan": true,
+    "characters": 86997
+  },
+  {
+    "chapter": 4,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\4\\实战演练：动手实现混合检索.md",
+    "sha256": "72C3482A7502AF16FAAF545551E55A6E3D9C63AB3A10B865E32B80183176FA57",
+    "has_spec": true,
+    "has_plan": true,
+    "characters": 113011
+  },
+  {
+    "chapter": 5,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\5\\理论学习：Workflow 编排与 ReAct 循环.md",
+    "sha256": "ACA6463F5AD035F799A477FDA96498A853D8B386B5E6E43B2DF2C33EFA0DF639",
+    "has_spec": false,
+    "has_plan": false,
+    "characters": 8325
+  },
+  {
+    "chapter": 6,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\6.md",
+    "sha256": "55C5FAACE444BF737700A3C676B124AEAF44191C61F036DC63E938CE2152618A",
+    "has_spec": false,
+    "has_plan": false,
+    "characters": 11236
+  },
+  {
+    "chapter": 7,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\7\\实战演练：动手实现上下文管理.md",
+    "sha256": "969E006D1775201F5F4B6EDFCC572F6EEFF207DEB967CA7984599415E3793F80",
+    "has_spec": true,
+    "has_plan": true,
+    "characters": 51040
+  },
+  {
+    "chapter": 8,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\8\\实战演练：动手实现工具系统.md",
+    "sha256": "DEA5FF990B2E9BDE73CBE338B472B1932F676153E2DC1801206E67CEDBFA139E",
+    "has_spec": true,
+    "has_plan": true,
+    "characters": 81471
+  },
+  {
+    "chapter": 9,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\9\\理论学习：可观测性与数据飞轮.md",
+    "sha256": "B6CE734F8905118C0A36B2C72480E2F71F7606290470188F185B6AC7353BE2A6",
+    "has_spec": false,
+    "has_plan": false,
+    "characters": 8363
+  },
+  {
+    "chapter": 10,
+    "source": "C:\\Users\\Administrator\\Documents\\PetShop_Helper开发文档\\10.md",
+    "sha256": "7752A62F834377909F8559D85FF66237E14027B2AD8671A949B407F7D0011F8A",
+    "has_spec": false,
+    "has_plan": false,
+    "characters": 13929
+  }
+]

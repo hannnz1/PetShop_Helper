@@ -32,11 +32,13 @@
 
 ## 状态
 
-- [ ] Task 1 配置
-- [ ] Task 2 Schema
-- [ ] Task 3 Memory
-- [ ] Task 4 Prompt
-- [ ] Task 5 LLM 与启动
-- [ ] Task 6 SSE
-- [ ] Task 7 结构化提取
-- [ ] Task 8 验收与交付
+- [x] Task 1 配置
+- [x] Task 2 Schema
+- [x] Task 3 Memory
+- [x] Task 4 Prompt
+- [x] Task 5 LLM 与启动
+- [x] Task 6 SSE
+- [x] Task 7 结构化提取
+- [x] Task 8 验收工具与离线验证
+
+真实模型验收待 `.env` 配置后执行；全量离线测试 80 项通过，真实 localhost socket 的假模型时序测试通过。
