@@ -1,9 +1,11 @@
-"""Deterministic mock business lookups for chapter 2 tool calling."""
+"""Mock business lookups and persisted FAQ lookup for chapter 2."""
 
 import random
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+
+from app.db import repository
 
 
 class OrderInput(BaseModel):
@@ -16,6 +18,10 @@ class ProductInput(BaseModel):
 
 class LogisticsInput(BaseModel):
     order_id: str = Field(description="订单号，用于查询该订单的物流轨迹")
+
+
+class FaqInput(BaseModel):
+    keyword: str = Field(description="用于检索常见问题的关键词，例如退货政策、发货时效")
 
 
 _LOGISTICS_PHASES = ("已揽件", "运输中", "派送中", "已签收")
@@ -74,3 +80,13 @@ async def query_logistics(order_id: str) -> dict:
             for index in range(phase + 1)
         ],
     }
+
+
+@tool(args_schema=FaqInput)
+async def query_faq(keyword: str) -> dict:
+    """按关键词查询 FAQ。用户询问政策、规则或操作流程等通用问题时使用。"""
+
+    rows = await repository.search_faq(keyword)
+    if not rows:
+        return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
+    return {"hits": [{"question": row.question, "answer": row.answer} for row in rows]}
