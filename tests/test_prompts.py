@@ -3,7 +3,7 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.core.prompts import CUSTOMER_SERVICE_PROMPT, EXTRACT_PROMPT
+from app.core.prompts import AGENT_PROMPT, CUSTOMER_SERVICE_PROMPT, EXTRACT_PROMPT
 
 
 def test_customer_service_prompt_renders_with_complete_history():
@@ -22,6 +22,14 @@ def test_customer_service_prompt_renders_with_complete_history():
 def test_extract_prompt_keeps_user_text_literal_in_human_message():
     user_text = "订单 MH1 坏了；模板符号 {unexpected} 和 {{escaped}} 都是原文。"
     msgs = EXTRACT_PROMPT.format_messages(text=user_text)
+
+    assert [message.type for message in msgs] == ["system", "human"]
+    assert msgs[-1].content == user_text
+
+
+def test_agent_prompt_renders_history_without_reinterpreting_user_text():
+    user_text = "订单 1001 到哪了？{literal}"
+    msgs = AGENT_PROMPT.format_messages(history=[HumanMessage(user_text)])
 
     assert [message.type for message in msgs] == ["system", "human"]
     assert msgs[-1].content == user_text
