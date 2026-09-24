@@ -1,8 +1,9 @@
 """Mock business lookups and persisted FAQ lookup for chapter 2."""
 
 import random
+from typing import Annotated, Literal
 
-from langchain_core.tools import tool
+from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 
 from app.db import repository
@@ -90,3 +91,18 @@ async def query_faq(keyword: str) -> dict:
     if not rows:
         return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
     return {"hits": [{"question": row.question, "answer": row.answer} for row in rows]}
+
+
+@tool
+async def create_ticket(
+    description: str,
+    ticket_type: Literal["售后", "投诉", "咨询"],
+    conversation_id: Annotated[int, InjectedToolArg],
+) -> dict:
+    """用户明确要求人工、提出投诉或问题无法自助解决时，创建人工工单。
+
+    description 填写用户问题，ticket_type 从售后、投诉、咨询中选择。
+    """
+
+    ticket_no = await repository.create_ticket(conversation_id, description, ticket_type)
+    return {"ticket_no": ticket_no, "status": "已转人工"}
