@@ -1,6 +1,7 @@
 """Isolated MySQL fixtures for chapter-two integration tests."""
 
 from pathlib import Path
+import ipaddress
 import re
 
 import pytest
@@ -27,6 +28,41 @@ def isolated_test_url(raw_url: str) -> URL:
     return url
 
 
+def _database_target(url: URL) -> tuple[str, int, str]:
+    """Normalize common MySQL endpoint aliases for an isolation comparison."""
+
+    host = (url.host or "localhost").lower().rstrip(".")
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if host in {"localhost", "localhost.localdomain"}:
+            host = "loopback"
+    else:
+        if address.is_loopback or address.is_unspecified:
+            host = "loopback"
+        else:
+            host = address.compressed
+    return host, url.port or 3306, (url.database or "").casefold()
+
+
+def validate_database_isolation(test_raw_url: str, app_raw_url: str) -> URL:
+    """Require distinct schemas before creating any engine or running any SQL.
+
+    Rejecting the same schema name even on different named hosts is deliberately
+    conservative: DNS aliases and tunnels can map those names to one server.
+    """
+
+    test_url = isolated_test_url(test_raw_url)
+    app_url = make_url(app_raw_url)
+    if app_url.drivername != "mysql+asyncmy" or not app_url.database:
+        raise ValueError("DATABASE_URL must name the application MySQL database")
+    test_target = _database_target(test_url)
+    app_target = _database_target(app_url)
+    if test_target == app_target or test_target[2] == app_target[2]:
+        raise ValueError("TEST_DATABASE_URL must not target the application database")
+    return test_url
+
+
 def ddl_statements() -> list[str]:
     """Read the authoritative SQL file, preserving SQL but removing full-line comments."""
 
@@ -39,7 +75,8 @@ def ddl_statements() -> list[str]:
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def _test_engine():
-    url = isolated_test_url(get_settings().test_database_url)
+    settings = get_settings()
+    url = validate_database_isolation(settings.test_database_url, settings.database_url)
     name = url.database
     admin_url = URL.create(
         drivername=url.drivername,
