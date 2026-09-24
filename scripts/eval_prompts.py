@@ -9,10 +9,10 @@ import httpx
 
 try:
     from scripts.demo_chat import StreamError, stream_turn
-    from scripts.eval_extract import ConfigurationError, require_live_config, validate_ticket
+    from scripts.eval_extract import ConfigurationError, live_client, require_live_config, validate_ticket
 except ModuleNotFoundError:  # python scripts/eval_prompts.py
     from demo_chat import StreamError, stream_turn
-    from eval_extract import ConfigurationError, require_live_config, validate_ticket
+    from eval_extract import ConfigurationError, live_client, require_live_config, validate_ticket
 
 CASES = Path(__file__).resolve().parents[1] / "tests/data/prompt_cases.json"
 
@@ -53,7 +53,7 @@ def main() -> int:
     try:
         require_live_config()
         dataset = json.loads(CASES.read_text(encoding="utf-8"))
-        with httpx.Client(base_url=args.base_url, timeout=60) as client:
+        with live_client(args.base_url) as client:
             return evaluate(dataset["cases"], client)
     except (ConfigurationError, OSError, json.JSONDecodeError, KeyError) as exc:
         print(f"无法运行真实评估: {exc}", file=sys.stderr)

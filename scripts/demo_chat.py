@@ -8,9 +8,9 @@ import sys
 import httpx
 
 try:
-    from scripts.eval_extract import ConfigurationError, require_live_config
+    from scripts.eval_extract import ConfigurationError, live_client, require_live_config
 except ModuleNotFoundError:  # python scripts/demo_chat.py
-    from eval_extract import ConfigurationError, require_live_config
+    from eval_extract import ConfigurationError, live_client, require_live_config
 
 
 class StreamError(RuntimeError):
@@ -77,7 +77,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         require_live_config()
-        with httpx.Client(base_url=args.base_url, timeout=60) as client:
+        with live_client(args.base_url) as client:
             run_demo(client, f"demo-{os.getpid()}")
     except (ConfigurationError, StreamError) as exc:
         print(f"演示失败: {exc}", file=sys.stderr)

@@ -15,6 +15,11 @@ class ConfigurationError(ValueError):
     pass
 
 
+def live_client(base_url: str) -> httpx.Client:
+    """Create a live API client without inheriting machine proxy settings."""
+    return httpx.Client(base_url=base_url, timeout=60, trust_env=False)
+
+
 def require_live_config(path: Path = ROOT / ".env") -> None:
     """Require an explicit, non-example .env before any live request."""
     if not path.is_file():
@@ -78,7 +83,7 @@ def main() -> int:
     try:
         require_live_config()
         samples = json.loads(SAMPLES.read_text(encoding="utf-8"))
-        with httpx.Client(base_url=args.base_url, timeout=60) as client:
+        with live_client(args.base_url) as client:
             return evaluate(samples, client)
     except (ConfigurationError, OSError, json.JSONDecodeError) as exc:
         print(f"无法运行真实评估: {exc}")

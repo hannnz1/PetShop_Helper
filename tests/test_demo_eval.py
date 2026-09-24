@@ -1,6 +1,7 @@
 """Offline contract tests for the live evaluation command-line tools."""
 
 import json
+import sys
 
 import httpx
 import pytest
@@ -10,6 +11,38 @@ from scripts import demo_chat, eval_extract, eval_prompts
 
 def _client(handler):
     return httpx.Client(transport=httpx.MockTransport(handler), base_url="http://testserver")
+
+
+@pytest.mark.parametrize("module", [eval_extract, demo_chat, eval_prompts])
+def test_live_cli_clients_ignore_proxy_environment(monkeypatch, module):
+    """Every live CLI must connect directly to loopback despite inherited proxies."""
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setenv("ALL_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setattr(sys, "argv", ["live-cli"])
+    kwargs_seen = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            kwargs_seen.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(eval_extract, "require_live_config", lambda: None)
+    monkeypatch.setattr(eval_extract, "SAMPLES", type("P", (), {"read_text": lambda *a, **k: "[]"})())
+    monkeypatch.setattr(eval_prompts, "require_live_config", lambda: None)
+    monkeypatch.setattr(eval_prompts, "CASES", type("P", (), {"read_text": lambda *a, **k: '{"cases": []}'})())
+    monkeypatch.setattr(demo_chat, "run_demo", lambda *args: None)
+    monkeypatch.setattr(eval_extract.httpx, "Client", FakeClient)
+
+    assert module.main() == 0
+    assert len(kwargs_seen) == 1
+    assert kwargs_seen[0]["base_url"] == "http://127.0.0.1:8000"
+    assert kwargs_seen[0]["trust_env"] is False
 
 
 def test_extract_evaluator_reports_pass_and_failure(capsys):
