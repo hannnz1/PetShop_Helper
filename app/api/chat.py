@@ -2,7 +2,7 @@
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -21,17 +21,16 @@ _ERROR_FRAME = 'event: error\ndata: {"message": "上游模型暂时不可用，�
 
 
 class _SessionStreamingResponse(StreamingResponse):
-    def __init__(self, *args, active_sessions: set[str], session_id: str, **kwargs):
+    def __init__(self, *args, release_session: Callable[[], None], **kwargs):
         super().__init__(*args, **kwargs)
-        self._active_sessions = active_sessions
-        self._session_id = session_id
+        self._release_session = release_session
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         try:
             await super().__call__(scope, receive, send)
         finally:
             # Response startup can fail before its body generator is entered.
-            self._active_sessions.discard(self._session_id)
+            self._release_session()
 
 
 def get_model(request: Request) -> BaseChatModel:
@@ -77,7 +76,15 @@ async def chat(
     active = request.app.state.active_sessions
     if req.session_id in active:
         raise HTTPException(status_code=409, detail="会话正在生成回复")
+    owners = request.app.state.active_session_owners
+    owner = object()
     active.add(req.session_id)
+    owners[req.session_id] = owner
+
+    def release_session() -> None:
+        if owners.get(req.session_id) is owner:
+            owners.pop(req.session_id)
+            active.discard(req.session_id)
 
     async def event_stream() -> AsyncIterator[str]:
         chunks: list[str] = []
@@ -89,24 +96,23 @@ async def chat(
                     yield f"data: {json.dumps({'delta': text}, ensure_ascii=False)}\n\n"
             if not chunks:
                 raise ValueError("empty upstream response")
+            complete = [*messages[1:], AIMessage(content="".join(chunks))]
+            history_budget = config.token_budget + config.chat_max_tokens - estimate_tokens([system])
+            request.app.state.store.replace(
+                req.session_id,
+                trim_history(complete, max_tokens=max(history_budget, 0)),
+            )
         except Exception:
             # An upstream exception may contain credentials or response bodies.
             logger.warning("Chat upstream stream failed")
             yield _ERROR_FRAME
             return
-
-        complete = [*messages[1:], AIMessage(content="".join(chunks))]
-        history_budget = config.token_budget + config.chat_max_tokens - estimate_tokens([system])
+        release_session()
         yield "data: [DONE]\n\n"
-        request.app.state.store.replace(
-            req.session_id,
-            trim_history(complete, max_tokens=max(history_budget, 0)),
-        )
 
     return _SessionStreamingResponse(
         event_stream(),
-        active_sessions=active,
-        session_id=req.session_id,
+        release_session=release_session,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

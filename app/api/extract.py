@@ -17,9 +17,15 @@ def get_extractor(request: Request) -> Runnable:
     """Bind the app's shared model to the configured structured output mode."""
     config = request.app.state.settings
     model = request.app.state.model
-    return EXTRACT_PROMPT | model.with_structured_output(
-        AfterSalesTicket, method=config.structured_output_method
-    )
+    try:
+        return EXTRACT_PROMPT | model.with_structured_output(
+            AfterSalesTicket, method=config.structured_output_method
+        )
+    except Exception:
+        logger.warning("Extract upstream binding failed")
+        raise HTTPException(
+            status_code=502, detail="上游模型暂时不可用，请稍后重试"
+        ) from None
 
 
 @router.post("/api/extract", response_model=AfterSalesTicket)

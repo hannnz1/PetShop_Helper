@@ -152,6 +152,83 @@ async def test_same_session_conflict_and_cancellation_release():
 
 
 @pytest.mark.asyncio
+async def test_done_commits_history_and_old_cleanup_preserves_new_owner():
+    second_entered = asyncio.Event()
+    release_second = asyncio.Event()
+
+    class TwoTurnModel:
+        calls = []
+
+        async def astream(self, messages):
+            self.calls.append(deepcopy(messages))
+            if len(self.calls) == 1:
+                yield AIMessageChunk(content="第一答")
+            else:
+                second_entered.set()
+                await release_second.wait()
+                yield AIMessageChunk(content="第二答")
+
+    model = TwoTurnModel()
+    app = create_app(settings=config(), model=model)
+    body = json.dumps({"session_id": "s", "message": "第一问"}).encode()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.4"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/api/chat",
+        "raw_path": b"/api/chat",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"content-type", b"application/json")],
+        "client": ("test", 1234),
+        "server": ("test", 80),
+    }
+    sent = False
+    second = None
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        await asyncio.Future()
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            async def send(message):
+                nonlocal second
+                if message["type"] != "http.response.body" or b"[DONE]" not in message.get("body", b""):
+                    return
+                assert [m.content for m in app.state.store.get("s")] == ["第一问", "第一答"]
+                second = asyncio.create_task(
+                    client.post("/api/chat", json={"session_id": "s", "message": "第二问"})
+                )
+                entered = asyncio.create_task(second_entered.wait())
+                done, pending = await asyncio.wait({entered, second}, timeout=2, return_when=asyncio.FIRST_COMPLETED)
+                for task in pending:
+                    if task is entered:
+                        task.cancel()
+                assert entered in done, f"follow-up did not start: {second.result().status_code if second.done() else 'timeout'}"
+
+            try:
+                await app(scope, receive, send)
+                assert second is not None
+                assert "s" in app.state.active_sessions
+                assert [m.content for m in model.calls[1][1:]] == ["第一问", "第一答", "第二问"]
+            finally:
+                release_second.set()
+                if second is not None:
+                    await second
+            assert second.result().status_code == 200
+            assert app.state.active_sessions == set()
+            assert [m.content for m in app.state.store.get("s")] == [
+                "第一问", "第一答", "第二问", "第二答"
+            ]
+
+
+@pytest.mark.asyncio
 async def test_response_start_failure_releases_session_before_generator_runs():
     model = StreamingFake([["恢复"]])
     app = create_app(settings=config(), model=model)

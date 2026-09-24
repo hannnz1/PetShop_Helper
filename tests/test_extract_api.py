@@ -92,6 +92,19 @@ def test_extract_upstream_failure_is_sanitized_502(caplog):
     assert "private-key" not in response.text + caplog.text
 
 
+def test_extract_binding_failure_is_sanitized_502(caplog):
+    class BrokenBinding:
+        def with_structured_output(self, schema, *, method):
+            raise RuntimeError("private-key unsupported structured output method")
+
+    app = create_app(settings=config(), model=BrokenBinding())
+    with TestClient(app) as client:
+        response = client.post("/api/extract", json={"text": "请退款"})
+    assert response.status_code == 502
+    assert response.json() == {"detail": "上游模型暂时不可用，请稍后重试"}
+    assert "private-key" not in response.text + caplog.text
+
+
 def test_extract_empty_and_over_budget_rejected_before_model_call():
     calls = []
     model = StubModel(RunnableLambda(lambda _: calls.append(1)))

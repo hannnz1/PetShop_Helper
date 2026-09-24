@@ -38,6 +38,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
         application.state.model = shared_model
         application.state.store = SessionStore()
         application.state.active_sessions = set()
+        application.state.active_session_owners = {}
         try:
             yield
         finally:
