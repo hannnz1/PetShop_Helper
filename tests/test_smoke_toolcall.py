@@ -45,8 +45,13 @@ class FakeModel:
     [
         ("gpt-4o-mini", "https://api.openai.com/v1"),
         ("glm-5.2", "https://api.openai.com/v1"),
-        ("glm-5.2", "https://api.z.ai.evil.example/api/paas/v4"),
-        ("glm-5.2", "https://api.z.ai/v1"),
+        ("glm-5.2", "https://proxy.openai.com/v1"),
+        ("glm-5.2", "http://glm.example.com/v1"),
+        ("glm-5.2", "https://user:secret@glm.example.com/v1"),
+        ("glm-5.2", "https://glm.example.com/v1?key=secret"),
+        ("glm-5.2", "https://glm.example.com/v1#token"),
+        ("glm-5.2", "https://localhost:8000/v1"),
+        ("glm-5.2", "https://"),
     ],
 )
 async def test_rejects_wrong_configuration_before_client_or_network(
@@ -79,7 +84,21 @@ async def test_correct_structured_call_is_go(capsys):
     )
     model = FakeModel(result)
     assert await run_smoke(settings(), model_factory=lambda **kwargs: model)
-    assert "GO" in capsys.readouterr().out
+    assert capsys.readouterr().out.startswith(
+        "GO: configured glm-5.2 endpoint returned structured"
+    )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["https://api.z.ai/api/paas/v4", "https://glm-gateway.example.com/v1"],
+)
+async def test_compatible_configured_endpoint_can_reach_model(base_url, capsys):
+    model = FakeModel(
+        SimpleNamespace(tool_calls=[{"name": "add", "args": {"a": 23, "b": 19}}])
+    )
+    assert await run_smoke(settings(base_url=base_url), model_factory=lambda **kwargs: model)
+    assert capsys.readouterr().out.startswith("GO: configured glm-5.2 endpoint")
 
 
 @pytest.mark.parametrize(
@@ -90,6 +109,12 @@ async def test_correct_structured_call_is_go(capsys):
         SimpleNamespace(tool_calls=[{"name": "add", "args": "23,19"}]),
         SimpleNamespace(tool_calls=[{"name": "add", "args": {"a": True, "b": 19}}]),
         SimpleNamespace(tool_calls="not-a-list"),
+        SimpleNamespace(
+            tool_calls=[
+                {"name": "add", "args": {"a": 23, "b": 19}},
+                {"name": "other", "args": {}},
+            ]
+        ),
         object(),
     ],
 )

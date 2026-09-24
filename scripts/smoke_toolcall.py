@@ -3,6 +3,7 @@
 import asyncio
 import sys
 from pathlib import Path
+from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from langchain_core.tools import tool
@@ -28,18 +29,31 @@ def add(a: int, b: int) -> int:
 
 
 def is_glm_endpoint(base_url: str) -> bool:
-    """Accept documented Z.ai chat API roots, including its coding-plan route."""
+    """Allow an explicitly configured HTTPS upstream, excluding OpenAI and local hosts.
+
+    This checks destination safety, not model identity. The live tool-call response
+    is the capability probe for the selected upstream.
+    """
     try:
+        if base_url != base_url.strip() or any(c.isspace() for c in base_url):
+            return False
         url = urlsplit(base_url)
+        host = url.hostname
+        if not host or host == "localhost" or host.endswith(".localhost"):
+            return False
+        if host == "openai.com" or host.endswith(".openai.com"):
+            return False
+        try:
+            if ip_address(host).is_loopback:
+                return False
+        except ValueError:
+            pass
         return (
             url.scheme == "https"
-            and url.hostname == "api.z.ai"
-            and url.port in (None, 443)
             and url.username is None
             and url.password is None
             and url.query == ""
             and url.fragment == ""
-            and url.path.rstrip("/") in {"/api/paas/v4", "/api/coding/paas/v4"}
         )
     except ValueError:
         return False
@@ -48,28 +62,26 @@ def is_glm_endpoint(base_url: str) -> bool:
 def has_expected_tool_call(response: object) -> bool:
     """Require a parsed LangChain tool call with the requested name and integers."""
     calls = getattr(response, "tool_calls", None)
-    if not isinstance(calls, list):
+    if not isinstance(calls, list) or len(calls) != 1:
         return False
-    for call in calls:
-        if not isinstance(call, dict) or call.get("name") != "add":
-            continue
-        args = call.get("args")
-        if (
-            isinstance(args, dict)
-            and set(args) == {"a", "b"}
-            and type(args["a"]) is int
-            and type(args["b"]) is int
-            and args["a"] == 23
-            and args["b"] == 19
-        ):
-            return True
-    return False
+    call = calls[0]
+    if not isinstance(call, dict) or call.get("name") != "add":
+        return False
+    args = call.get("args")
+    return (
+        isinstance(args, dict)
+        and set(args) == {"a", "b"}
+        and type(args["a"]) is int
+        and type(args["b"]) is int
+        and args["a"] == 23
+        and args["b"] == 19
+    )
 
 
 async def run_smoke(settings: Settings, model_factory=get_chat_model) -> bool:
     """Run the live gate; never print the key, request, or raw upstream data."""
     if settings.chat_model != "glm-5.2" or not is_glm_endpoint(settings.chat_base_url):
-        print("NO-GO: configure CHAT_MODEL=glm-5.2 and a Z.ai API base URL.")
+        print("NO-GO: configure CHAT_MODEL=glm-5.2 and a trusted HTTPS glm endpoint.")
         return False
 
     try:
@@ -80,7 +92,7 @@ async def run_smoke(settings: Settings, model_factory=get_chat_model) -> bool:
         return False
 
     if has_expected_tool_call(response):
-        print("GO: glm-5.2 returned structured add(a=23, b=19) tool_calls.")
+        print("GO: configured glm-5.2 endpoint returned structured add(a=23, b=19) tool_calls.")
         return True
     print("NO-GO: response did not contain the expected structured add tool_call.")
     return False
