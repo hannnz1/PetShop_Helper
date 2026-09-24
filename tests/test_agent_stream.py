@@ -2,9 +2,13 @@ import asyncio
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core import agent
+from app.core.memory import estimate_tokens
+from app.core.prompts import AGENT_SYSTEM
 from app.db import repository
+from app.tools.infra import ToolRun
 from tests.test_agent_orchestration import FakeModel
 
 
@@ -75,5 +79,26 @@ async def test_stream_failure_does_not_emit_done(db_session_factory, db_clean, m
     stream = agent.stream_agent_turn("u1", "投诉", None, model=model)
     assert (await anext(stream))["type"] == "tool"
     with pytest.raises(ConnectionError):
+        [event async for event in stream]
+    assert model.streams == []
+
+
+@pytest.mark.asyncio
+async def test_stream_convergence_overflow_after_tool_status_has_no_done(db_session_factory, db_clean, monkeypatch):
+    from app.config import get_settings
+
+    baseline = estimate_tokens([SystemMessage(AGENT_SYSTEM), HumanMessage("查订单")])
+    monkeypatch.setattr(agent, "get_settings", lambda: get_settings().model_copy(update={"token_budget": baseline + 100}))
+    model = FakeModel([AIMessage(content="审计", tool_calls=[
+        {"name": "query_order", "args": {"order_id": "1001"}, "id": "c1"}
+    ])], chunks=["不应发送"])
+
+    async def huge_tool(*args, **kwargs):
+        return ToolRun("c1", "query_order", True, ToolMessage(content="X" * 1000, tool_call_id="c1"))
+
+    monkeypatch.setattr(agent, "execute_tool_call", huge_tool)
+    stream = agent.stream_agent_turn("u1", "查订单", None, model=model)
+    assert (await anext(stream))["type"] == "tool"
+    with pytest.raises(agent.ContextBudgetExceeded):
         [event async for event in stream]
     assert model.streams == []

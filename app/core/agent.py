@@ -1,6 +1,5 @@
 """One tool-planning round with persisted conversations and two answer exits."""
 
-import asyncio
 from dataclasses import dataclass
 from typing import AsyncIterator
 
@@ -18,6 +17,10 @@ from app.tools.registry import get_all_tools
 
 class ConversationNotFound(Exception):
     """The requested conversation is missing or belongs to another user."""
+
+
+class ContextBudgetExceeded(ValueError):
+    """The current tool exchange cannot fit without losing required results."""
 
 
 @dataclass
@@ -111,17 +114,36 @@ async def _prepare_turn(
 
 
 async def _run_tools(turn: _PreparedTurn) -> list[ToolRun]:
-    runs = await asyncio.gather(
-        *(execute_tool_call(call, turn.conversation_id) for call in turn.planned.tool_calls)
-    )
-    for run in runs:
+    """Execute in model order so a failure cannot leave a late write running."""
+
+    runs: list[ToolRun] = []
+    for call in turn.planned.tool_calls:
+        run = await execute_tool_call(call, turn.conversation_id)
         await repository.append_message(
             turn.conversation_id,
             "tool",
             content=str(run.tool_message.content),
             tool_call_id=run.tool_call_id,
         )
+        runs.append(run)
     return runs
+
+
+def _convergence_messages(turn: _PreparedTurn, runs: list[ToolRun], max_tokens: int) -> list[BaseMessage]:
+    """Fit final-model input by removing only old complete conversation pairs."""
+
+    # _build_messages guarantees system, zero or more complete pairs, current.
+    system = turn.messages[0]
+    current = turn.messages[-1]
+    tool_messages = [run.tool_message for run in runs]
+    required = [system, current, turn.planned, *tool_messages]
+    if estimate_tokens(required) > max_tokens:
+        raise ContextBudgetExceeded("current tool exchange exceeds context token budget")
+
+    old = list(turn.messages[1:-1])
+    while old and estimate_tokens([system, *old, current, turn.planned, *tool_messages]) > max_tokens:
+        old = old[2:]
+    return [system, *old, current, turn.planned, *tool_messages]
 
 
 async def run_agent_turn(
@@ -135,9 +157,8 @@ async def run_agent_turn(
         return AgentResult(turn.conversation_id, _text(turn.planned), [], [])
 
     runs = await _run_tools(turn)
-    final: AIMessage = await model.ainvoke(
-        [*turn.messages, turn.planned, *(run.tool_message for run in runs)]
-    )
+    convergence = _convergence_messages(turn, runs, get_settings().token_budget)
+    final: AIMessage = await model.ainvoke(convergence)
     answer = _text(final)
     await repository.append_message(turn.conversation_id, "assistant", content=answer)
     return AgentResult(turn.conversation_id, answer, turn.planned.tool_calls, runs)
@@ -162,10 +183,9 @@ async def stream_agent_turn(
         yield {"type": "tool", "name": call.get("name") or ""}
 
     runs = await _run_tools(turn)
+    convergence = _convergence_messages(turn, runs, get_settings().token_budget)
     chunks: list[str] = []
-    async for chunk in model.astream(
-        [*turn.messages, turn.planned, *(run.tool_message for run in runs)]
-    ):
+    async for chunk in model.astream(convergence):
         part = _text(chunk)
         if part:
             chunks.append(part)

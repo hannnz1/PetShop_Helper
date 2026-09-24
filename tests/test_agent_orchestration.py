@@ -1,10 +1,17 @@
 """Task 11: orchestration against a real isolated MySQL repository."""
 
+import asyncio
+
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
+from sqlalchemy import select
 
 from app.core import agent
+from app.core.memory import estimate_tokens
+from app.core.prompts import AGENT_SYSTEM
 from app.db import repository
+from app.db.models import Ticket
+from app.tools.infra import ToolRun
 
 
 class FakeModel:
@@ -153,3 +160,108 @@ async def test_budget_trims_old_whole_pairs(db_session_factory, db_clean, monkey
     assert "最近问题" in contents and "最近答案" in contents
     assert "旧问题" * 200 not in contents
     assert len(model.invocations[0]) == 4
+
+
+@pytest.mark.asyncio
+async def test_convergence_drops_old_pairs_but_keeps_current_tool_result(db_session_factory, db_clean, monkeypatch):
+    from app.config import get_settings
+
+    cid = await repository.create_conversation("u1")
+    await repository.append_message(cid, "user", "历史问题")
+    await repository.append_message(cid, "assistant", "历史回答")
+    planned = AIMessage(content="审计前言", tool_calls=[
+        {"name": "query_order", "args": {"order_id": "1001"}, "id": "c1"}
+    ])
+    tool_message = ToolMessage(content="模拟订单状态：待发货" * 10, tool_call_id="c1")
+    required = estimate_tokens([
+        SystemMessage(AGENT_SYSTEM), HumanMessage("新问题"), planned, tool_message
+    ])
+    old_pair = [HumanMessage("历史问题"), AIMessage(content="历史回答")]
+    initial = estimate_tokens([SystemMessage(AGENT_SYSTEM), *old_pair, HumanMessage("新问题")])
+    budget = max(required, initial)
+    assert estimate_tokens([SystemMessage(AGENT_SYSTEM), *old_pair, HumanMessage("新问题"), planned, tool_message]) > budget
+    monkeypatch.setattr(agent, "get_settings", lambda: get_settings().model_copy(update={"token_budget": budget}))
+
+    async def fake_tool(*args, **kwargs):
+        return ToolRun("c1", "query_order", True, tool_message)
+
+    monkeypatch.setattr(agent, "execute_tool_call", fake_tool)
+    model = FakeModel([planned, AIMessage(content="最终答")])
+    result = await agent.run_agent_turn("u1", "新问题", cid, model=model)
+    convergence = model.invocations[1]
+    assert estimate_tokens(convergence) <= budget
+    assert "历史问题" not in [m.content for m in convergence]
+    assert convergence[-1] is tool_message
+    assert result.answer == "最终答"
+
+
+@pytest.mark.asyncio
+async def test_convergence_overflow_fails_explicitly_without_final(db_session_factory, db_clean, monkeypatch):
+    from app.config import get_settings
+
+    current = "查订单"
+    baseline = estimate_tokens([SystemMessage(AGENT_SYSTEM), HumanMessage(current)])
+    monkeypatch.setattr(agent, "get_settings", lambda: get_settings().model_copy(update={"token_budget": baseline + 100}))
+    planned = AIMessage(content="审计", tool_calls=[
+        {"name": "query_order", "args": {"order_id": "1001"}, "id": "c1"}
+    ])
+    model = FakeModel([planned, AIMessage(content="不应调用")])
+
+    async def huge_tool(*args, **kwargs):
+        return ToolRun("c1", "query_order", True, ToolMessage(content="X" * 1000, tool_call_id="c1"))
+
+    monkeypatch.setattr(agent, "execute_tool_call", huge_tool)
+    with pytest.raises(agent.ContextBudgetExceeded):
+        await agent.run_agent_turn("u1", current, None, model=model)
+    assert len(model.invocations) == 1
+
+
+@pytest.mark.asyncio
+async def test_fast_db_failure_prevents_later_write_and_orphan_ticket(db_session_factory, db_clean, monkeypatch):
+    planned = AIMessage(content="审计", tool_calls=[
+        {"name": "query_faq", "args": {"keyword": "退款"}, "id": "read"},
+        {"name": "create_ticket", "args": {"description": "投诉", "ticket_type": "投诉"}, "id": "write"},
+    ])
+    model = FakeModel([planned, AIMessage(content="不应调用")])
+    write_started = asyncio.Event()
+    original = agent.execute_tool_call
+
+    async def fail_then_late_write(call, conversation_id):
+        if call["id"] == "read":
+            raise ConnectionError("db unavailable")
+        write_started.set()
+        await asyncio.sleep(0.03)
+        return await original(call, conversation_id)
+
+    monkeypatch.setattr(agent, "execute_tool_call", fail_then_late_write)
+    with pytest.raises(ConnectionError):
+        await agent.run_agent_turn("u1", "投诉", None, model=model)
+    await asyncio.sleep(0.05)
+    assert not write_started.is_set()
+    async with db_session_factory() as session:
+        assert (await session.execute(select(Ticket))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_successful_write_is_audited_before_later_failure(db_session_factory, db_clean, monkeypatch):
+    planned = AIMessage(content="审计", tool_calls=[
+        {"name": "create_ticket", "args": {"description": "投诉", "ticket_type": "投诉"}, "id": "write"},
+        {"name": "query_faq", "args": {"keyword": "退款"}, "id": "read"},
+    ])
+    model = FakeModel([planned, AIMessage(content="不应调用")])
+    original = agent.execute_tool_call
+
+    async def write_then_fail(call, conversation_id):
+        if call["id"] == "read":
+            raise ConnectionError("db unavailable")
+        return await original(call, conversation_id)
+
+    monkeypatch.setattr(agent, "execute_tool_call", write_then_fail)
+    with pytest.raises(ConnectionError):
+        await agent.run_agent_turn("u1", "投诉", None, model=model)
+    async with db_session_factory() as session:
+        tickets = (await session.execute(select(Ticket))).scalars().all()
+    assert len(tickets) == 1
+    rows = await repository.list_messages(tickets[0].conversation_id)
+    assert [row.role for row in rows] == ["user", "assistant", "tool"]
+    assert rows[-1].tool_call_id == "write"
