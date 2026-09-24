@@ -5,7 +5,7 @@
 | 顺序 | 开发内容 | 当前状态 |
 |---|---|---|
 | 1 | 纯对话、多轮内存、SSE、售后结构化提取、聊天页面 | 接口验收通过；留一条期望方案质量改进项 |
-| 2 | SQLAlchemy + Docker MySQL、业务工具、单轮 Function Calling、持久化 | 计划通过；Task 1 离线闸完成，待真实 glm-5.2 冒烟 |
+| 2 | SQLAlchemy + Docker MySQL、业务工具、单轮 Function Calling、持久化 | 计划通过；Task 1 真实 glm-5.2 冒烟 GO，进入 Task 2 |
 | 3 | 文档处理、对话知识提取、BGE-M3 + Milvus、MySQL 双写和恢复 | 待前序完成 |
 | 4 | Milvus BM25 + dense 混合召回、RRF、bge-reranker-v2-m3、引用与评估 | 待前序完成 |
 | 5 | LangGraph Workflow 编排与 ReAct 循环 | 待前序完成 |
