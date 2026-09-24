@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
+from starlette.types import Receive, Scope, Send
 
 from app.config import Settings
 from app.core.memory import build_context, estimate_tokens, trim_history
@@ -17,6 +18,20 @@ from app.schemas.chat import ChatRequest
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _ERROR_FRAME = 'event: error\ndata: {"message": "上游模型暂时不可用，请稍后重试"}\n\n'
+
+
+class _SessionStreamingResponse(StreamingResponse):
+    def __init__(self, *args, active_sessions: set[str], session_id: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._active_sessions = active_sessions
+        self._session_id = session_id
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            # Response startup can fail before its body generator is entered.
+            self._active_sessions.discard(self._session_id)
 
 
 def get_model(request: Request) -> BaseChatModel:
@@ -67,32 +82,31 @@ async def chat(
     async def event_stream() -> AsyncIterator[str]:
         chunks: list[str] = []
         try:
-            try:
-                async for chunk in model.astream(messages):
-                    text = _chunk_text(chunk)
-                    if text:
-                        chunks.append(text)
-                        yield f"data: {json.dumps({'delta': text}, ensure_ascii=False)}\n\n"
-                if not chunks:
-                    raise ValueError("empty upstream response")
-            except Exception:
-                # An upstream exception may contain credentials or response bodies.
-                logger.warning("Chat upstream stream failed")
-                yield _ERROR_FRAME
-                return
+            async for chunk in model.astream(messages):
+                text = _chunk_text(chunk)
+                if text:
+                    chunks.append(text)
+                    yield f"data: {json.dumps({'delta': text}, ensure_ascii=False)}\n\n"
+            if not chunks:
+                raise ValueError("empty upstream response")
+        except Exception:
+            # An upstream exception may contain credentials or response bodies.
+            logger.warning("Chat upstream stream failed")
+            yield _ERROR_FRAME
+            return
 
-            complete = [*messages[1:], AIMessage(content="".join(chunks))]
-            history_budget = config.token_budget + config.chat_max_tokens - estimate_tokens([system])
-            yield "data: [DONE]\n\n"
-            request.app.state.store.replace(
-                req.session_id,
-                trim_history(complete, max_tokens=max(history_budget, 0)),
-            )
-        finally:
-            active.discard(req.session_id)
+        complete = [*messages[1:], AIMessage(content="".join(chunks))]
+        history_budget = config.token_budget + config.chat_max_tokens - estimate_tokens([system])
+        yield "data: [DONE]\n\n"
+        request.app.state.store.replace(
+            req.session_id,
+            trim_history(complete, max_tokens=max(history_budget, 0)),
+        )
 
-    return StreamingResponse(
+    return _SessionStreamingResponse(
         event_stream(),
+        active_sessions=active,
+        session_id=req.session_id,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

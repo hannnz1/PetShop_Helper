@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessageChunk, HumanMessage
+from starlette.requests import ClientDisconnect
 
 from app.config import Settings
 from app.main import create_app
@@ -148,6 +149,50 @@ async def test_same_session_conflict_and_cancellation_release():
             assert retry.status_code == 200
             assert app.state.active_sessions == set()
             assert [m.content for m in app.state.store.get("s")] == ["三", "完成"]
+
+
+@pytest.mark.asyncio
+async def test_response_start_failure_releases_session_before_generator_runs():
+    model = StreamingFake([["恢复"]])
+    app = create_app(settings=config(), model=model)
+    body = json.dumps({"session_id": "s", "message": "首次"}).encode()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.4"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/api/chat",
+        "raw_path": b"/api/chat",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"content-type", b"application/json")],
+        "client": ("test", 1234),
+        "server": ("test", 80),
+    }
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return {"type": "http.disconnect"}
+
+    async def broken_send(message):
+        if message["type"] == "http.response.start":
+            raise ConnectionError("client disconnected before stream started")
+
+    async with app.router.lifespan_context(app):
+        with pytest.raises(ClientDisconnect):
+            await app(scope, receive, broken_send)
+        assert app.state.active_sessions == set()
+        assert app.state.store.get("s") == []
+        assert model.calls == []
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            retry = await client.post("/api/chat", json={"session_id": "s", "message": "重试"})
+        assert retry.status_code == 200
+        assert frames(retry)[-1] == "data: [DONE]"
 
 
 def test_lifespan_isolated_state_root_health_and_injected_model_not_closed():
