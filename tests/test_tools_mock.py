@@ -65,11 +65,47 @@ async def test_query_product_values():
 async def test_query_logistics_timeline_matches_status_and_location():
     result = await query_logistics.ainvoke({"order_id": "1001"})
     assert result["status"] in {"已揽件", "运输中", "派送中", "已签收"}
-    assert result["location"].endswith("分拨中心")
+    assert result["location"]
     assert isinstance(result["timeline"], list)
-    assert len(result["timeline"]) >= 2
+    assert len(result["timeline"]) >= 1
     assert any(result["status"] in event for event in result["timeline"])
     assert any(result["location"] in event for event in result["timeline"])
+
+
+async def test_order_and_logistics_share_consistent_state_across_orders():
+    seen_logistics = set()
+    for number in range(120):
+        order_id = f"CASE-{number:03d}"
+        order = await query_order.ainvoke({"order_id": order_id})
+        logistics = await query_logistics.ainvoke({"order_id": order_id})
+        seen_logistics.add(logistics["status"])
+        if logistics["status"] == "已签收":
+            assert order["status"] == "已签收"
+        else:
+            assert order["status"] == "已发货"
+    assert seen_logistics == {"已揽件", "运输中", "派送中", "已签收"}
+
+
+async def test_each_logistics_phase_has_plausible_location_and_chronological_events():
+    scenarios = {}
+    for number in range(120):
+        result = await query_logistics.ainvoke({"order_id": f"CASE-{number:03d}"})
+        scenarios.setdefault(result["status"], result)
+    assert set(scenarios) == {"已揽件", "运输中", "派送中", "已签收"}
+
+    expected = {
+        "已揽件": ("揽收网点", ["已揽件"]),
+        "运输中": ("分拨中心", ["已揽件", "运输中"]),
+        "派送中": ("派送站", ["已揽件", "运输中", "派送中"]),
+        "已签收": ("收货地址", ["已揽件", "运输中", "派送中", "已签收"]),
+    }
+    for status, result in scenarios.items():
+        location_suffix, events = expected[status]
+        assert result["location"].endswith(location_suffix)
+        assert len(result["timeline"]) == len(events)
+        for event_text, phase in zip(result["timeline"], events, strict=True):
+            assert phase in event_text
+        assert result["location"] in result["timeline"][-1]
 
 
 @pytest.mark.parametrize(
