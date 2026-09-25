@@ -15,7 +15,11 @@ from app.config import get_settings
 
 
 _DDL = Path(__file__).resolve().parent.parent / "sql" / "ch02-ddl.sql"
-_TABLES = ("messages", "tickets", "conversations", "faq")
+_CH03_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql"
+_TABLES = (
+    "messages", "tickets", "conversations", "faq",
+    "qa_extraction_staging", "knowledge_chunks",
+)
 
 
 def isolated_test_url(raw_url: str) -> URL:
@@ -64,13 +68,28 @@ def validate_database_isolation(test_raw_url: str, app_raw_url: str) -> URL:
 
 
 def ddl_statements() -> list[str]:
-    """Read the authoritative SQL file, preserving SQL but removing full-line comments."""
+    """Read chapter-two DDL; retained for its existing connection tests."""
 
     lines = [
         line for line in _DDL.read_text(encoding="utf-8").splitlines()
         if not line.lstrip().startswith("--")
     ]
     return [statement.strip() for statement in "\n".join(lines).split(";") if statement.strip()]
+
+
+def _create_table_stmts() -> list[str]:
+    """Create both chapter schemas from their authoritative files in the test DB."""
+
+    statements = ddl_statements()
+    lines = [
+        line for line in _CH03_DDL.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("--")
+    ]
+    statements.extend(
+        statement.strip() for statement in "\n".join(lines).split(";")
+        if statement.strip()
+    )
+    return statements
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -102,7 +121,7 @@ async def _test_engine():
                     await conn.execute(text(f"DROP TABLE IF EXISTS `{table}`"))
             finally:
                 await conn.execute(text("SET FOREIGN_KEY_CHECKS=1"))
-            for statement in ddl_statements():
+            for statement in _create_table_stmts():
                 await conn.execute(text(statement))
             await conn.commit()
         yield engine

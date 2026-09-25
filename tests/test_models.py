@@ -1,4 +1,4 @@
-"""Verify the four ORM mappings against the authoritative MySQL DDL."""
+"""Verify chapter-two ORM mappings against the authoritative MySQL DDL."""
 
 import asyncio
 
@@ -12,7 +12,10 @@ from app.db.base import Base
 
 
 def test_mappings_match_key_mysql_ddl_properties():
-    assert set(Base.metadata.tables) == {"conversations", "messages", "faq", "tickets"}
+    assert set(Base.metadata.tables) == {
+        "conversations", "messages", "faq", "tickets",
+        "knowledge_chunks", "qa_extraction_staging",
+    }
     for table_name in ("conversations", "messages", "faq"):
         table = Base.metadata.tables[table_name]
         assert isinstance(table.c.id.type, BIGINT)
