@@ -152,7 +152,13 @@ async def test_budget_trims_old_whole_pairs(db_session_factory, db_clean, monkey
     await repository.append_message(cid, "assistant", "旧答案" * 200)
     await repository.append_message(cid, "user", "最近问题")
     await repository.append_message(cid, "assistant", "最近答案")
-    settings = get_settings().model_copy(update={"token_budget": 1000})
+    # Keep the test tied to the actual prompt size: reserve enough for the
+    # latest pair, while the older 400-character pair cannot fit.
+    budget = estimate_tokens([
+        SystemMessage(AGENT_SYSTEM), HumanMessage("最近问题"),
+        AIMessage(content="最近答案"), HumanMessage("新问题"),
+    ]) + 10
+    settings = get_settings().model_copy(update={"token_budget": budget})
     monkeypatch.setattr(agent, "get_settings", lambda: settings)
     model = FakeModel([AIMessage(content="新答案")])
     await agent.run_agent_turn("u1", "新问题", cid, model=model)

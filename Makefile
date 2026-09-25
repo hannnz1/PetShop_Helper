@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed
+.PHONY: dev test eval eval-agent seed
 
 ifeq ($(OS),Windows_NT)
 dev:
@@ -13,6 +13,9 @@ test:
 
 eval:
 	uv run --locked python scripts/eval_extract.py
+
+eval-agent:
+	uv run --locked python scripts/eval_agent.py
 
 ifeq ($(OS),Windows_NT)
 seed:
