@@ -28,6 +28,7 @@ JOB_SPECS = {
         JobSpec("seed-conv", "seed-conv"),
         JobSpec("kb-vectorize", "kb-vectorize"),
         JobSpec("kb-mine", "kb-mine", heavy=True),
+        JobSpec("kb-reset", "kb-reset", heavy=True),
         JobSpec("eval-retrieval", "eval-retrieval"),
         JobSpec("eval-mining", "eval-mining"),
     )

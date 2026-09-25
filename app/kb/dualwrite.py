@@ -41,6 +41,11 @@ async def vectorize_pending(client, batch_size: int = 64) -> int:
     """
     if batch_size <= 0:
         raise ValueError("batch_size must be positive")
+    async with repository.knowledge_write_lock():
+        return await _vectorize_pending_locked(client, batch_size)
+
+
+async def _vectorize_pending_locked(client, batch_size: int) -> int:
     pending = await repository.list_pending_chunks()
     done = 0
     for start in range(0, len(pending), batch_size):

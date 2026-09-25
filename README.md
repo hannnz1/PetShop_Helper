@@ -85,4 +85,4 @@ Windows PowerShell 对应命令：
 .\.venv\Scripts\python.exe -m pytest tests\test_kb_manual.py tests\test_kb_api.py -q
 ```
 
-`kb-preview` 只读源文件，当前输出 11 个知识块；`eval-mining` 会调用已配置的真实聊天上游，输入是仓库内的合成标注样例。完整建库、MySQL 幂等、浏览器全链与 `kb-reset` 仍在第 3 章验收范围内；本机 Docker Desktop Linux 引擎未启动时不能将离线测试当作这些验收已通过。过程和待补项目见 [第 3 章开发记录](dev-notes/ch03.md)。
+`kb-preview` 只读源文件，当前输出 11 个知识块；`eval-mining` 会调用已配置的真实聊天上游，输入是仓库内的合成标注样例。`kb-reset` 已提供命令行确认参数和管理页确认按钮，只清除第 3 章知识块、抽取暂存及 Milvus 知识集合；该命令会删除数据，尚未在真实库执行。完整建库、MySQL 幂等、浏览器全链与重置仍在第 3 章验收范围内；本机 Docker Desktop Linux 引擎未启动时不能将离线测试当作这些验收已通过。过程和待补项目见 [第 3 章开发记录](dev-notes/ch03.md)。

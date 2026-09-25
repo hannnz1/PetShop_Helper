@@ -67,6 +67,11 @@ def manual_database(monkeypatch):
             vectorize_status TEXT NOT NULL DEFAULT 'pending',
             created_at TEXT, updated_at TEXT
         )"""))
+        connection.execute(text("""CREATE TABLE qa_extraction_staging (
+            id INTEGER PRIMARY KEY, batch_no TEXT NOT NULL, source_ref TEXT,
+            question TEXT NOT NULL, answer TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'extracted', created_at TEXT
+        )"""))
     monkeypatch.setattr(repository.db, "async_session", type("Session", (), {
         "kw": {"bind": _AsyncEngine(engine)},
     })())
@@ -151,3 +156,35 @@ async def test_manual_reuses_existing_pair_without_relinking_old_document(manual
         )).one()
         assert old == (None, 8)
         assert connection.scalar(text("SELECT count(*) FROM knowledge_chunks")) == 3
+
+
+@pytest.mark.asyncio
+async def test_reset_drops_vectors_then_clears_only_chapter_three_tables(manual_database):
+    with manual_database.begin() as connection:
+        connection.execute(text("""INSERT INTO knowledge_chunks
+            (id, category, questions, answer, is_key_clause)
+            VALUES (1, '演示', 'q', 'a', 0)"""))
+        connection.execute(text("""INSERT INTO qa_extraction_staging
+            (id, batch_no, question, answer) VALUES (1, 'b', 'q', 'a')"""))
+    called = []
+    await repository.reset_knowledge_tables(lambda: called.append("dropped"))
+    assert called == ["dropped"]
+    with manual_database.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM knowledge_chunks")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM qa_extraction_staging")) == 0
+
+
+@pytest.mark.asyncio
+async def test_reset_keeps_mysql_if_vector_drop_fails(manual_database):
+    with manual_database.begin() as connection:
+        connection.execute(text("""INSERT INTO knowledge_chunks
+            (id, category, questions, answer, is_key_clause)
+            VALUES (1, '演示', 'q', 'a', 0)"""))
+
+    def broken_drop():
+        raise RuntimeError("Milvus offline")
+
+    with pytest.raises(RuntimeError, match="Milvus offline"):
+        await repository.reset_knowledge_tables(broken_drop)
+    with manual_database.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM knowledge_chunks")) == 1

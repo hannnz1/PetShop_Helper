@@ -1,4 +1,4 @@
-.PHONY: dev test eval eval-agent seed seed-conv kb-preview kb-build kb-vectorize kb-mine eval-retrieval eval-mining
+.PHONY: dev test eval eval-agent seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining
 
 ifeq ($(OS),Windows_NT)
 dev:
@@ -21,6 +21,9 @@ kb-vectorize:
 kb-mine:
 	.\.venv\Scripts\python.exe -X utf8 -m scripts.mine_knowledge
 
+kb-reset:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.reset_kb --yes
+
 eval-retrieval:
 	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_retrieval
 
@@ -38,6 +41,9 @@ kb-vectorize:
 
 kb-mine:
 	uv run --locked python -m scripts.mine_knowledge
+
+kb-reset:
+	uv run --locked python -m scripts.reset_kb --yes
 
 eval-retrieval:
 	uv run --locked python -m scripts.eval_retrieval

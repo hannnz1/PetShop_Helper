@@ -84,6 +84,12 @@ def test_mining_job_is_registered_and_requires_confirmation():
     assert spec.heavy is True
 
 
+def test_reset_job_is_registered_and_requires_confirmation():
+    spec = jobs.JOB_SPECS["kb-reset"]
+    assert spec.target == "kb-reset"
+    assert spec.heavy is True
+
+
 def test_windows_stop_terminates_only_registered_process_tree(tmp_path, monkeypatch):
     client, _, _ = _client(tmp_path, monkeypatch)
     stopped = []
