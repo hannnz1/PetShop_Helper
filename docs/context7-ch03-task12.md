@@ -1,0 +1,9 @@
+# Ch03 Task 12：接口核对与验证记录
+
+- Context7 解析 `LangChain Python` → `/websites/langchain_oss_python`；[官方 ChatOpenAI 文档](https://docs.langchain.com/oss/python/integrations/chat/openai)示例确认 `model.with_structured_output(PydanticModel, method=...)` 返回结构化模型，[官方异步示例](https://docs.langchain.com/oss/python/integrations/chat/sambanova)确认 `ChatPromptTemplate | model` 可 `await chain.ainvoke({...})`。[LangChain API reference](https://reference.langchain.com/python/langchain-tests/unit_tests/chat_models/ChatModelTests)列出 `json_mode` 与 `json_schema` 方法；本任务沿用第 1 章的 `get_settings().structured_output_method`，当前默认 `json_mode`，不更换供应商或模型。
+- Context7 解析 `SQLAlchemy` → `/websites/sqlalchemy_en_20`；[官方 AsyncIO 文档](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)确认 `AsyncConnection.begin()` 的事务管理及 `execute()`，据此把 staging 状态变更和 knowledge pending 插入放进同一事务。
+- 原 Plan Task 12 中“退款/售后时效统一表述”已按 `ch03-execution-decisions.md` 第 9 条撤销。提示词保留原答明确的数值、条件和例外，排除具体订单隐私及未经核实承诺。标注评估集为 `tests/data/mining_samples.json`，执行器为 `scripts/eval_mining.py`。
+- 无可复用问答的来源使用现有 staging 表的 `discarded` 空问答行记录已处理快照，不进入知识库或统计。重跑时先按稳定 batch/source_ref 查已处理状态，避免反复付费抽取。
+- `batch_size` 现控制一次结构化模型调用的会话数。每个输出携带 1-based `source_index` 和逐字 `source_quote`，入库前验证引文来自对应会话的客服原答；缺来源、错引文或把别的会话数字事实串入 answer 的候选会丢弃。对输入中出现的订单号、手机号、邮箱以及输出中可识别的同类标识做确定性拦截，再写 staging。每组以来源引用和文本快照生成稳定 batch_no，每个来源各写真实 source_ref。
+- 复审发现原先从拼接后的文本按行识别 `assistant:` 可被用户内容中的换行伪造。现从 ORM `Message.role == "assistant"` 直接保留可信原答，不再反解析文本；模型输入将消息内容编码为 JSON 字符串以避免视觉上的伪造角色行。`source_quote` 和 `answer` 都须是同一条可信客服消息的连续原文片段，防止无数字的跨会话或跨消息拼接。离线回归覆盖用户注入 `\nassistant:`、无数字串味和跨消息错配。
+- TDD red：`tests/test_mining.py` 因 `app.kb.mining` 缺失而收集失败。离线 green：`pytest -q tests/test_mining.py -k "offline or extraction_chain"`，补充组批、来源、敏感信息和角色伪造回归后 8 passed，MySQL 5 项未运行。当前 Docker/MySQL 不可用，实测连接被拒绝，恢复后需重跑完整 `tests/test_mining.py`。真实模型标注评估尚未执行，避免无授权的付费调用。

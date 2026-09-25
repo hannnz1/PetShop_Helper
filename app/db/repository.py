@@ -160,6 +160,11 @@ async def _insert_document_row(connection, chunk: dict) -> int:
 
 
 async def insert_knowledge_document(chunks: list[dict]) -> list[int]:
+    ids, _inserted = await insert_knowledge_document_report(chunks)
+    return ids
+
+
+async def insert_knowledge_document_report(chunks: list[dict]) -> tuple[list[int], int]:
     """Atomically insert and link a document, or return an exact prior run's IDs.
 
     One MySQL named lock serializes the read/insert/commit across workers. A
@@ -168,7 +173,7 @@ async def insert_knowledge_document(chunks: list[dict]) -> list[int]:
     commit, since MySQL named locks do not follow transaction boundaries.
     """
     if not chunks:
-        return []
+        return [], 0
     engine = db.async_session.kw["bind"]
     name = "mewhelp:kb:" + hashlib.sha256(
         (engine.url.database or "").encode("utf-8")
@@ -189,7 +194,7 @@ async def insert_knowledge_document(chunks: list[dict]) -> list[int]:
                 existing = list(result.mappings())
                 prior = _matching_document(existing, chunks)
                 if prior is not None:
-                    return prior
+                    return prior, 0
                 ids = [await _insert_document_row(connection, chunk) for chunk in chunks]
                 for index, chunk_id in enumerate(ids):
                     await connection.execute(
@@ -198,7 +203,7 @@ async def insert_knowledge_document(chunks: list[dict]) -> list[int]:
                             next_chunk_id=ids[index + 1] if index + 1 < len(ids) else None,
                         )
                     )
-                return ids
+                return ids, len(ids)
         finally:
             await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
             await connection.commit()
@@ -284,3 +289,224 @@ async def set_staging_status(ids: list[int], status: str) -> None:
             row = await session.get(QaExtractionStaging, staging_id)
             if row is not None:
                 row.status = status
+
+
+async def list_conversations_with_messages() -> list[tuple[int, list[Message]]]:
+    """Return conversations in ID order, with their messages in ID order."""
+    async with db.async_session() as session:
+        ids = list((await session.execute(select(Conversation.id).order_by(Conversation.id))).scalars())
+        if not ids:
+            return []
+        messages = list((await session.execute(
+            select(Message).where(Message.conversation_id.in_(ids)).order_by(Message.id)
+        )).scalars())
+    by_conversation: dict[int, list[Message]] = {cid: [] for cid in ids}
+    for message in messages:
+        by_conversation[message.conversation_id].append(message)
+    return [(cid, by_conversation[cid]) for cid in ids]
+
+
+def _knowledge_lock_name(engine) -> str:
+    return "mewhelp:kb:" + hashlib.sha256(
+        (engine.url.database or "").encode("utf-8")
+    ).hexdigest()[:32]
+
+
+async def insert_staging_batch(
+    batch_no: str, source_ref: str, pairs: list[tuple[str, str]],
+) -> int:
+    """Persist one source's complete extraction once, even with concurrent jobs."""
+    engine = db.async_session.kw["bind"]
+    name = _knowledge_lock_name(engine)
+    async with engine.connect() as connection:
+        acquired = await connection.scalar(
+            text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
+        )
+        await connection.commit()
+        if acquired != 1:
+            raise TimeoutError("knowledge ingestion lock unavailable")
+        try:
+            async with connection.begin():
+                table = QaExtractionStaging.__table__
+                prior = await connection.scalar(select(table.c.id).where(
+                    table.c.batch_no == batch_no,
+                    table.c.source_ref == source_ref,
+                ).limit(1))
+                if prior is not None:
+                    return 0
+                if pairs:
+                    await connection.execute(insert(table), [
+                        {"batch_no": batch_no, "source_ref": source_ref,
+                         "question": question, "answer": answer}
+                        for question, answer in pairs
+                    ])
+                else:
+                    # The existing staging schema has no batch header row.
+                    # A discarded empty row marks an evaluated no-pairs source
+                    # without entering knowledge or extracted/kept statistics.
+                    await connection.execute(insert(table).values(
+                        batch_no=batch_no, source_ref=source_ref,
+                        question="", answer="", status="discarded",
+                    ))
+                return len(pairs)
+        finally:
+            await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+            await connection.commit()
+
+
+async def staging_batch_exists(batch_no: str, source_ref: str) -> bool:
+    """Avoid another paid extraction for an unchanged, already staged source."""
+    table = QaExtractionStaging.__table__
+    async with db.async_session() as session:
+        existing = await session.scalar(select(table.c.id).where(
+            table.c.batch_no == batch_no,
+            table.c.source_ref == source_ref,
+        ).limit(1))
+    return existing is not None
+
+
+async def _insert_mined_chunk_row(connection, row: dict) -> int:
+    result = await connection.execute(insert(KnowledgeChunk.__table__).values(
+        category="历史对话", questions=row["question"], answer=row["answer"],
+        section_path="mined", content_type="mined", is_key_clause=0,
+    ))
+    return int(result.inserted_primary_key[0])
+
+
+async def finalize_mined_staging() -> dict[str, int]:
+    """Atomically classify staged QA and insert pending knowledge.
+
+    A legacy `kept` row with no matching mined chunk is recovered on rerun.
+    The same named lock used by document ingestion prevents concurrent jobs
+    from both accepting one question.
+    """
+    from app.kb.dedup import normalize_question
+
+    engine = db.async_session.kw["bind"]
+    name = _knowledge_lock_name(engine)
+    stats = {"kept": 0, "discarded": 0, "recovered": 0}
+    async with engine.connect() as connection:
+        acquired = await connection.scalar(
+            text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
+        )
+        await connection.commit()
+        if acquired != 1:
+            raise TimeoutError("knowledge ingestion lock unavailable")
+        try:
+            async with connection.begin():
+                staging = QaExtractionStaging.__table__
+                knowledge = KnowledgeChunk.__table__
+                rows = list((await connection.execute(
+                    select(staging).where(staging.c.status.in_(["extracted", "kept"]))
+                    .order_by(staging.c.id)
+                )).mappings())
+                existing = list((await connection.execute(
+                    select(knowledge.c.questions, knowledge.c.answer,
+                           knowledge.c.category, knowledge.c.content_type)
+                )).mappings())
+                seen = {normalize_question(row["questions"]) for row in existing}
+                mined_pairs = {
+                    (row["questions"], row["answer"])
+                    for row in existing
+                    if row["category"] == "历史对话" and row["content_type"] == "mined"
+                }
+                # Recover old kept rows first; then classify fresh candidates.
+                for row in sorted(rows, key=lambda item: (item["status"] != "kept", item["id"])):
+                    pair = (row["question"], row["answer"])
+                    key = normalize_question(row["question"])
+                    if row["status"] == "kept":
+                        if pair not in mined_pairs:
+                            await _insert_mined_chunk_row(connection, row)
+                            mined_pairs.add(pair)
+                            seen.add(key)
+                            stats["recovered"] += 1
+                        continue
+                    if not key or key in seen:
+                        status = "discarded"
+                        stats["discarded"] += 1
+                    else:
+                        await _insert_mined_chunk_row(connection, row)
+                        mined_pairs.add(pair)
+                        seen.add(key)
+                        status = "kept"
+                        stats["kept"] += 1
+                    await connection.execute(
+                        update(staging).where(staging.c.id == row["id"]).values(status=status)
+                    )
+        finally:
+            await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+            await connection.commit()
+    return stats
+
+
+async def knowledge_stats() -> dict:
+    """Summarize MySQL knowledge inventory for the KB and admin dashboards."""
+    async with db.async_session() as session:
+        total = int((await session.execute(
+            select(func.count()).select_from(KnowledgeChunk)
+        )).scalar_one())
+        status_rows = (await session.execute(
+            select(KnowledgeChunk.vectorize_status, func.count())
+            .group_by(KnowledgeChunk.vectorize_status)
+        )).all()
+        key_clauses = int((await session.execute(
+            select(func.count()).select_from(KnowledgeChunk)
+            .where(KnowledgeChunk.is_key_clause == 1)
+        )).scalar_one())
+        category_rows = (await session.execute(
+            select(KnowledgeChunk.category, func.count())
+            .group_by(KnowledgeChunk.category)
+        )).all()
+        content_type = func.coalesce(KnowledgeChunk.content_type, "unspecified")
+        type_rows = (await session.execute(
+            select(content_type, func.count()).group_by(content_type)
+        )).all()
+    statuses = dict(status_rows)
+    return {
+        "total": total,
+        "pending": int(statuses.get("pending", 0)),
+        "done": int(statuses.get("done", 0)),
+        "key_clauses": key_clauses,
+        "by_category": {name: int(count) for name, count in category_rows},
+        "by_content_type": {name: int(count) for name, count in type_rows},
+    }
+
+
+async def list_recent_chunks(limit: int = 20) -> list[KnowledgeChunk]:
+    """Read the newest chunks with deterministic ID ordering."""
+    if limit <= 0:
+        return []
+    async with db.async_session() as session:
+        result = await session.execute(
+            select(KnowledgeChunk).order_by(KnowledgeChunk.id.desc()).limit(min(limit, 100))
+        )
+        return list(result.scalars())
+
+
+async def list_chunk_pairs() -> list[tuple[str, str]]:
+    """Read exact question/answer pairs for preview duplicate markers."""
+    async with db.async_session() as session:
+        result = await session.execute(
+            select(KnowledgeChunk.questions, KnowledgeChunk.answer)
+            .order_by(KnowledgeChunk.id)
+        )
+        return [(question, answer) for question, answer in result.all()]
+
+
+async def staging_stats() -> dict[str, int]:
+    """Count extraction states and distinct mining batch numbers."""
+    async with db.async_session() as session:
+        state_rows = (await session.execute(
+            select(QaExtractionStaging.status, func.count())
+            .group_by(QaExtractionStaging.status)
+        )).all()
+        batches = int((await session.execute(
+            select(func.count(func.distinct(QaExtractionStaging.batch_no)))
+        )).scalar_one())
+    states = dict(state_rows)
+    return {
+        "extracted": int(states.get("extracted", 0)),
+        "kept": int(states.get("kept", 0)),
+        "discarded": int(states.get("discarded", 0)),
+        "batches": batches,
+    }
