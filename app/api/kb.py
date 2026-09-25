@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core import retrieval
 from app.db import repository
-from app.kb import documents, dualwrite, milvus_client, sources
+from app.kb import dedup, documents, dualwrite, milvus_client, sources
 from scripts.build_kb import source_chunks
 
 
@@ -138,7 +138,22 @@ def _chunks(request: SourceRequest) -> list[documents.Chunk]:
 async def preview(request: SourceRequest) -> dict:
     """Show the exact chunks that ingestion would write, without side effects."""
     chunks = _chunks(request)
-    return {"count": len(chunks), "chunks": [asdict(chunk) for chunk in chunks]}
+    try:
+        existing = {
+            (dedup.normalize_question(question), dedup.normalize_question(answer))
+            for question, answer in await repository.list_chunk_pairs()
+        }
+    except Exception:
+        existing = None
+    shown = []
+    for chunk in chunks:
+        row = asdict(chunk)
+        row["duplicate"] = None if existing is None else (
+            dedup.normalize_question(chunk.questions),
+            dedup.normalize_question(chunk.answer),
+        ) in existing
+        shown.append(row)
+    return {"count": len(chunks), "chunks": shown}
 
 
 @router.post("/ingest")

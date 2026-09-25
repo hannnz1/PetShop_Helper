@@ -14,8 +14,12 @@ async def overview(request: Request) -> dict:
     mysql = knowledge["mysql"]
     milvus = knowledge["milvus"]
     stats = mysql["stats"] if mysql["available"] else None
-    if not mysql["available"] or not milvus["available"]:
-        status, summary = "unavailable", "知识库依赖读数失败"
+    if not mysql["available"] and not milvus["available"]:
+        status, summary = "unavailable", "MySQL 与 Milvus 读数失败"
+    elif not mysql["available"]:
+        status, summary = "unavailable", "MySQL 读数失败"
+    elif not milvus["available"]:
+        status, summary = "unavailable", "Milvus 读数失败"
     elif not stats["total"]:
         status, summary = "empty", "还没有知识块"
     elif stats["pending"] or knowledge["consistent"] is False:
@@ -23,10 +27,10 @@ async def overview(request: Request) -> dict:
     else:
         status, summary = "normal", "知识库已同步"
     return {"modules": [
-        {"id": "chat", "name": "纯对话客服", "href": "/", "status": "normal",
-         "summary": "多轮对话与结构化售后提取"},
-        {"id": "agent", "name": "工具客服", "href": "/", "status": "normal",
-         "summary": "工具调用与业务处理"},
+        {"id": "chat", "name": "纯对话客服", "href": "/", "status": "unknown",
+         "summary": "入口可用；上游模型状态未在此页检测"},
+        {"id": "agent", "name": "工具客服", "href": "/", "status": "unknown",
+         "summary": "入口可用；业务工具状态未在此页检测"},
         {"id": "kb", "name": "知识库", "href": "/kb", "status": status,
          "summary": summary, "mysql": stats, "milvus_count": milvus["count"]},
     ]}

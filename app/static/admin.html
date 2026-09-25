@@ -38,7 +38,7 @@ h1{font-size:clamp(28px,4vw,42px);line-height:1.2;margin:8px 0}p{color:var(--mut
   function showCard(item, data) {
     const card=el('article','card'); const head=el('div','card-head'); const title=el('h2','',item.name||item.title);
     const status=data?.status || data?.state || 'unavailable';
-    const stateMap={normal:['正常','ok'],ok:['正常','ok'],healthy:['正常','ok'],action:['要干活','work'],work:['要干活','work'],attention:['要干活','work'],empty:['没数据',''],unavailable:['读数失败','fail'],error:['读数失败','fail']};
+    const stateMap={normal:['正常','ok'],ok:['正常','ok'],healthy:['正常','ok'],action:['要干活','work'],work:['要干活','work'],attention:['要干活','work'],empty:['没数据',''],unknown:['未检测',''],unavailable:['读数失败','fail'],error:['读数失败','fail']};
     const state=stateMap[status] || [String(status),''];
     const pill=el('span','pill '+state[1],state[0]); head.append(title,pill); card.append(head);
     card.append(el('p','summary',data?.summary || data?.message || (status==='unavailable'?'暂时无法读取这一模块的状态。':'进入模块查看详情。')));

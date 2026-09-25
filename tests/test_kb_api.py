@@ -28,6 +28,36 @@ def test_preview_is_dry_run_and_shows_marked_chunks(monkeypatch):
     assert response.json()["chunks"][0]["is_key_clause"] == 1
 
 
+def test_preview_marks_existing_question_answer_pair_without_writing(monkeypatch):
+    async def existing():
+        return [("运费怎么算？", "满99元包邮。")]
+
+    async def forbidden(_chunks):
+        raise AssertionError("preview must not write")
+
+    monkeypatch.setattr(kb.repository, "list_chunk_pairs", existing)
+    monkeypatch.setattr(kb.dualwrite, "write_pending_report", forbidden)
+    with _client() as client:
+        response = client.post("/api/kb/preview", json={
+            "content_type": "faq", "markdown": "# 运费怎么算\n\n满99元包邮。",
+        })
+    assert response.status_code == 200
+    assert response.json()["chunks"][0]["duplicate"] is True
+
+
+def test_preview_keeps_chunks_when_duplicate_lookup_is_unavailable(monkeypatch):
+    async def offline():
+        raise ConnectionError("mysql unavailable")
+
+    monkeypatch.setattr(kb.repository, "list_chunk_pairs", offline)
+    with _client() as client:
+        response = client.post("/api/kb/preview", json={
+            "content_type": "faq", "markdown": "# 运费怎么算\n\n满99元包邮。",
+        })
+    assert response.status_code == 200
+    assert response.json()["chunks"][0]["duplicate"] is None
+
+
 def test_ingest_reuses_identical_source_chunks(monkeypatch):
     calls = []
 
