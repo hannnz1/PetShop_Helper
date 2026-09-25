@@ -1,4 +1,18 @@
-.PHONY: dev test eval eval-agent seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining
+.PHONY: dev test eval eval-agent seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down
+
+ifeq ($(OS),Windows_NT)
+milvus-up:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/milvus-up.ps1
+
+milvus-down:
+	docker compose stop milvus-standalone minio etcd
+else
+milvus-up:
+	docker compose up -d etcd minio milvus-standalone
+
+milvus-down:
+	docker compose stop milvus-standalone minio etcd
+endif
 
 ifeq ($(OS),Windows_NT)
 dev:
