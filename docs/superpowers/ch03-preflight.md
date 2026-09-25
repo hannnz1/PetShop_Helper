@@ -12,6 +12,6 @@
 4. Spec 预设从 `ch02-function-calling` 分支切出，仓库当前仅有 `feat/ch01-pure-chat`，第 2 章实际提交已在该分支。
 5. Plan 的 `killpg` 为 POSIX 进程组处理方式，与当前 Windows 本机环境不匹配；作业停止机制需重新设计，同时保持作业管理需求。
 
-Context7 初查：Milvus 官方文档示例为 `pymilvus[milvus-lite]` 加本地 `.db` URI；OpenAI 官方 Python SDK支持 `AsyncOpenAI(base_url=...)` 的 embeddings 接口；LangChain Reference 有 `OpenAIEmbeddings`。资料尚未证明 Milvus Lite 在本机 Windows 可用，须先做安装/启动冒烟，不能未经用户同意换向量库。真实嵌入验收还需独立 `EMBED_*` 凭据，现有聊天模型密钥不能假定适用。
+Context7 初查：Milvus 官方文档示例为 `pymilvus[milvus-lite]` 加本地 `.db` URI；OpenAI 官方 Python SDK 支持 `AsyncOpenAI(base_url=...)` 的 embeddings 接口；LangChain Reference 有 `OpenAIEmbeddings`。Milvus Lite 新版[官方仓库说明](https://github.com/milvus-io/milvus-lite)已列 Windows 为有依赖 wheel 时可用的平台；旧版[官方 FAQ](https://milvus.io/docs/operational_faq.md)仍说不支持 Windows，二者反映版本差异。本机隔离环境已安装 `pymilvus==3.0.2`、`milvus-lite==3.2.1`，Windows/Python 3.12 实测本地 `.db` 建集合、insert、search、按 ID upsert、get 全部通过。原 Plan 按旧 2.x 结构写的 API 和返回值需要基于 Context7 与真实 3.x 行为复审。真实嵌入验收仍需独立 `EMBED_*` 凭据，现有聊天模型密钥不能假定适用。
 
-当前已向用户询问嵌入客户端和配置字段名。问题定稿、计划评审及 Task 1 风险闸前，不改第三章运行代码、不调用付费嵌入上游。
+当前已向用户询问嵌入客户端和配置字段名。问题定稿、计划评审及 Task 1 真实嵌入风险闸前，不改第三章运行代码、不调用付费嵌入上游。Milvus 冒烟只在 Git 忽略的 `work/` 隔离环境中运行，未修改项目依赖。
