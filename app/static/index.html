@@ -5,31 +5,182 @@
 <title>PetShop Helper · 宠物生活客服</title>
 <style>
 :root{--bg:#f5f7f4;--ink:#213c32;--muted:#748078;--green:#237b59;--line:#dfe7e0}*{box-sizing:border-box}body{margin:0;background:var(--bg);font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif;color:var(--ink)}button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.5}.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}.sidebar{padding:32px 24px;border-right:1px solid var(--line);background:#eaf0e8;display:flex;flex-direction:column;gap:28px}.brand{display:flex;gap:12px;align-items:center;font-weight:750;font-size:18px}.mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:var(--green);color:white;font-size:24px}.tag{font-size:11px;letter-spacing:2px;color:var(--muted)}.new{border:1px solid #b6cbbb;background:transparent;border-radius:10px;padding:12px;color:var(--ink)}.side-note{font-size:13px;color:#617365}.side-foot{margin-top:auto;font-size:12px;color:var(--muted)}main{max-width:1100px;width:100%;margin:auto;display:flex;flex-direction:column;height:100vh;padding:0 44px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:92px;border-bottom:1px solid var(--line)}h1{font-size:18px;margin:0}.status{font-size:12px;color:var(--muted)}.status:before{content:"";display:inline-block;width:7px;height:7px;background:#89988a;border-radius:50%;margin-right:7px}.tabs{display:flex;gap:8px}.tab{background:none;border:0;border-radius:8px;padding:8px 13px;color:var(--muted)}.tab.active{background:#e4eee6;color:var(--green);font-weight:600}.panel{flex:1;min-height:0;display:flex;flex-direction:column}.panel[hidden]{display:none}.messages{flex:1;overflow:auto;padding:26px 0;scroll-behavior:smooth}.welcome{margin:7vh auto 35px;max-width:570px}.welcome .kicker{color:var(--green);font-size:12px;letter-spacing:2px}.welcome h2{font-size:34px;line-height:1.4;margin:16px 0;font-weight:650}.welcome p{color:var(--muted)}.suggestions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:26px}.suggestions button{border:1px solid var(--line);background:white;border-radius:12px;text-align:left;padding:17px;color:var(--ink)}.suggestions small{display:block;color:var(--muted);margin-top:4px}.msg{display:flex;gap:12px;margin-bottom:24px;align-items:flex-start}.msg.user{justify-content:flex-end}.avatar{width:32px;height:32px;background:#e1eee4;border-radius:10px;display:grid;place-items:center;flex-shrink:0;font-size:17px}.bubble{white-space:pre-wrap;overflow-wrap:anywhere;max-width:85%;padding:14px 18px;background:white;border:1px solid var(--line);border-radius:0 14px 14px 14px}.user .bubble{background:#e1eee4;border-color:#e1eee4;border-radius:14px 0 14px 14px}.bubble.error{border-color:#e4b3a3;color:#99492f}.composer{padding:16px;background:white;border:1px solid #d6e0d7;border-radius:16px;box-shadow:0 8px 30px #2a4a3210}.composer textarea{width:100%;resize:none;border:0;background:none;outline:none;color:var(--ink);min-height:64px;max-height:150px}.composer:focus-within{border-color:var(--green)}.compose-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px}.hint{font-size:11px;color:var(--muted)}.primary{border:0;background:var(--green);color:white;border-radius:9px;padding:9px 22px}.secondary{border:1px solid var(--line);background:white;color:var(--ink);border-radius:9px;padding:8px 16px}.footnote{text-align:center;font-size:11px;color:var(--muted);padding:12px 0 17px}.extract{max-width:680px;width:100%;margin:48px auto;overflow:auto}.extract h2{font-size:26px;margin:0}.extract p{color:var(--muted)}.extract textarea{width:100%;height:160px;border:1px solid var(--line);border-radius:12px;padding:16px;resize:vertical;margin:12px 0;outline-color:var(--green)}.result{background:white;border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:22px}.result dl{margin:0}.result dt{font-size:12px;color:var(--muted);margin-top:12px}.result dt:first-child{margin:0}.result dd{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}.result pre{font-size:12px;white-space:pre-wrap;color:var(--muted);margin-bottom:0}.error-text{color:#99492f!important}.mobile-new{display:none}@media(max-width:760px){.app{display:block}.sidebar{display:none}main{padding:0 18px;height:100dvh}header{min-height:82px;flex-wrap:wrap;padding:12px 0;gap:6px}h1{font-size:16px}.status{display:none}.tab{padding:6px 8px}.mobile-new{display:block;border:0;background:none;color:var(--green);font-size:12px}.welcome{margin-top:5vh}.welcome h2{font-size:28px}.suggestions{gap:8px}.suggestions button{padding:12px}.hint{font-size:10px}.bubble{max-width:88%}.extract{margin-top:25px}}
+.tool-trace{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.tool-trace:empty{display:none}.tool-badge{font-size:11px;color:#617365;background:#f6f8f5;border:1px dashed #b6cbbb;border-radius:99px;padding:2px 9px}.assistant .bubble{white-space:normal}.answer{white-space:normal;overflow-wrap:anywhere}.answer p{margin:0 0 .65em}.answer p:last-child{margin-bottom:0}.answer ul,.answer ol{margin:.4em 0;padding-left:1.4em}.answer pre{overflow:auto;background:#eff3ef;padding:10px;border-radius:8px}.answer code{font-family:Consolas,monospace;background:#eff3ef;border-radius:3px;padding:1px 3px}.answer pre code{background:none;padding:0}.answer table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%}.answer th,.answer td{border:1px solid var(--line);padding:4px 8px;text-align:left}.answer blockquote{border-left:3px solid #b6cbbb;margin:.5em 0;padding-left:10px;color:#617365}.answer a{color:var(--green)}.answer.typing:after{content:'● ● ●';color:#89988a;letter-spacing:3px;animation:pulse 1s infinite alternate}@keyframes pulse{from{opacity:.3}to{opacity:1}}
 </style>
 </head>
 <body>
 <div class="app">
-<aside class="sidebar"><div class="brand"><span class="mark">♧</span><div>PetShop<span class="tag" style="display:block">HELPER / 客服工作台</span></div></div><button class="new" id="newChat">＋ 开始新对话</button><div class="side-note">为每一份陪伴<br>提供贴心解答。</div><div class="side-foot">第一章 · 纯对话<br>当前版本暂不连接订单系统。<br>服务重启后会话历史清空。</div></aside>
+<aside class="sidebar"><div class="brand"><span class="mark">♧</span><div>PetShop<span class="tag" style="display:block">HELPER / 客服工作台</span></div></div><button class="new" id="newChat">＋ 开始新对话</button><div class="side-note">为每一份陪伴<br>提供贴心解答。</div><div class="side-foot">第二章 · 工具客服演示<br>订单、商品、物流查询使用模拟数据。<br>对话记录保存在当前本地服务中。</div></aside>
 <main><header><div><h1>宠物生活，有问有答</h1><span class="status" id="status">准备就绪</span></div><nav class="tabs" aria-label="功能切换"><button class="tab active" data-panel="chatPanel">客服对话</button><button class="tab" data-panel="extractPanel">售后整理</button><button class="mobile-new" id="mobileNew">新对话</button></nav></header>
 <section class="panel" id="chatPanel"><div class="messages" id="messages" role="log" aria-label="聊天记录"><div class="welcome" id="welcome"><span class="kicker">HELLO, PET PARENTS</span><h2>你好，我是小喵。<br>今天有什么可以帮你？</h2><p>商品咨询、购物疑问或售后问题，告诉我你的需要。</p><div class="suggestions"><button data-question="给猫咪挑选猫粮时要注意什么？">挑选宠物用品 <small>一起理清选购思路 ↗</small></button><button data-question="猫爬架收到后损坏了，申请售后需要准备什么？">处理售后问题 <small>了解需要准备的信息 ↗</small></button></div></div></div><form class="composer" id="chatForm"><label for="message" class="hint">向小喵提问</label><textarea id="message" placeholder="例如：我买的自动喂食器出了问题…" maxlength="20000" required></textarea><div class="compose-bottom"><span class="hint">Enter 发送 · Shift + Enter 换行</span><div><button type="button" class="secondary" id="stop" hidden>停止</button> <button class="primary" id="send">发送 ↑</button></div></div></form><div class="footnote">AI 回复仅供参考，订单与售后政策请以平台核实信息为准。</div></section>
 <section class="panel" id="extractPanel" hidden><div class="extract"><span class="tag">AFTER-SALES ASSISTANT</span><h2>把问题，说清楚。</h2><p>粘贴售后描述，整理订单号、诉求类型和期望方案。此操作仅提取信息，不会提交工单。</p><form id="extractForm"><label for="description">售后描述</label><textarea id="description" placeholder="订单 MH20260701123 的猫爬架到货就散架了，我想退款。" required maxlength="20000"></textarea><button class="primary" id="extractButton">整理售后信息</button></form><p id="extractStatus" role="status"></p><div class="result" id="extractResult" hidden><dl><dt>订单号</dt><dd id="orderId"></dd><dt>诉求类型</dt><dd id="requestType"></dd><dt>期望方案</dt><dd id="solution"></dd></dl><details><summary>查看 JSON</summary><pre id="jsonResult"></pre></details></div></div></section>
 </main></div>
 <script>
-const $=id=>document.getElementById(id);let sessionId=crypto.randomUUID(),controller=null,busy=false;
-function scrollBottom(){$('messages').scrollTop=$('messages').scrollHeight}
-function bubble(role,text){const row=document.createElement('div');row.className='msg '+role;if(role==='assistant'){const avatar=document.createElement('span');avatar.className='avatar';avatar.textContent='♧';row.append(avatar)}const content=document.createElement('div');content.className='bubble';content.textContent=text;row.append(content);$('messages').append(row);scrollBottom();return content}
-function setBusy(value){busy=value;$('send').disabled=value;$('message').disabled=value;$('stop').hidden=!value;$('status').textContent=value?'小喵正在回复…':'准备就绪';$('newChat').disabled=value;$('mobileNew').disabled=value;document.querySelectorAll('[data-question]').forEach(b=>b.disabled=value)}
-function newChat(){if(busy)return;sessionId=crypto.randomUUID();$('messages').querySelectorAll('.msg').forEach(e=>e.remove());$('welcome').hidden=false;$('message').value='';$('message').focus()}
-$('newChat').onclick=newChat;$('mobileNew').onclick=newChat;$('stop').onclick=()=>controller?.abort();
-document.querySelectorAll('[data-panel]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(t=>t.classList.toggle('active',t===tab));document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!==tab.dataset.panel)});
-document.querySelectorAll('[data-question]').forEach(b=>b.onclick=()=>{if(busy)return;$('message').value=b.dataset.question;$('chatForm').requestSubmit()});
-$('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('chatForm').requestSubmit()}});
-async function responseError(response){let data;try{data=await response.json()}catch{return `请求失败（${response.status}）`}return typeof data.detail==='string'?data.detail:`请求失败（${response.status}），请检查输入或服务配置。`}
-$('chatForm').onsubmit=async e=>{e.preventDefault();const message=$('message').value.trim();if(!message||busy)return;$('welcome').hidden=true;bubble('user',message);const answer=bubble('assistant','正在思考…');let content='',done=false,buffer='';setBusy(true);$('message').value='';controller=new AbortController();
-try{const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId,message}),signal:controller.signal});if(!response.ok)throw Error(await responseError(response));if(!response.body)throw Error('浏览器未提供流式响应。');const reader=response.body.getReader(),decoder=new TextDecoder();
-const handleFrame=frame=>{let event='message';const data=[];for(const line of frame.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data.push(line.slice(5).trimStart())}if(!data.length)return;const payload=data.join('\n');if(event==='error'){let msg;try{msg=JSON.parse(payload).message}catch{msg='回复暂时失败，请重试。'}throw Error(msg)}if(payload==='[DONE]'){done=true;return}const value=JSON.parse(payload);if(typeof value.delta==='string'){content+=value.delta;answer.textContent=content;scrollBottom()}};
-while(true){const {value,done:ended}=await reader.read();buffer+=decoder.decode(value,{stream:!ended});buffer=buffer.replace(/\r\n/g,'\n');let end;while((end=buffer.indexOf('\n\n'))>=0){handleFrame(buffer.slice(0,end));buffer=buffer.slice(end+2)}if(ended)break}if(!done)throw Error('连接已中断，回复未完成，请重试。');if(!content)throw Error('模型未返回文本，请重试。');
-}catch(error){controller?.abort();answer.classList.add('error');const notice=error.name==='AbortError'?'已停止生成，本轮不会作为完整对话保存。':error.message;answer.textContent=content?content+'\n\n'+notice:notice;}finally{controller=null;setBusy(false);$('message').focus();scrollBottom()}};
-$('extractForm').onsubmit=async e=>{e.preventDefault();const text=$('description').value.trim();if(!text)return;$('extractButton').disabled=true;$('extractResult').hidden=true;$('extractStatus').className='';$('extractStatus').textContent='正在整理…';try{const response=await fetch('/api/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});if(!response.ok)throw Error(await responseError(response));const ticket=await response.json();$('orderId').textContent=ticket.order_id??'未提供';$('requestType').textContent=ticket.request_type;$('solution').textContent=ticket.expected_solution;$('jsonResult').textContent=JSON.stringify(ticket,null,2);$('extractResult').hidden=false;$('extractStatus').textContent='整理完成，请核对信息。'}catch(error){$('extractStatus').className='error-text';$('extractStatus').textContent=error.message}finally{$('extractButton').disabled=false}};
+const $ = id => document.getElementById(id);
+const userKey = 'petshop.user_id', conversationKey = 'petshop.conversation_id';
+let userId = localStorage.getItem(userKey);
+if (!userId) { userId = crypto.randomUUID(); localStorage.setItem(userKey, userId); }
+let conversationId = Number(localStorage.getItem(conversationKey)) || null;
+let controller = null, busy = false;
+if (conversationId) $('status').textContent = '已接续上次会话';
+
+function escapeHtml(text) {
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+function inlineMarkdown(raw) {
+  const slots = [];
+  let safe = escapeHtml(raw);
+  safe = safe.replace(/`([^`]+)`/g, (_, code) => {
+    slots.push('<code>' + code + '</code>'); return `\uE000${slots.length - 1}\uE001`;
+  });
+  safe = safe.replace(/https?:\/\/[^\s<>"']+/g, url => {
+    const clean = url.replace(/[.,!?;:，。！？；：]+$/, '');
+    const suffix = url.slice(clean.length);
+    slots.push(`<a href="${clean}" target="_blank" rel="noopener noreferrer">${clean}</a>`);
+    return `\uE000${slots.length - 1}\uE001${suffix}`;
+  });
+  safe = safe.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  return safe.replace(/\uE000(\d+)\uE001/g, (_, index) => slots[Number(index)]);
+}
+function renderMarkdown(raw) {
+  const lines = raw.replace(/\r\n/g, '\n').split('\n'), out = [];
+  let paragraph = [], list = null, quote = [], inCode = false, code = [];
+  const flushParagraph = () => { if (paragraph.length) out.push('<p>' + paragraph.map(inlineMarkdown).join('<br>') + '</p>'); paragraph = []; };
+  const flushList = () => { if (list) out.push(`</${list}>`); list = null; };
+  const flushQuote = () => { if (quote.length) out.push('<blockquote>' + quote.map(inlineMarkdown).join('<br>') + '</blockquote>'); quote = []; };
+  const closeBlocks = () => { flushParagraph(); flushList(); flushQuote(); };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i], trimmed = line.trim();
+    if (/^```/.test(trimmed)) {
+      closeBlocks();
+      if (inCode) { out.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>'); code = []; }
+      inCode = !inCode; continue;
+    }
+    if (inCode) { code.push(line); continue; }
+    if (!trimmed) { closeBlocks(); continue; }
+    const cells = value => value.replace(/^\||\|$/g, '').split('|').map(part => part.trim());
+    if (line.includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i + 1])) {
+      closeBlocks(); const header = cells(line); i += 2; const rows = [];
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) { rows.push(cells(lines[i])); i++; }
+      i--;
+      out.push('<table><thead><tr>' + header.map(c => '<th>' + inlineMarkdown(c) + '</th>').join('') + '</tr></thead><tbody>' +
+        rows.map(row => '<tr>' + header.map((_, n) => '<td>' + inlineMarkdown(row[n] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table>');
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) { closeBlocks(); const n = heading[1].length; out.push(`<h${n}>${inlineMarkdown(heading[2])}</h${n}>`); continue; }
+    if (/^(?:---+|\*\*\*+)\s*$/.test(trimmed)) { closeBlocks(); out.push('<hr>'); continue; }
+    const quoted = /^>\s?(.*)$/.exec(line);
+    if (quoted) { flushParagraph(); flushList(); quote.push(quoted[1]); continue; }
+    flushQuote();
+    const bullet = /^\s*[-*+]\s+(.+)$/.exec(line), numbered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
+    if (bullet || numbered) {
+      flushParagraph(); const kind = bullet ? 'ul' : 'ol';
+      if (list !== kind) { flushList(); out.push(`<${kind}>`); list = kind; }
+      out.push('<li>' + inlineMarkdown((bullet || numbered)[1]) + '</li>'); continue;
+    }
+    flushList(); paragraph.push(line);
+  }
+  closeBlocks();
+  if (inCode) out.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+  return out.join('');
+}
+function scrollBottom() { $('messages').scrollTop = $('messages').scrollHeight; }
+function bubble(role, text) {
+  const row = document.createElement('div'); row.className = 'msg ' + role;
+  if (role === 'assistant') { const avatar = document.createElement('span'); avatar.className = 'avatar'; avatar.textContent = '♧'; row.append(avatar); }
+  const outer = document.createElement('div'); outer.className = 'bubble'; row.append(outer);
+  let content = outer;
+  if (role === 'assistant') {
+    const trace = document.createElement('div'); trace.className = 'tool-trace'; outer.append(trace);
+    content = document.createElement('div'); content.className = 'answer typing'; outer.append(content);
+    content.toolTrace = trace;
+  } else { outer.textContent = text; }
+  $('messages').append(row); scrollBottom(); return content;
+}
+function setBusy(value) {
+  busy = value; $('send').disabled = value; $('message').disabled = value; $('stop').hidden = !value;
+  $('status').textContent = value ? '小喵正在回复…' : '准备就绪';
+  $('newChat').disabled = value; $('mobileNew').disabled = value;
+  document.querySelectorAll('[data-question]').forEach(button => button.disabled = value);
+}
+function newChat() {
+  if (busy) return;
+  conversationId = null; localStorage.removeItem(conversationKey);
+  $('messages').querySelectorAll('.msg').forEach(node => node.remove());
+  $('welcome').hidden = false; $('message').value = ''; $('message').focus();
+}
+$('newChat').onclick = newChat; $('mobileNew').onclick = newChat; $('stop').onclick = () => controller?.abort();
+document.querySelectorAll('[data-panel]').forEach(tab => tab.onclick = () => {
+  document.querySelectorAll('[data-panel]').forEach(item => item.classList.toggle('active', item === tab));
+  document.querySelectorAll('.panel').forEach(panel => panel.hidden = panel.id !== tab.dataset.panel);
+});
+document.querySelectorAll('[data-question]').forEach(button => button.onclick = () => {
+  if (busy) return; $('message').value = button.dataset.question; $('chatForm').requestSubmit();
+});
+$('message').addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('chatForm').requestSubmit(); }
+});
+async function responseError(response) {
+  let data; try { data = await response.json(); } catch { return `请求失败（${response.status}）`; }
+  return typeof data.detail === 'string' ? data.detail : `请求失败（${response.status}），请检查输入或服务配置。`;
+}
+$('chatForm').onsubmit = async event => {
+  event.preventDefault(); const message = $('message').value.trim(); if (!message || busy) return;
+  $('welcome').hidden = true; bubble('user', message); const answer = bubble('assistant');
+  let content = '', done = false, buffer = ''; setBusy(true); $('message').value = ''; controller = new AbortController();
+  try {
+    const response = await fetch('/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, message, conversation_id: conversationId}), signal: controller.signal});
+    if (!response.ok) throw Error(await responseError(response));
+    if (!response.body) throw Error('浏览器未提供流式响应。');
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    const handleFrame = frame => {
+      let eventName = 'message'; const data = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+      }
+      if (!data.length) return; const payload = data.join('\n');
+      if (eventName === 'error') { let detail; try { detail = JSON.parse(payload).message; } catch { detail = '回复暂时失败，请重试。'; } throw Error(detail); }
+      if (payload === '[DONE]') { done = true; return; }
+      const value = JSON.parse(payload);
+      if (value.event === 'tool' && typeof value.name === 'string') {
+        const badge = document.createElement('span'); badge.className = 'tool-badge'; badge.textContent = '🔧 调用了 ' + value.name;
+        answer.toolTrace.append(badge); scrollBottom();
+      } else if (value.event === 'done' && Number.isSafeInteger(value.conversation_id) && value.conversation_id > 0) {
+        conversationId = value.conversation_id; localStorage.setItem(conversationKey, String(conversationId));
+      } else if (typeof value.delta === 'string') {
+        content += value.delta; answer.classList.remove('typing'); answer.innerHTML = renderMarkdown(content); scrollBottom();
+      }
+    };
+    while (true) {
+      const {value, done: ended} = await reader.read(); buffer += ended ? decoder.decode() : decoder.decode(value, {stream: true});
+      buffer = buffer.replace(/\r\n/g, '\n'); let end;
+      while ((end = buffer.indexOf('\n\n')) >= 0) { handleFrame(buffer.slice(0, end)); buffer = buffer.slice(end + 2); }
+      if (ended) break;
+    }
+    if (!done) throw Error('连接已中断，回复未完成，请重试。');
+    if (!content) throw Error('模型未返回文本，请重试。');
+  } catch (error) {
+    controller?.abort(); answer.classList.remove('typing'); answer.classList.add('error');
+    const notice = error.name === 'AbortError' ? '已停止生成，本轮不会作为完整对话保存。' : error.message;
+    answer.textContent = content ? content + '\n\n' + notice : notice;
+  } finally { controller = null; setBusy(false); $('message').focus(); scrollBottom(); }
+};
+$('extractForm').onsubmit = async event => {
+  event.preventDefault(); const text = $('description').value.trim(); if (!text) return;
+  $('extractButton').disabled = true; $('extractResult').hidden = true; $('extractStatus').className = ''; $('extractStatus').textContent = '正在整理…';
+  try {
+    const response = await fetch('/api/extract', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})});
+    if (!response.ok) throw Error(await responseError(response)); const ticket = await response.json();
+    $('orderId').textContent = ticket.order_id ?? '未提供'; $('requestType').textContent = ticket.request_type;
+    $('solution').textContent = ticket.expected_solution; $('jsonResult').textContent = JSON.stringify(ticket, null, 2);
+    $('extractResult').hidden = false; $('extractStatus').textContent = '整理完成，请核对信息。';
+  } catch (error) { $('extractStatus').className = 'error-text'; $('extractStatus').textContent = error.message; }
+  finally { $('extractButton').disabled = false; }
+};
 </script>
 </body></html>
