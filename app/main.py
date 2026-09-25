@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from langchain_core.language_models import BaseChatModel
 
 from app.api.chat import router as chat_router
+from app.api.agent import router as agent_router
 from app.api.extract import router as extract_router
 from app.config import Settings, get_settings
 from app.core.llm import get_chat_model
@@ -52,6 +53,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
 
     application = FastAPI(title="PetShop_Helper", version="0.1.0", lifespan=lifespan)
     application.include_router(chat_router)
+    application.include_router(agent_router)
     application.include_router(extract_router)
 
     @application.get("/", include_in_schema=False)

@@ -76,7 +76,7 @@ def _build_messages(rows: list[Message], current: str, max_tokens: int) -> list[
     human = HumanMessage(content=current)
     required = estimate_tokens([system, human])
     if required > max_tokens:
-        raise ValueError("system and current message exceed context budget")
+        raise ContextBudgetExceeded("system and current message exceed context budget")
     kept: list[BaseMessage] = []
     for user, assistant in reversed(_complete_turns(rows)):
         candidate = [user, assistant, *kept]

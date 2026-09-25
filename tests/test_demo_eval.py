@@ -92,7 +92,7 @@ def test_extract_evaluator_fails_on_transport_error(capsys):
 def test_demo_rejects_malformed_error_and_truncated_stream(stream):
     with _client(lambda request: httpx.Response(200, headers={"content-type": "text/event-stream"}, text=stream)) as client:
         with pytest.raises(demo_chat.StreamError):
-            demo_chat.stream_turn(client, "sid", "你好", lambda text: None)
+            demo_chat.stream_turn(client, "uid", None, "你好", lambda text: None)
 
 
 def test_demo_accepts_complete_stream_and_two_turns(capsys):
@@ -100,12 +100,14 @@ def test_demo_accepts_complete_stream_and_two_turns(capsys):
 
     def handler(request):
         sent.append(json.loads(request.content))
-        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text='data: {"delta":"你好"}\n\ndata: [DONE]\n\n')
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text='data: {"delta":"你好"}\n\ndata: {"event":"done","conversation_id":1}\n\ndata: [DONE]\n\n')
 
     with _client(handler) as client:
         demo_chat.run_demo(client, "sid")
     assert len(sent) == 2
-    assert sent[0]["session_id"] == sent[1]["session_id"] == "sid"
+    assert sent[0]["user_id"] == sent[1]["user_id"] == "sid"
+    assert sent[0]["conversation_id"] is None
+    assert sent[1]["conversation_id"] == 1
     assert "你好" in capsys.readouterr().out
 
 
@@ -116,7 +118,7 @@ def test_demo_accepts_complete_stream_and_two_turns(capsys):
 def test_demo_rejects_http_and_content_type_errors(response):
     with _client(lambda request: response) as client:
         with pytest.raises(demo_chat.StreamError):
-            demo_chat.stream_turn(client, "sid", "你好", lambda text: None)
+            demo_chat.stream_turn(client, "uid", None, "你好", lambda text: None)
 
 
 def test_prompt_evaluator_prints_human_review_without_auto_quality_claim(capsys):

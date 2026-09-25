@@ -1,4 +1,4 @@
-"""Stream two live chat turns under one session and show the raw model response."""
+"""Stream two live chat turns under one persisted conversation."""
 
 import argparse
 import json
@@ -17,10 +17,11 @@ class StreamError(RuntimeError):
     pass
 
 
-def stream_turn(client: httpx.Client, session_id: str, message: str, emit) -> str:
+def stream_turn(client: httpx.Client, user_id: str, conversation_id: int | None, message: str, emit) -> tuple[str, int]:
     chunks = []
+    returned_id = None
     try:
-        with client.stream("POST", "/api/chat", json={"session_id": session_id, "message": message}) as response:
+        with client.stream("POST", "/api/chat", json={"user_id": user_id, "conversation_id": conversation_id, "message": message}) as response:
             response.raise_for_status()
             if not response.headers.get("content-type", "").lower().startswith("text/event-stream"):
                 raise StreamError("响应不是 text/event-stream")
@@ -46,27 +47,35 @@ def stream_turn(client: httpx.Client, session_id: str, message: str, emit) -> st
                     obj = json.loads(data[0])
                 except json.JSONDecodeError as exc:
                     raise StreamError("SSE data 不是有效 JSON") from exc
-                if not isinstance(obj, dict) or not isinstance(obj.get("delta"), str):
+                if not isinstance(obj, dict):
+                    raise StreamError("SSE JSON 格式错误")
+                if obj.get("event") == "tool" and isinstance(obj.get("name"), str):
+                    continue
+                if obj.get("event") == "done" and isinstance(obj.get("conversation_id"), int):
+                    returned_id = obj["conversation_id"]
+                    continue
+                if not isinstance(obj.get("delta"), str):
                     raise StreamError("SSE delta 格式错误")
                 chunks.append(obj["delta"])
                 emit(obj["delta"])
-            if event or not done or not chunks:
-                raise StreamError("SSE 流截断、缺少 [DONE] 或没有内容")
+            if event or not done or returned_id is None or not chunks:
+                raise StreamError("SSE 流截断、缺少会话完成帧或没有内容")
     except httpx.HTTPStatusError as exc:
         raise StreamError(f"HTTP {exc.response.status_code}") from exc
     except httpx.RequestError as exc:
         raise StreamError(f"连接/传输失败: {type(exc).__name__}") from exc
-    return "".join(chunks)
+    return "".join(chunks), returned_id
 
 
-def run_demo(client: httpx.Client, session_id: str) -> None:
+def run_demo(client: httpx.Client, user_id: str) -> None:
     turns = [
         ("第一轮", "我叫王小明,昨天买了你们的智能猫砂盆"),
         ("第二轮", "还记得我叫什么、买了什么吗?"),
     ]
+    conversation_id = None
     for title, message in turns:
         print(f"\n=== {title}: {message} ===", flush=True)
-        stream_turn(client, session_id, message, lambda delta: print(delta, end="", flush=True))
+        _, conversation_id = stream_turn(client, user_id, conversation_id, message, lambda delta: print(delta, end="", flush=True))
         print(flush=True)
     print("请人工核对第二轮是否正确复述「王小明」和「智能猫砂盆」；脚本仅验证 SSE 协议完整。")
 

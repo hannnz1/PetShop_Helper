@@ -163,3 +163,41 @@ async def test_database_tool_timeout_propagates_as_infrastructure_failure(monkey
             timeout=0.01,
             max_retries=0,
         )
+
+
+@pytest.mark.asyncio
+async def test_ticket_timeout_is_reported_without_retry(monkeypatch):
+    attempts = 0
+
+    class Fake:
+        async def ainvoke(self, args):
+            nonlocal attempts
+            attempts += 1
+            await asyncio.sleep(1)
+
+    monkeypatch.setattr(registry, "get_tool", lambda name: Fake())
+    with pytest.raises(infra.ToolInfrastructureError):
+        await infra.execute_tool_call(
+            {"name": "create_ticket", "args": {"description": "投诉", "ticket_type": "投诉"}, "id": "c1"},
+            7,
+            timeout=0.01,
+        )
+    assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_database_tool_uses_default_retry_count(monkeypatch):
+    attempts = 0
+
+    class Fake:
+        async def ainvoke(self, args):
+            nonlocal attempts
+            attempts += 1
+            raise ConnectionError("offline")
+
+    monkeypatch.setattr(registry, "get_tool", lambda name: Fake())
+    with pytest.raises(ConnectionError):
+        await infra.execute_tool_call(
+            {"name": "query_faq", "args": {"keyword": "退货"}, "id": "c1"}, 7
+        )
+    assert attempts == 3

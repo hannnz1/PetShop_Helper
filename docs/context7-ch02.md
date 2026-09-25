@@ -10,6 +10,10 @@
 
 第 2 章实施必须使用用户固定的 SQLAlchemy 2.0 异步、asyncmy、Docker MySQL 与 LangChain 工具接口，不以 SQLite 或其他驱动替换。计划预审纠偏见 [ch02-execution-decisions.md](superpowers/plans/ch02-execution-decisions.md)。
 
+## Task 12：接口契约补充核验
+
+2026-09-25 恢复中断的接口任务时，再次通过 Context7 查询 FastAPI `/websites/fastapi_tiangolo`、Pydantic `/pydantic/pydantic` 与 SQLAlchemy `/websites/sqlalchemy_en_20` 官方资料。FastAPI 的 `StreamingResponse` 支持异步生成器逐块发送，流开始后的异常应在 SSE 内容中处理；Pydantic `Field(min_length/max_length/gt)` 可约束请求字段，空白裁剪先于长度验证；SQLAlchemy `SQLAlchemyError` 是数据库层基础异常，驱动问题通常以 `DBAPIError` 族向上报告。实现及测试分别对照 [StreamingResponse](https://fastapi.tiangolo.com/advanced/custom-response/)、[Pydantic 字段约束](https://docs.pydantic.dev/latest/concepts/fields/) 与 [SQLAlchemy 异常](https://docs.sqlalchemy.org/en/20/core/exceptions.html)。
+
 ## Task 9：工具执行边界与 FAQ 上限
 
 2026-09-25 实施前通过 Context7 再查官方接口：LangChain [ToolMessage](https://reference.langchain.com/python/langchain-core/messages/tool/ToolMessage) 支持关联 `tool_call_id`，错误消息可用 `status="error"`；[BaseTool.ainvoke](https://reference.langchain.com/python/langchain-core/tools/base/BaseTool) 接受工具输入并异步执行。SQLAlchemy [连接池断线处理](https://docs.sqlalchemy.org/en/20/core/pooling.html) 说明数据库断线经 `DBAPIError` 传播，连接会被失效；[ORM 查询](https://docs.sqlalchemy.org/en/20/orm/queryguide/select.html) 使用 `select(...).order_by(...)`，`.limit(10)` 对应 SQL 层结果上限。实际执行层以 `InjectedToolArg` 保留模型不可见的 `conversation_id`，并覆盖任何模型自带同名值；读工具只有限次重试，写工具从不自动重试；数据库类异常及 DB 工具超时留给上层接口处理。

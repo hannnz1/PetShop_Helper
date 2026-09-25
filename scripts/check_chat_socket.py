@@ -8,24 +8,24 @@ from pathlib import Path
 
 import httpx
 import uvicorn
-from langchain_core.messages import AIMessageChunk
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import Settings
+from app.core import agent
 from app.main import create_app
 
 
-class GatedFakeModel:
+class GatedFakeProducer:
     def __init__(self):
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def astream(self, messages):
+    async def stream(self, user_id, message, conversation_id, model=None):
         self.entered.set()
-        yield AIMessageChunk(content="首帧")
+        yield {"type": "delta", "text": "首帧"}
         await self.release.wait()
-        yield AIMessageChunk(content="第二帧")
+        yield {"type": "delta", "text": "第二帧"}
+        yield {"type": "done", "conversation_id": 1}
 
 
 async def _next_frame(lines) -> str:
@@ -40,14 +40,16 @@ async def _next_frame(lines) -> str:
 
 
 async def check_socket_stream() -> None:
-    fake = GatedFakeModel()
+    fake = GatedFakeProducer()
+    original_stream = agent.stream_agent_turn
+    agent.stream_agent_turn = fake.stream
     settings = Settings(
         _env_file=None,
         chat_model="offline-fake",
         chat_base_url="http://127.0.0.1/unused",
         chat_api_key="offline-only",
     )
-    app = create_app(settings=settings, model=fake)
+    app = create_app(settings=settings, model=object())
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))
     sock.listen(128)
@@ -70,7 +72,7 @@ async def check_socket_stream() -> None:
                 else:
                     raise AssertionError("Uvicorn /health 未就绪")
 
-                async with client.stream("POST", "/api/chat", json={"session_id": "offline-socket", "message": "你好"}) as response:
+                async with client.stream("POST", "/api/chat", json={"user_id": "offline-socket", "message": "你好"}) as response:
                     assert response.status_code == 200
                     assert response.headers["content-type"].startswith("text/event-stream")
                     lines = response.aiter_lines()
@@ -82,8 +84,10 @@ async def check_socket_stream() -> None:
                     fake.release.set()
                     second = await asyncio.wait_for(_next_frame(lines), 5)
                     done = await asyncio.wait_for(_next_frame(lines), 5)
+                    terminal = await asyncio.wait_for(_next_frame(lines), 5)
                     assert json.loads(second[6:]) == {"delta": "第二帧"}
-                    assert done == "data: [DONE]"
+                    assert json.loads(done[6:]) == {"event": "done", "conversation_id": 1}
+                    assert terminal == "data: [DONE]"
     finally:
         fake.release.set()
         server.should_exit = True
@@ -94,6 +98,7 @@ async def check_socket_stream() -> None:
             await asyncio.wait_for(server_task, 5)
         finally:
             sock.close()
+            agent.stream_agent_turn = original_stream
 
 
 if __name__ == "__main__":

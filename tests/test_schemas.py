@@ -7,23 +7,23 @@ from app.schemas.extract import AfterSalesTicket, ExtractRequest, RequestType
 
 def test_chat_request_rejects_empty_or_whitespace_fields():
     for payload in (
-        {"session_id": "s1", "message": ""},
-        {"session_id": "s1", "message": " \t\n "},
-        {"session_id": " \t", "message": "hello"},
+        {"user_id": "u1", "message": ""},
+        {"user_id": "u1", "message": " \t\n "},
+        {"user_id": " \t", "message": "hello"},
     ):
         with pytest.raises(ValidationError):
             ChatRequest(**payload)
 
 
 def test_chat_request_accepts_boundary_lengths():
-    assert ChatRequest(session_id="s" * 128, message="m" * 20_000)
+    assert ChatRequest(user_id="u" * 64, message="m" * 20_000)
 
 
 def test_chat_request_rejects_values_over_maximum_length():
     with pytest.raises(ValidationError):
-        ChatRequest(session_id="s" * 129, message="hello")
+        ChatRequest(user_id="u" * 65, message="hello")
     with pytest.raises(ValidationError):
-        ChatRequest(session_id="s1", message="m" * 20_001)
+        ChatRequest(user_id="u1", message="m" * 20_001)
 
 
 def test_extract_request_rejects_empty_or_whitespace_text():

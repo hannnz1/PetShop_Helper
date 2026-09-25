@@ -1,328 +1,80 @@
-import asyncio
-import json
-from copy import deepcopy
+"""Chapter-two streaming HTTP contract."""
 
-import httpx
+import json
+
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessageChunk, HumanMessage
-from starlette.requests import ClientDisconnect
+from sqlalchemy.exc import OperationalError
 
 from app.config import Settings
+from app.core import agent
 from app.main import create_app
+from app.tools.infra import ToolInfrastructureError
 
 
-def config(token_budget: int = 2000) -> Settings:
-    return Settings(
-        _env_file=None,
-        chat_model="test-model",
-        chat_base_url="https://example.test/v1",
-        chat_api_key="private-key",
-        token_budget=token_budget,
-    )
+def _client(monkeypatch, producer):
+    monkeypatch.setattr(agent, "stream_agent_turn", producer)
+    settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1", chat_api_key="test")
+    return TestClient(create_app(settings=settings, model=object()))
 
 
-class StreamingFake:
-    def __init__(self, turns):
-        self.turns = iter(turns)
-        self.calls = []
-
-    async def astream(self, messages):
-        self.calls.append(deepcopy(messages))
-        for chunk in next(self.turns):
-            if isinstance(chunk, Exception):
-                raise chunk
-            yield AIMessageChunk(content=chunk)
-
-
-def frames(response):
+def _frames(response):
     return [frame for frame in response.text.split("\n\n") if frame]
 
 
-def deltas(response):
-    return [json.loads(frame[6:])["delta"] for frame in frames(response) if frame.startswith("data: {")]
+def test_stream_tools_deltas_and_done(monkeypatch):
+    async def producer(user_id, message, conversation_id, model=None):
+        assert (user_id, message, conversation_id) == ("u1", "查物流", None)
+        yield {"type": "tool", "name": "query_logistics"}
+        yield {"type": "delta", "text": "演示"}
+        yield {"type": "delta", "text": "运输中"}
+        yield {"type": "done", "conversation_id": 12}
 
-
-def test_sse_forwards_each_chunk_and_done():
-    model = StreamingFake([["你", "好", "呀"]])
-    app = create_app(settings=config(), model=model)
-    with TestClient(app) as client:
-        response = client.post("/api/chat", json={"session_id": "s1", "message": "在吗"})
+    with _client(monkeypatch, producer) as client:
+        response = client.post("/api/chat", json={"user_id": "u1", "message": "查物流"})
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert response.headers["cache-control"] == "no-cache"
     assert response.headers["x-accel-buffering"] == "no"
-    assert frames(response) == [
-        'data: {"delta": "你"}',
-        'data: {"delta": "好"}',
-        'data: {"delta": "呀"}',
-        "data: [DONE]",
+    assert _frames(response) == [
+        'data: {"event": "tool", "name": "query_logistics"}',
+        'data: {"delta": "演示"}', 'data: {"delta": "运输中"}',
+        'data: {"event": "done", "conversation_id": 12}', 'data: [DONE]',
     ]
 
 
-def test_second_turn_sends_actual_prior_messages_and_isolates_sessions():
-    model = StreamingFake([["第一轮答"], ["第二轮答"], ["另一会话"]])
-    app = create_app(settings=config(), model=model)
-    with TestClient(app) as client:
-        for session, message in [("s", "第一问"), ("s", "第二问"), ("other", "独立问")]:
-            response = client.post("/api/chat", json={"session_id": session, "message": message})
-            assert response.status_code == 200
-            assert frames(response)[-1] == "data: [DONE]"
-    assert [m.content for m in model.calls[1][1:]] == ["第一问", "第一轮答", "第二问"]
-    assert [m.content for m in model.calls[2][1:]] == ["独立问"]
-    assert [m.content for m in app.state.store.get("s")] == [
-        "第一问", "第一轮答", "第二问", "第二轮答"
-    ]
-    assert [m.content for m in app.state.store.get("other")] == ["独立问", "另一会话"]
+@pytest.mark.parametrize("failure,expected", [
+    (agent.ConversationNotFound(99), "会话不存在"),
+    (agent.ContextBudgetExceeded("too big"), "上下文预算"),
+    (ValueError("other problem"), "上游模型暂时不可用"),
+    (ToolInfrastructureError("timeout"), "数据库暂时不可用"),
+    (OperationalError("select", {}, Exception("secret")), "数据库暂时不可用"),
+    (ConnectionError("secret"), "数据库暂时不可用"),
+    (OSError("secret"), "数据库暂时不可用"),
+    (RuntimeError("secret"), "上游模型暂时不可用"),
+])
+def test_stream_failure_after_tool_status_has_no_done(monkeypatch, failure, expected):
+    async def producer(*args, **kwargs):
+        yield {"type": "tool", "name": "create_ticket"}
+        raise failure
+
+    with _client(monkeypatch, producer) as client:
+        response = client.post("/api/chat", json={"user_id": "u1", "message": "投诉"})
+    frames = _frames(response)
+    assert json.loads(frames[0][6:]) == {"event": "tool", "name": "create_ticket"}
+    assert frames[1].startswith("event: error\ndata: ")
+    assert expected in frames[1]
+    assert "[DONE]" not in response.text
+    assert "secret" not in response.text
 
 
-def test_validation_and_budget_reject_before_model_call():
-    model = StreamingFake([["unused"]])
-    app = create_app(settings=config(token_budget=500), model=model)
-    with TestClient(app) as client:
-        assert client.post("/api/chat", json={"session_id": "s", "message": " "}).status_code == 422
-        assert client.post("/api/chat", json={"session_id": "s", "message": "长" * 600}).status_code == 422
-    assert model.calls == []
-    assert app.state.store.get("s") == []
+def test_chat_invalid_request_422(monkeypatch):
+    async def never(*args, **kwargs):
+        raise AssertionError("invalid request reached producer")
+        yield
 
-
-def test_partial_upstream_error_is_atomic_and_does_not_commit_history():
-    model = StreamingFake([["部分", RuntimeError("private-key upstream body")], ["恢复"]])
-    app = create_app(settings=config(), model=model)
-    with TestClient(app) as client:
-        response = client.post("/api/chat", json={"session_id": "s", "message": "问"})
-        assert response.status_code == 200
-        assert frames(response)[0] == 'data: {"delta": "部分"}'
-        assert len(frames(response)) == 2
-        assert frames(response)[1].startswith("event: error\ndata: ")
-        assert "private-key" not in response.text
-        assert "[DONE]" not in response.text
-        assert app.state.store.get("s") == []
-        retry = client.post("/api/chat", json={"session_id": "s", "message": "再问"})
-        assert frames(retry)[-1] == "data: [DONE]"
-    assert [m.content for m in app.state.store.get("s")] == ["再问", "恢复"]
-
-
-def test_empty_upstream_response_is_error_without_history():
-    app = create_app(settings=config(), model=StreamingFake([["", ""]]))
-    with TestClient(app) as client:
-        response = client.post("/api/chat", json={"session_id": "s", "message": "问"})
-    assert len(frames(response)) == 1
-    assert frames(response)[0].startswith("event: error\ndata: ")
-    assert app.state.store.get("s") == []
-
-
-def test_content_blocks_forward_text_without_empty_frames():
-    model = StreamingFake([[[{"type": "text", "text": "文字"}], ""]])
-    app = create_app(settings=config(), model=model)
-    with TestClient(app) as client:
-        response = client.post("/api/chat", json={"session_id": "s", "message": "问"})
-    assert deltas(response) == ["文字"]
-    assert frames(response)[-1] == "data: [DONE]"
-
-
-@pytest.mark.asyncio
-async def test_same_session_conflict_and_cancellation_release():
-    entered = asyncio.Event()
-    release = asyncio.Event()
-
-    class BlockingModel:
-        async def astream(self, messages):
-            entered.set()
-            await release.wait()
-            yield AIMessageChunk(content="完成")
-
-    app = create_app(settings=config(), model=BlockingModel())
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            first = asyncio.create_task(client.post("/api/chat", json={"session_id": "s", "message": "一"}))
-            await asyncio.wait_for(entered.wait(), 2)
-            busy = await client.post("/api/chat", json={"session_id": "s", "message": "二"})
-            assert busy.status_code == 409
-            first.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await first
-            await asyncio.sleep(0)
-            assert app.state.active_sessions == set()
-            release.set()
-            retry = await client.post("/api/chat", json={"session_id": "s", "message": "三"})
-            assert retry.status_code == 200
-            assert app.state.active_sessions == set()
-            assert [m.content for m in app.state.store.get("s")] == ["三", "完成"]
-
-
-@pytest.mark.asyncio
-async def test_done_commits_history_and_old_cleanup_preserves_new_owner():
-    second_entered = asyncio.Event()
-    release_second = asyncio.Event()
-
-    class TwoTurnModel:
-        calls = []
-
-        async def astream(self, messages):
-            self.calls.append(deepcopy(messages))
-            if len(self.calls) == 1:
-                yield AIMessageChunk(content="第一答")
-            else:
-                second_entered.set()
-                await release_second.wait()
-                yield AIMessageChunk(content="第二答")
-
-    model = TwoTurnModel()
-    app = create_app(settings=config(), model=model)
-    body = json.dumps({"session_id": "s", "message": "第一问"}).encode()
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": "2.4"},
-        "http_version": "1.1",
-        "method": "POST",
-        "scheme": "http",
-        "path": "/api/chat",
-        "raw_path": b"/api/chat",
-        "query_string": b"",
-        "root_path": "",
-        "headers": [(b"content-type", b"application/json")],
-        "client": ("test", 1234),
-        "server": ("test", 80),
-    }
-    sent = False
-    second = None
-
-    async def receive():
-        nonlocal sent
-        if not sent:
-            sent = True
-            return {"type": "http.request", "body": body, "more_body": False}
-        await asyncio.Future()
-
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            async def send(message):
-                nonlocal second
-                if message["type"] != "http.response.body" or b"[DONE]" not in message.get("body", b""):
-                    return
-                assert [m.content for m in app.state.store.get("s")] == ["第一问", "第一答"]
-                second = asyncio.create_task(
-                    client.post("/api/chat", json={"session_id": "s", "message": "第二问"})
-                )
-                entered = asyncio.create_task(second_entered.wait())
-                done, pending = await asyncio.wait({entered, second}, timeout=2, return_when=asyncio.FIRST_COMPLETED)
-                for task in pending:
-                    if task is entered:
-                        task.cancel()
-                assert entered in done, f"follow-up did not start: {second.result().status_code if second.done() else 'timeout'}"
-
-            try:
-                await app(scope, receive, send)
-                assert second is not None
-                assert "s" in app.state.active_sessions
-                assert [m.content for m in model.calls[1][1:]] == ["第一问", "第一答", "第二问"]
-            finally:
-                release_second.set()
-                if second is not None:
-                    await second
-            assert second.result().status_code == 200
-            assert app.state.active_sessions == set()
-            assert [m.content for m in app.state.store.get("s")] == [
-                "第一问", "第一答", "第二问", "第二答"
-            ]
-
-
-@pytest.mark.asyncio
-async def test_response_start_failure_releases_session_before_generator_runs():
-    model = StreamingFake([["恢复"]])
-    app = create_app(settings=config(), model=model)
-    body = json.dumps({"session_id": "s", "message": "首次"}).encode()
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": "2.4"},
-        "http_version": "1.1",
-        "method": "POST",
-        "scheme": "http",
-        "path": "/api/chat",
-        "raw_path": b"/api/chat",
-        "query_string": b"",
-        "root_path": "",
-        "headers": [(b"content-type", b"application/json")],
-        "client": ("test", 1234),
-        "server": ("test", 80),
-    }
-    sent = False
-
-    async def receive():
-        nonlocal sent
-        if not sent:
-            sent = True
-            return {"type": "http.request", "body": body, "more_body": False}
-        return {"type": "http.disconnect"}
-
-    async def broken_send(message):
-        if message["type"] == "http.response.start":
-            raise ConnectionError("client disconnected before stream started")
-
-    async with app.router.lifespan_context(app):
-        with pytest.raises(ClientDisconnect):
-            await app(scope, receive, broken_send)
-        assert app.state.active_sessions == set()
-        assert app.state.store.get("s") == []
-        assert model.calls == []
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            retry = await client.post("/api/chat", json={"session_id": "s", "message": "重试"})
-        assert retry.status_code == 200
-        assert frames(retry)[-1] == "data: [DONE]"
-
-
-def test_lifespan_isolated_state_root_health_and_injected_model_not_closed():
-    model = StreamingFake([["ok"]])
-    one = create_app(settings=config(), model=model)
-    two = create_app(settings=config(), model=StreamingFake([["else"]]))
-    with TestClient(one) as client:
-        assert client.get("/health").json() == {"status": "ok"}
-        assert "text/html" in client.get("/").headers["content-type"]
-        assert client.post("/api/chat", json={"session_id": "x", "message": "hi"}).status_code == 200
-    with TestClient(two):
-        assert two.state.store.get("x") == []
-
-
-def test_missing_settings_fails_lifespan_with_safe_message(monkeypatch):
-    import app.main as main
-
-    def missing():
-        raise RuntimeError("private-key should never escape")
-
-    monkeypatch.setattr(main, "get_settings", missing)
-    with pytest.raises(RuntimeError, match="CHAT_MODEL") as error:
-        with TestClient(create_app()):
-            pass
-    assert "private-key" not in str(error.value)
-
-
-def test_lifespan_closes_only_owned_model_clients(monkeypatch):
-    import app.main as main
-
-    class AsyncClient:
-        closed = False
-
-        async def close(self):
-            self.closed = True
-
-    class SyncClient:
-        closed = False
-
-        def close(self):
-            self.closed = True
-
-    class Owned:
-        root_async_client = AsyncClient()
-        root_client = SyncClient()
-
-        async def astream(self, messages):
-            raise AssertionError("startup must not call model")
-            yield
-
-    owned = Owned()
-    monkeypatch.setattr(main, "get_chat_model", lambda **kwargs: owned)
-    with TestClient(create_app(settings=config())) as client:
-        assert client.get("/health").status_code == 200
-    assert owned.root_async_client.closed
-    assert owned.root_client.closed
+    with _client(monkeypatch, never) as client:
+        assert client.post("/api/chat", json={"user_id": "u1", "message": " "}).status_code == 422
+        assert client.post("/api/chat", json={"message": "hello"}).status_code == 422
+        assert client.post("/api/chat", json={"user_id": "u1", "message": "hi", "conversation_id": -1}).status_code == 422
+        assert client.post("/api/chat", json={"user_id": "u" * 65, "message": "hi"}).status_code == 422

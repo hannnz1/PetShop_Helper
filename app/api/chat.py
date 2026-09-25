@@ -1,118 +1,70 @@
-"""Streaming customer-service conversation endpoint."""
+"""SSE customer-service entry point backed by the shared agent orchestration."""
 
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
-from starlette.types import Receive, Scope, Send
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.config import Settings
-from app.core.memory import build_context, estimate_tokens, trim_history
-from app.core.prompts import CUSTOMER_SERVICE_PROMPT
+from app.core import agent
 from app.schemas.chat import ChatRequest
+from app.tools.infra import ToolInfrastructureError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-_ERROR_FRAME = 'event: error\ndata: {"message": "上游模型暂时不可用，请稍后重试"}\n\n'
-
-
-class _SessionStreamingResponse(StreamingResponse):
-    def __init__(self, *args, release_session: Callable[[], None], **kwargs):
-        super().__init__(*args, **kwargs)
-        self._release_session = release_session
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        try:
-            await super().__call__(scope, receive, send)
-        finally:
-            # Response startup can fail before its body generator is entered.
-            self._release_session()
 
 
 def get_model(request: Request) -> BaseChatModel:
-    """Return the shared model, overridable through FastAPI dependencies."""
     return request.app.state.model
 
 
-def get_config(request: Request) -> Settings:
-    return request.app.state.settings
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _chunk_text(chunk: object) -> str:
-    content = getattr(chunk, "content", None)
-    if isinstance(content, str):
-        return content
-    text = getattr(chunk, "text", "")
-    if isinstance(text, str):
-        return text
-    if callable(text):
-        text = text()
-    return text if isinstance(text, str) else ""
+def _error(message: str) -> str:
+    return f"event: error\ndata: {json.dumps({'message': message}, ensure_ascii=False)}\n\n"
 
 
 @router.post("/api/chat")
-async def chat(
-    req: ChatRequest,
-    request: Request,
-    model: BaseChatModel = Depends(get_model),
-    config: Settings = Depends(get_config),
-) -> StreamingResponse:
-    system = CUSTOMER_SERVICE_PROMPT.format_messages(history=[])[0]
-    previous = request.app.state.store.get(req.session_id)
-    try:
-        messages = build_context(
-            system,
-            previous,
-            HumanMessage(content=req.message),
-            config.token_budget,
-        )
-    except ValueError:
-        raise HTTPException(status_code=422, detail="消息超出上下文预算") from None
-
-    active = request.app.state.active_sessions
-    if req.session_id in active:
-        raise HTTPException(status_code=409, detail="会话正在生成回复")
-    owners = request.app.state.active_session_owners
-    owner = object()
-    active.add(req.session_id)
-    owners[req.session_id] = owner
-
-    def release_session() -> None:
-        if owners.get(req.session_id) is owner:
-            owners.pop(req.session_id)
-            active.discard(req.session_id)
-
+async def chat(req: ChatRequest, model: BaseChatModel = Depends(get_model)) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
-        chunks: list[str] = []
+        completed = False
         try:
-            async for chunk in model.astream(messages):
-                text = _chunk_text(chunk)
-                if text:
-                    chunks.append(text)
-                    yield f"data: {json.dumps({'delta': text}, ensure_ascii=False)}\n\n"
-            if not chunks:
-                raise ValueError("empty upstream response")
-            complete = [*messages[1:], AIMessage(content="".join(chunks))]
-            history_budget = config.token_budget + config.chat_max_tokens - estimate_tokens([system])
-            request.app.state.store.replace(
-                req.session_id,
-                trim_history(complete, max_tokens=max(history_budget, 0)),
-            )
-        except Exception:
-            # An upstream exception may contain credentials or response bodies.
-            logger.warning("Chat upstream stream failed")
-            yield _ERROR_FRAME
+            async for event in agent.stream_agent_turn(
+                req.user_id, req.message, req.conversation_id, model=model
+            ):
+                if event["type"] == "tool":
+                    yield _sse({"event": "tool", "name": event["name"]})
+                elif event["type"] == "delta":
+                    yield _sse({"delta": event["text"]})
+                elif event["type"] == "done":
+                    completed = True
+                    yield _sse({"event": "done", "conversation_id": event["conversation_id"]})
+        except agent.ConversationNotFound:
+            yield _error("会话不存在")
             return
-        release_session()
-        yield "data: [DONE]\n\n"
+        except agent.ContextBudgetExceeded:
+            yield _error("消息超出上下文预算")
+            return
+        except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):
+            logger.warning("Chat database service failure user_id=%s", req.user_id)
+            yield _error("数据库暂时不可用，请稍后重试")
+            return
+        except Exception:
+            # Upstream failures may include secrets or response bodies.
+            logger.warning("Chat model or orchestration failure user_id=%s", req.user_id)
+            yield _error("上游模型暂时不可用，请稍后重试")
+            return
+        if completed:
+            yield "data: [DONE]\n\n"
+        else:
+            yield _error("上游模型暂时不可用，请稍后重试")
 
-    return _SessionStreamingResponse(
-        event_stream(),
-        release_session=release_session,
-        media_type="text/event-stream",
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
