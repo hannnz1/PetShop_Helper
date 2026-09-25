@@ -125,3 +125,28 @@ def test_get_settings_is_cached(monkeypatch):
 
     assert first is second
     get_settings.cache_clear()
+
+
+def test_ch03_embedding_settings_are_optional_until_live_gate(monkeypatch):
+    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    settings = Settings(
+        chat_model="test-model", chat_base_url="https://example.test/v1",
+        chat_api_key="test-key", _env_file=None,
+    )
+    assert settings.siliconflow_api_key is None
+    assert settings.embed_base_url == "https://api.siliconflow.cn/v1"
+    assert settings.embed_model == "BAAI/bge-m3"
+    assert settings.milvus_uri == "data/milvus_knowledge.db"
+    assert settings.retrieval_top_k == 3
+    assert settings.retrieval_min_score == 0.4
+
+
+def test_ch03_embedding_key_uses_design_documents_name(monkeypatch):
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "test-embed-secret")
+    settings = Settings(
+        chat_model="test-model", chat_base_url="https://example.test/v1",
+        chat_api_key="test-key", _env_file=None,
+    )
+    assert isinstance(settings.siliconflow_api_key, SecretStr)
+    assert settings.siliconflow_api_key.get_secret_value() == "test-embed-secret"
+    assert "test-embed-secret" not in repr(settings)

@@ -8,7 +8,10 @@ dependencies = [
     "fastapi>=0.141.1",
     "langchain>=1.4.2",
     "langchain-openai>=1.6.3",
+    "milvus-lite==3.2.1",
+    "openai>=3,<4",
     "pydantic-settings>=2.15.0",
+    "pymilvus==3.0.2",
     "sqlalchemy[asyncio]>=2.0.0",
     "uvicorn[standard]>=0.53.0",
 ]

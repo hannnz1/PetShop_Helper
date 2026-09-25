@@ -23,12 +23,25 @@ class Settings(BaseSettings):
     structured_output_method: Literal["json_mode", "json_schema"] = "json_mode"
     database_url: str = "mysql+asyncmy://root:root@127.0.0.1:3306/mewhelp?charset=utf8mb4"
     test_database_url: str = "mysql+asyncmy://root:root@127.0.0.1:3306/mewhelp_test?charset=utf8mb4"
+    siliconflow_api_key: SecretStr | None = None
+    embed_base_url: str = "https://api.siliconflow.cn/v1"
+    embed_model: str = "BAAI/bge-m3"
+    milvus_uri: str = "data/milvus_knowledge.db"
+    retrieval_top_k: int = Field(default=3, gt=0)
+    retrieval_min_score: float = Field(default=0.4, ge=0, le=1)
 
     @field_validator("chat_model", "chat_base_url", "chat_api_key", mode="before")
     @classmethod
     def reject_blank_chat_settings(cls, value: object) -> object:
         raw_value = value.get_secret_value() if isinstance(value, SecretStr) else value
         if isinstance(raw_value, str) and not raw_value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("siliconflow_api_key")
+    @classmethod
+    def reject_blank_embed_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not value.get_secret_value().strip():
             raise ValueError("must not be blank")
         return value
 

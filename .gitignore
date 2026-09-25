@@ -8,4 +8,5 @@ __pycache__/
 .ruff_cache/
 .superpowers/
 work/
+data/*.db*
 *.log
