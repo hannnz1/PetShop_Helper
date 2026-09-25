@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>后台总览 · PetShop Helper</title>
+<style>
+:root{--ink:#203c33;--muted:#60766a;--line:#dae6dd;--bg:#f4f7f1;--green:#176c4b}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif}
+main{max-width:1200px;margin:auto;padding:40px 22px 85px}.eyebrow{letter-spacing:.15em;text-transform:uppercase;color:var(--green);font-size:11px;font-weight:750}
+h1{font-size:clamp(28px,4vw,42px);line-height:1.2;margin:8px 0}p{color:var(--muted)}.lead{max-width:680px;margin-bottom:30px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{background:white;border:1px solid var(--line);border-radius:18px;padding:25px;min-height:226px;display:flex;flex-direction:column;box-shadow:0 8px 24px #26463608}
+.card-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.card h2{font-size:21px;margin:0}.pill{border-radius:50px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;background:#edf2ee;color:#5b6d63}
+.pill.ok{background:#e4f3e7;color:#22623d}.pill.work{background:#fff1d7;color:#875714}.pill.fail{background:#fbe8e3;color:#9b4f37}
+.summary{min-height:48px;margin:15px 0}.metrics{display:flex;flex-wrap:wrap;gap:18px;margin:0 0 20px}.metrics div{min-width:75px}.metrics dt{font-size:11px;color:var(--muted)}.metrics dd{font-weight:750;font-size:22px;margin:0}.enter{display:inline-flex;align-self:start;margin-top:auto;background:#176c4b;color:white;text-decoration:none;padding:9px 15px;border-radius:9px;font-weight:650}
+.error{color:#9b4f37}.refresh{border:1px solid var(--line);background:white;color:var(--ink);border-radius:9px;padding:8px 13px;cursor:pointer}
+@media(max-width:720px){.cards{grid-template-columns:1fr}main{padding-top:25px}.card{min-height:190px}}
+</style>
+</head>
+<body>
+<div id="adminNav"></div>
+<main>
+  <span class="eyebrow">Operations / Overview</span><h1>后台总览</h1>
+  <p class="lead">从这里进入各模块。每张卡独立读取状态；某项服务暂时不可用时，其余入口仍可使用。</p>
+  <button class="refresh" id="refresh" type="button">刷新状态</button>
+  <div class="cards" id="cards" aria-live="polite"></div>
+</main>
+<script src="/static/admin.js"></script>
+<script>
+(() => {
+  mountAdminNav('admin');
+  const cards = document.getElementById('cards');
+  const defaults = [
+    {id:'chat',name:'纯对话客服',href:'/'},
+    {id:'agent',name:'工具客服',href:'/'},
+    {id:'kb',name:'知识库',href:'/kb'},
+  ];
+  function el(tag, className, value) { const n=document.createElement(tag); if(className)n.className=className; if(value!==undefined)n.textContent=String(value); return n; }
+  function showCard(item, data) {
+    const card=el('article','card'); const head=el('div','card-head'); const title=el('h2','',item.name||item.title);
+    const status=data?.status || data?.state || 'unavailable';
+    const stateMap={normal:['正常','ok'],ok:['正常','ok'],healthy:['正常','ok'],action:['要干活','work'],work:['要干活','work'],attention:['要干活','work'],empty:['没数据',''],unavailable:['读数失败','fail'],error:['读数失败','fail']};
+    const state=stateMap[status] || [String(status),''];
+    const pill=el('span','pill '+state[1],state[0]); head.append(title,pill); card.append(head);
+    card.append(el('p','summary',data?.summary || data?.message || (status==='unavailable'?'暂时无法读取这一模块的状态。':'进入模块查看详情。')));
+    const metrics=el('dl','metrics');
+    const entries=data?.metrics && typeof data.metrics==='object' ? Object.entries(data.metrics) : data?.mysql ? [['知识块',data.mysql.total],['待向量化',data.mysql.pending],['Milvus',data.milvus_count]] : [];
+    for(const [label,value] of entries.slice(0,4)){const box=el('div');box.append(el('dt','',label),el('dd','',value ?? '—'));metrics.append(box);}
+    if(metrics.childElementCount)card.append(metrics);
+    const link=el('a','enter','进入模块 →');link.href=item.href||'/admin';card.append(link);return card;
+  }
+  async function load() {
+    cards.replaceChildren(); for(const item of defaults)cards.append(showCard(item,{status:'unavailable',summary:'状态读取中…'}));
+    let modules=[];
+    try { const r=await fetch('/api/admin/overview'); if(!r.ok)throw new Error('HTTP '+r.status); const body=await r.json(); modules=Array.isArray(body.modules)?body.modules:[]; }
+    catch { cards.replaceChildren(); for(const item of defaults)cards.append(showCard(item,{status:'unavailable'})); return; }
+    cards.replaceChildren();
+    if(!modules.length){for(const item of defaults)cards.append(showCard(item,{status:'unavailable'}));return;}
+    for(const item of modules)cards.append(showCard(item,item));
+  }
+  document.getElementById('refresh').addEventListener('click',load); load();
+})();
+</script>
+</body>
+</html>
