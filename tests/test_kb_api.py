@@ -295,7 +295,50 @@ def test_overview_reports_consistency_from_independent_counts(monkeypatch):
     data = response.json()
     assert data["mysql"]["stats"]["pending"] == 1
     assert data["milvus"]["count"] == 1
-    assert data["consistent"] is True
+    assert data["consistent"] is False
+
+
+def test_overview_pending_only_is_not_consistent(monkeypatch):
+    async def stats():
+        return {"total": 2, "pending": 2, "done": 0, "key_clauses": 0}
+
+    async def recent():
+        return []
+
+    class FakeClient:
+        def has_collection(self, _name):
+            return False
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(kb.repository, "knowledge_stats", stats)
+    monkeypatch.setattr(kb.repository, "list_recent_chunks", recent)
+    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    with _client() as client:
+        response = client.get("/api/kb/overview")
+    assert response.status_code == 200
+    assert response.json()["consistent"] is False
+
+
+def test_overview_reports_consistent_when_all_rows_are_vectorized(monkeypatch):
+    async def stats():
+        return {"total": 2, "pending": 0, "done": 2, "key_clauses": 0}
+
+    class FakeClient:
+        def has_collection(self, _name):
+            return True
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(kb.repository, "knowledge_stats", stats)
+    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "count", lambda _client: 2)
+    with _client() as client:
+        response = client.get("/api/kb/overview")
+    assert response.status_code == 200
+    assert response.json()["consistent"] is True
 
 
 def test_staging_lists_rows_by_status(monkeypatch):

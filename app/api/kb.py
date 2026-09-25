@@ -72,7 +72,10 @@ async def overview(request: Request) -> dict:
         pass
     consistent = None
     if mysql["available"] and milvus["available"]:
-        consistent = mysql["stats"]["done"] == milvus["count"]
+        consistent = (
+            mysql["stats"]["pending"] == 0
+            and mysql["stats"]["total"] == mysql["stats"]["done"] == milvus["count"]
+        )
     runner = getattr(request.app.state, "jobs", None)
     return {
         "mysql": mysql, "milvus": milvus, "consistent": consistent,

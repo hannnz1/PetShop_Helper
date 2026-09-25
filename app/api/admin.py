@@ -20,10 +20,10 @@ async def overview(request: Request) -> dict:
         status, summary = "unavailable", "MySQL 读数失败"
     elif not milvus["available"]:
         status, summary = "unavailable", "Milvus 读数失败"
-    elif not stats["total"]:
-        status, summary = "empty", "还没有知识块"
     elif stats["pending"] or knowledge["consistent"] is False:
         status, summary = "action", "有待向量化或双写不一致的知识块"
+    elif not stats["total"]:
+        status, summary = "empty", "还没有知识块"
     else:
         status, summary = "normal", "知识库已同步"
     return {"modules": [

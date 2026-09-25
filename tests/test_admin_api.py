@@ -44,3 +44,21 @@ def test_admin_names_only_the_offline_dependency(monkeypatch):
     assert kb_card["status"] == "unavailable"
     assert "Milvus" in kb_card["summary"]
     assert "MySQL" not in kb_card["summary"]
+
+
+def test_admin_flags_orphan_vectors_even_when_mysql_is_empty(monkeypatch):
+    async def orphan_vectors(_request):
+        return {
+            "mysql": {"available": True, "stats": {"total": 0, "pending": 0, "done": 0}},
+            "milvus": {"available": True, "count": 2},
+            "consistent": False, "staging": None, "sources": [], "jobs": [],
+        }
+
+    monkeypatch.setattr(admin.kb, "overview", orphan_vectors)
+    app = FastAPI()
+    app.include_router(admin.router)
+    with TestClient(app) as client:
+        response = client.get("/api/admin/overview")
+    kb_card = next(item for item in response.json()["modules"] if item["id"] == "kb")
+    assert kb_card["status"] == "action"
+    assert "不一致" in kb_card["summary"]
