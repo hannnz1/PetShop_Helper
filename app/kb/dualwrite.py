@@ -8,7 +8,16 @@ from app.kb.documents import Chunk
 
 async def write_pending(chunks: list[Chunk]) -> list[int]:
     """Atomically insert and link a document, or reuse its exact prior run."""
-    return await repository.insert_knowledge_document([
+    return await repository.insert_knowledge_document(_rows(chunks))
+
+
+async def write_pending_report(chunks: list[Chunk]) -> tuple[list[int], int]:
+    """Return IDs and the number newly inserted by the same locked transaction."""
+    return await repository.insert_knowledge_document_report(_rows(chunks))
+
+
+def _rows(chunks: list[Chunk]) -> list[dict]:
+    return [
         {
             "category": chunk.category, "questions": chunk.questions,
             "answer": chunk.answer, "section_path": chunk.section_path,
@@ -16,7 +25,7 @@ async def write_pending(chunks: list[Chunk]) -> list[int]:
             "is_key_clause": chunk.is_key_clause,
         }
         for chunk in chunks
-    ])
+    ]
 
 
 async def vectorize_pending(client, batch_size: int = 64) -> int:

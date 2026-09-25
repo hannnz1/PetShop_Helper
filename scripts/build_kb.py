@@ -8,15 +8,11 @@ import asyncio
 from dataclasses import replace
 from pathlib import Path
 
-from app.kb import documents, dualwrite
+from app.kb import documents, dualwrite, sources
 
 
-KB_DIR = Path(__file__).resolve().parent.parent / "data" / "kb"
-DOCS = {
-    "product-faq.md": "faq",
-    "returns-policy.md": "policy",
-    "after-sales-manual.md": "manual",
-}
+KB_DIR = sources.KB_DIR
+DOCS = sources.SOURCE_TYPES
 
 
 def source_chunks(filename: str, markdown: str, content_type: str) -> list[documents.Chunk]:
