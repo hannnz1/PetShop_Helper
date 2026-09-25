@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.141.1",
     "langchain>=1.4.2",
     "langchain-openai>=1.6.3",
+    "langchain-text-splitters>=1.1,<2",
     "milvus-lite==3.2.1",
     "openai>=3,<4",
     "pydantic-settings>=2.15.0",

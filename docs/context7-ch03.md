@@ -7,3 +7,7 @@
 - **Pydantic Settings**：`BaseSettings` 从 `.env` 与环境变量加载同名字段，`SecretStr` 隐藏密钥表示，字段约束使用 `Field`；如需不同名称可使用 `validation_alias`。参考 [官方 Settings 文档](https://github.com/pydantic/pydantic-settings/blob/main/docs/index.md)。项目正式字段直接命名 `siliconflow_api_key`，映射 `SILICONFLOW_API_KEY`。
 
 后续使用 LangChain 文本切分器、SQLAlchemy 新表映射、FastAPI `/kb` API 时，应在各任务动手前分别核对最新官方接口并追加记录。
+
+## Task 6：LangChain 文本切分器（2026-09-25）
+
+经 Context7 `/langchain-ai/docs` 核对 [Markdown 标题切分官方示例](https://github.com/langchain-ai/docs/blob/main/src/oss/python/integrations/splitters/markdown_header_metadata_splitter.mdx)及[递归切分官方示例](https://github.com/langchain-ai/docs/blob/main/src/oss/integrations/splitters/recursive_text_splitter.mdx)：`MarkdownHeaderTextSplitter(headers_to_split_on=..., strip_headers=True).split_text(md)` 返回带标题 metadata 的 `Document` 列表；`RecursiveCharacterTextSplitter(chunk_size=..., chunk_overlap=..., separators=..., is_separator_regex=False, length_function=len).split_text(text)` 返回字符串块。当前 `langchain>=1.4.2` 未附带可导入的 `langchain_text_splitters`，已显式增加 `langchain-text-splitters==1.1.2`（锁文件解析结果）。
