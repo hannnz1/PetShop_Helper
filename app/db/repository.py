@@ -1,8 +1,11 @@
 """Asynchronous persistence for customer-service conversations and tool data."""
 
 from uuid import uuid4
+import hashlib
+import re
+import unicodedata
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select, text, update
 
 import app.db.base as db
 from app.db.models import Conversation, Faq, KnowledgeChunk, Message, QaExtractionStaging, Ticket
@@ -113,6 +116,94 @@ async def insert_knowledge_chunk(
         return row.id
 
 
+_KNOWLEDGE_FIELDS = (
+    "category", "questions", "answer", "section_path", "content_type", "is_key_clause",
+)
+
+
+def _knowledge_fingerprint(chunk: dict) -> tuple:
+    """Treat formatting-only Unicode/spacing changes as the same source text."""
+    return tuple(
+        int(chunk[key]) if key == "is_key_clause" else
+        re.sub(r"\s+", " ", unicodedata.normalize("NFKC", chunk[key] or "")).strip()
+        for key in _KNOWLEDGE_FIELDS
+    )
+
+
+def _matching_document(rows: list[dict], chunks: list[dict]) -> list[int] | None:
+    """Find an exact, already linked document; a changed document is a new version."""
+    by_id = {row["id"]: row for row in rows}
+    wanted = [_knowledge_fingerprint(chunk) for chunk in chunks]
+    for first in rows:
+        if first["prev_chunk_id"] is not None or _knowledge_fingerprint(first) != wanted[0]:
+            continue
+        ids: list[int] = []
+        current = first
+        for expected in wanted:
+            if current is None or _knowledge_fingerprint(current) != expected:
+                break
+            ids.append(current["id"])
+            current = by_id.get(current["next_chunk_id"])
+        else:
+            if current is None:
+                return ids
+    return None
+
+
+async def _insert_document_row(connection, chunk: dict) -> int:
+    result = await connection.execute(
+        insert(KnowledgeChunk.__table__).values(
+            **{field: chunk[field] for field in _KNOWLEDGE_FIELDS}
+        )
+    )
+    return int(result.inserted_primary_key[0])
+
+
+async def insert_knowledge_document(chunks: list[dict]) -> list[int]:
+    """Atomically insert and link a document, or return an exact prior run's IDs.
+
+    One MySQL named lock serializes the read/insert/commit across workers. A
+    changed answer is never written over existing knowledge; it forms a new
+    document version. The lock belongs to the same physical connection through
+    commit, since MySQL named locks do not follow transaction boundaries.
+    """
+    if not chunks:
+        return []
+    engine = db.async_session.kw["bind"]
+    name = "mewhelp:kb:" + hashlib.sha256(
+        (engine.url.database or "").encode("utf-8")
+    ).hexdigest()[:32]
+    async with engine.connect() as connection:
+        acquired = await connection.scalar(
+            text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
+        )
+        # GET_LOCK starts an implicit SQLAlchemy transaction, but the MySQL
+        # named lock itself persists across this commit on the connection.
+        await connection.commit()
+        if acquired != 1:
+            raise TimeoutError("knowledge ingestion lock unavailable")
+        try:
+            async with connection.begin():
+                table = KnowledgeChunk.__table__
+                result = await connection.execute(select(table).order_by(table.c.id))
+                existing = list(result.mappings())
+                prior = _matching_document(existing, chunks)
+                if prior is not None:
+                    return prior
+                ids = [await _insert_document_row(connection, chunk) for chunk in chunks]
+                for index, chunk_id in enumerate(ids):
+                    await connection.execute(
+                        update(table).where(table.c.id == chunk_id).values(
+                            prev_chunk_id=ids[index - 1] if index else None,
+                            next_chunk_id=ids[index + 1] if index + 1 < len(ids) else None,
+                        )
+                    )
+                return ids
+        finally:
+            await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+            await connection.commit()
+
+
 async def list_pending_chunks() -> list[KnowledgeChunk]:
     async with db.async_session() as session:
         result = await session.execute(
@@ -126,9 +217,10 @@ async def list_pending_chunks() -> list[KnowledgeChunk]:
 async def mark_chunk_vectorized(chunk_id: int, vector_id: str) -> None:
     async with db.async_session.begin() as session:
         row = await session.get(KnowledgeChunk, chunk_id)
-        if row is not None:
-            row.vector_id = vector_id
-            row.vectorize_status = "done"
+        if row is None:
+            raise LookupError(f"knowledge chunk {chunk_id} does not exist")
+        row.vector_id = vector_id
+        row.vectorize_status = "done"
 
 
 async def set_chunk_neighbors(
