@@ -2,10 +2,10 @@
 
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import app.db.base as db
-from app.db.models import Conversation, Faq, Message, Ticket
+from app.db.models import Conversation, Faq, KnowledgeChunk, Message, QaExtractionStaging, Ticket
 
 
 def _new_ticket_no() -> str:
@@ -89,3 +89,106 @@ async def create_ticket(conversation_id: int, description: str, ticket_type: str
         )
         conversation.status = "已转人工"
     return ticket_no
+
+
+async def insert_knowledge_chunk(
+    category: str,
+    questions: str,
+    answer: str,
+    section_path: str | None = None,
+    content_type: str | None = None,
+    is_key_clause: int = 0,
+) -> int:
+    async with db.async_session.begin() as session:
+        row = KnowledgeChunk(
+            category=category,
+            questions=questions,
+            answer=answer,
+            section_path=section_path,
+            content_type=content_type,
+            is_key_clause=is_key_clause,
+        )
+        session.add(row)
+        await session.flush()
+        return row.id
+
+
+async def list_pending_chunks() -> list[KnowledgeChunk]:
+    async with db.async_session() as session:
+        result = await session.execute(
+            select(KnowledgeChunk)
+            .where(KnowledgeChunk.vectorize_status == "pending")
+            .order_by(KnowledgeChunk.id)
+        )
+        return list(result.scalars())
+
+
+async def mark_chunk_vectorized(chunk_id: int, vector_id: str) -> None:
+    async with db.async_session.begin() as session:
+        row = await session.get(KnowledgeChunk, chunk_id)
+        if row is not None:
+            row.vector_id = vector_id
+            row.vectorize_status = "done"
+
+
+async def set_chunk_neighbors(
+    chunk_id: int, prev_id: int | None, next_id: int | None
+) -> None:
+    async with db.async_session.begin() as session:
+        row = await session.get(KnowledgeChunk, chunk_id)
+        if row is not None:
+            row.prev_chunk_id = prev_id
+            row.next_chunk_id = next_id
+
+
+async def count_chunks_by_status(status: str) -> int:
+    async with db.async_session() as session:
+        result = await session.execute(
+            select(func.count())
+            .select_from(KnowledgeChunk)
+            .where(KnowledgeChunk.vectorize_status == status)
+        )
+        return int(result.scalar_one())
+
+
+async def list_all_questions() -> list[str]:
+    async with db.async_session() as session:
+        result = await session.execute(
+            select(KnowledgeChunk.questions).order_by(KnowledgeChunk.id)
+        )
+        return list(result.scalars())
+
+
+async def insert_staging(
+    batch_no: str, source_ref: str | None, question: str, answer: str
+) -> int:
+    async with db.async_session.begin() as session:
+        row = QaExtractionStaging(
+            batch_no=batch_no,
+            source_ref=source_ref,
+            question=question,
+            answer=answer,
+        )
+        session.add(row)
+        await session.flush()
+        return row.id
+
+
+async def list_staging_by_status(status: str) -> list[QaExtractionStaging]:
+    async with db.async_session() as session:
+        result = await session.execute(
+            select(QaExtractionStaging)
+            .where(QaExtractionStaging.status == status)
+            .order_by(QaExtractionStaging.id)
+        )
+        return list(result.scalars())
+
+
+async def set_staging_status(ids: list[int], status: str) -> None:
+    if not ids:
+        return
+    async with db.async_session.begin() as session:
+        for staging_id in ids:
+            row = await session.get(QaExtractionStaging, staging_id)
+            if row is not None:
+                row.status = status
