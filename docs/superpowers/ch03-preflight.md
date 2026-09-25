@@ -15,3 +15,13 @@
 Context7 初查：Milvus 官方文档示例为 `pymilvus[milvus-lite]` 加本地 `.db` URI；OpenAI 官方 Python SDK 支持 `AsyncOpenAI(base_url=...)` 的 embeddings 接口；LangChain Reference 有 `OpenAIEmbeddings`。Milvus Lite 新版[官方仓库说明](https://github.com/milvus-io/milvus-lite)已列 Windows 为有依赖 wheel 时可用的平台；旧版[官方 FAQ](https://milvus.io/docs/operational_faq.md)仍说不支持 Windows，二者反映版本差异。本机隔离环境已安装 `pymilvus==3.0.2`、`milvus-lite==3.2.1`，Windows/Python 3.12 实测本地 `.db` 建集合、insert、search、按 ID upsert、get 全部通过。原 Plan 按旧 2.x 结构写的 API 和返回值需要基于 Context7 与真实 3.x 行为复审。真实嵌入验收仍需独立 `EMBED_*` 凭据，现有聊天模型密钥不能假定适用。
 
 当前已向用户询问嵌入客户端和配置字段名。问题定稿、计划评审及 Task 1 真实嵌入风险闸前，不改第三章运行代码、不调用付费嵌入上游。Milvus 冒烟只在 Git 忽略的 `work/` 隔离环境中运行，未修改项目依赖。
+
+独立计划预审补充（当前源 Plan **未通过**，须产出修订执行计划并复审）：
+
+- 源材料给出 `knowledge_chunks` 和 `qa_extraction_staging` DDL，但 Plan 没有创建 `sql/ch03-ddl.sql` 的任务；应在 ORM 和测试库之前补齐权威 DDL 及幂等应用步骤。
+- 示例反复导入不存在的 `app.config.settings`，须适配现有 `get_settings()`。
+- 本机没有 `make`；Plan 的页面作业全依赖 make，且 `show_kb.py`、`kb-preview`、`kb-reset` 尚无完整实现步骤。Windows 作业执行与停止机制需一并定稿。
+- 挖知识先标 staging 为 kept 再写知识的步骤有崩溃漏入风险；源文档建库重跑可能重复插入。修订计划需稳定来源键、整体去重与失败恢复测试。
+- 嵌入返回少于批量输入时，源代码 `zip` 会漏写向量却将整批标 done；标记 done 前必须校验数量与每条维度。
+- Spec 要显式标记关键条款，Plan 却按关键词猜测；需定文档标记语法。挖知识 Prompt 的“忠于原答”与“统一改写时效”也冲突，需保持有依据的原答事实。
+- Milvus Lite 是本地嵌入库，不能按源 Plan 用“关掉 Milvus 服务”测试故障；应在隔离环境注入读取失败。不得损坏正式数据文件。
