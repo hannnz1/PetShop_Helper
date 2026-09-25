@@ -150,3 +150,59 @@ def test_ch03_embedding_key_uses_design_documents_name(monkeypatch):
     assert isinstance(settings.siliconflow_api_key, SecretStr)
     assert settings.siliconflow_api_key.get_secret_value() == "test-embed-secret"
     assert "test-embed-secret" not in repr(settings)
+
+
+def test_ch04_retrieval_defaults_preserve_pre_migration_milvus(monkeypatch):
+    monkeypatch.delenv("RERANK_API_KEY", raising=False)
+    settings = Settings(
+        chat_model="test-model", chat_base_url="https://example.test/v1",
+        chat_api_key="test-key", _env_file=None,
+    )
+    assert settings.milvus_uri == "data/milvus_knowledge.db"
+    assert settings.rerank_api_key is None
+    assert settings.rerank_model == "BAAI/bge-reranker-v2-m3"
+    assert settings.recall_top_k == 50
+    assert settings.rerank_top_k == 10
+    assert settings.rerank_min_score == 0.3
+
+
+def test_ch04_retrieval_settings_load_from_environment(monkeypatch):
+    overrides = {
+        "MILVUS_URI": "http://127.0.0.1:19530",
+        "RERANK_API_KEY": "test-rerank-key",
+        "RERANK_MODEL": "BAAI/test-reranker",
+        "RECALL_TOP_K": "30",
+        "RERANK_TOP_K": "7",
+        "RERANK_MIN_SCORE": "0.45",
+    }
+    for name, value in overrides.items():
+        monkeypatch.setenv(name, value)
+    settings = Settings(
+        chat_model="test-model", chat_base_url="https://example.test/v1",
+        chat_api_key="test-key", _env_file=None,
+    )
+    assert settings.milvus_uri == overrides["MILVUS_URI"]
+    assert settings.rerank_api_key.get_secret_value() == "test-rerank-key"
+    assert "test-rerank-key" not in repr(settings)
+    assert settings.rerank_model == "BAAI/test-reranker"
+    assert settings.recall_top_k == 30
+    assert settings.rerank_top_k == 7
+    assert settings.rerank_min_score == 0.45
+
+
+@pytest.mark.parametrize("field_name", ("recall_top_k", "rerank_top_k"))
+def test_ch04_top_k_must_be_positive(field_name):
+    with pytest.raises(ValidationError):
+        Settings(
+            chat_model="test-model", chat_base_url="https://example.test/v1",
+            chat_api_key="test-key", **{field_name: 0}, _env_file=None,
+        )
+
+
+@pytest.mark.parametrize("value", (-0.1, 1.1))
+def test_ch04_min_score_must_be_probability(value):
+    with pytest.raises(ValidationError):
+        Settings(
+            chat_model="test-model", chat_base_url="https://example.test/v1",
+            chat_api_key="test-key", rerank_min_score=value, _env_file=None,
+        )

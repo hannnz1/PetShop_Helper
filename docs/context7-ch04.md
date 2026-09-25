@@ -10,3 +10,5 @@ Before changing Milvus/SiliconFlow code, queried Context7 for current official d
 - MinIO distribution issue: the [official archived MinIO source repository](https://github.com/minio/minio) now describes source-only community distribution and Docker builds from source; the [Milvus issue](https://github.com/milvus-io/milvus/issues/53430) documents the removed Docker Hub image. The pinned 2024-05-28 source tag was downloaded and SHA-256 checked before local image construction, retaining the original MinIO component rather than changing object stores.
 
 No credential values were queried or recorded.
+
+Task 2 configuration check: [Pydantic Settings official documentation](https://github.com/pydantic/pydantic-settings/blob/main/docs/index.md) confirms `BaseSettings` environment overrides and `SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')`; its [configuration reference](https://github.com/pydantic/pydantic-settings/blob/main/_autodocs/configuration.md) confirms defaults are validated. The new rerank and recall fields use the existing `Settings` pattern and keep the Lite default until the planned Task 14 migration.
