@@ -1,30 +1,32 @@
-"""FAQ tool behavior against the isolated Docker MySQL test schema."""
+"""Stable FAQ tool registration and semantic search behavior."""
 
-import pytest
-
-from app.db.models import Faq
+from app.tools.business import FaqInput
 from app.tools.business import query_faq
 
 
-@pytest.mark.asyncio
-async def test_query_faq_hit_returns_question_and_answer(db_session_factory, db_clean):
-    async with db_session_factory() as session:
-        session.add(Faq(question="退货政策", answer="7 天无理由退货", category="售后"))
-        await session.commit()
+async def test_query_faq_tool_keeps_name_description_and_input_schema(monkeypatch):
+    async def fake_search(keyword):
+        assert keyword == "退货政策"
+        return [{"id": 7, "score": 0.91, "question": "退货政策", "answer": "7 天无理由退货"}]
 
-    result = await query_faq.ainvoke({"keyword": "退货政策"})
+    monkeypatch.setattr("app.tools.business.retrieval.search_knowledge", fake_search)
+    assert query_faq.name == "query_faq"
+    assert query_faq.args_schema is FaqInput
+    assert query_faq.description == "按关键词查询 FAQ。用户询问政策、规则或操作流程等通用问题时使用。"
+    assert await query_faq.ainvoke({"keyword": "退货政策"}) == {
+        "hits": [{"question": "退货政策", "answer": "7 天无理由退货"}]
+    }
 
-    assert result == {"hits": [{"question": "退货政策", "answer": "7 天无理由退货"}]}
 
+async def test_query_faq_sends_synonym_query_to_semantic_retrieval(monkeypatch):
+    calls = []
 
-@pytest.mark.asyncio
-async def test_query_faq_literal_miss_exposes_synonym_gap(db_session_factory, db_clean):
-    async with db_session_factory() as session:
-        session.add(Faq(question="运费怎么算", answer="按地址计算", category="物流"))
-        await session.commit()
+    async def fake_search(keyword):
+        calls.append(keyword)
+        return [{"id": 8, "score": 0.87, "question": "运费怎么算", "answer": "按地址计算"}]
 
-    result = await query_faq.ainvoke({"keyword": "邮费"})
-
-    assert result["hits"] == []
-    assert "未找到" in result["message"]
-    assert "邮费" in result["message"]
+    monkeypatch.setattr("app.tools.business.retrieval.search_knowledge", fake_search)
+    assert await query_faq.ainvoke({"keyword": "邮费"}) == {
+        "hits": [{"question": "运费怎么算", "answer": "按地址计算"}]
+    }
+    assert calls == ["邮费"]

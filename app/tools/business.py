@@ -1,4 +1,4 @@
-"""Mock business lookups and persisted FAQ lookup for chapter 2."""
+"""Mock business lookups and semantic FAQ lookup."""
 
 import random
 from typing import Annotated, Literal
@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 
+from app.core import retrieval
 from app.db import repository
 
 
@@ -87,10 +88,10 @@ async def query_logistics(order_id: str) -> dict:
 async def query_faq(keyword: str) -> dict:
     """按关键词查询 FAQ。用户询问政策、规则或操作流程等通用问题时使用。"""
 
-    rows = await repository.search_faq(keyword)
-    if not rows:
+    hits = await retrieval.search_knowledge(keyword)
+    if not hits:
         return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
-    return {"hits": [{"question": row.question, "answer": row.answer} for row in rows]}
+    return {"hits": [{"question": hit["question"], "answer": hit["answer"]} for hit in hits]}
 
 
 @tool
