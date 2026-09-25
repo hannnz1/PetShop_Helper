@@ -1,0 +1,37 @@
+[
+  {
+    "id": "shipping-fee-paraphrase",
+    "query": "邮费是多少",
+    "expect_question_contains": "运费",
+    "expect_answer_contains_all": ["99", "10", "偏远地区"],
+    "answer_regex_all": ["(?:满|达到|不少于|至少)\\s*99\\s*元?.{0,8}(?:包邮|免邮|免运费|免除运费)", "(?:未满|不足|低于)\\s*(?:99\\s*元?)?.{0,8}(?:收(?:取)?|需付|支付|运费|邮费).{0,6}10\\s*元?"],
+    "forbid_answer_regex_any": ["(?:保证|承诺|一定|必定).{0,12}(?:赔|退款|免运费|包邮|送达|发货|到账)"]
+  },
+  {
+    "id": "courier-fee-paraphrase",
+    "query": "快递费怎么收",
+    "expect_question_contains": "运费",
+    "expect_answer_contains_all": ["99", "10", "偏远地区"],
+    "answer_regex_all": ["(?:满|达到|不少于|至少)\\s*99\\s*元?.{0,8}(?:包邮|免邮|免运费|免除运费)", "(?:未满|不足|低于)\\s*(?:99\\s*元?)?.{0,8}(?:收(?:取)?|需付|支付|运费|邮费).{0,6}10\\s*元?"],
+    "forbid_answer_regex_any": ["(?:保证|承诺|一定|必定).{0,12}(?:赔|退款|免运费|包邮|送达|发货|到账)"]
+  },
+  {
+    "id": "dispatch-time-paraphrase",
+    "query": "多久能发货",
+    "expect_question_contains": "发货",
+    "expect_answer_contains_all": ["48", "预售", "详情页"]
+  },
+  {
+    "id": "return-paraphrase",
+    "query": "东西不想要了能退吗",
+    "expect_question_contains": "退货",
+    "expect_answer_contains_all": ["7", "完好"],
+    "answer_regex_all": ["7\\s*天.{0,8}无理由退货", "商品.{0,6}完好"]
+  },
+  {
+    "id": "invoice-paraphrase",
+    "query": "怎么开发票",
+    "expect_question_contains": "发票",
+    "expect_answer_contains_all": ["申请开票", "抬头", "税号"]
+  }
+]
