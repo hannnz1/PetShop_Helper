@@ -159,6 +159,11 @@ async def preview(request: SourceRequest) -> dict:
 async def ingest(request: SourceRequest) -> dict:
     """Persist pending chunks; exact repeat requests reuse document IDs."""
     chunks = _chunks(request)
+    async with repository.knowledge_lifecycle_lock():
+        return await _ingest_locked(request, chunks)
+
+
+async def _ingest_locked(request: SourceRequest, chunks: list[documents.Chunk]) -> dict:
     writer = dualwrite.write_pending_report if request.filename is not None else dualwrite.write_manual_report
     ids, inserted = await writer(chunks)
     if request.vectorize:

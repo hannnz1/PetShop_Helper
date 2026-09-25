@@ -119,6 +119,11 @@ async def mine(batch_size: int = 20, model=None) -> dict[str, int]:
     """
     if batch_size <= 0:
         raise ValueError("batch_size must be positive")
+    async with repository.knowledge_lifecycle_lock():
+        return await _mine_locked(batch_size, model)
+
+
+async def _mine_locked(batch_size: int, model=None) -> dict[str, int]:
     sources = await _load_conversation_texts()
     extracted = 0
     for start in range(0, len(sources), batch_size):

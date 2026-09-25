@@ -1,10 +1,22 @@
 """KB preview and ingestion API contracts without live database/model calls."""
 
+from contextlib import asynccontextmanager
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import kb
 from app.db import repository
+
+
+@pytest.fixture(autouse=True)
+def offline_lifecycle_lock(monkeypatch):
+    @asynccontextmanager
+    async def unlocked():
+        yield
+
+    monkeypatch.setattr(repository, "knowledge_lifecycle_lock", unlocked)
 
 
 def _client():

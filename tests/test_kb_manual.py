@@ -1,5 +1,8 @@
 """Manual-ingest SQL behavior without the unavailable Docker MySQL engine."""
 
+import asyncio
+from contextlib import asynccontextmanager
+
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -188,3 +191,25 @@ async def test_reset_keeps_mysql_if_vector_drop_fails(manual_database):
         await repository.reset_knowledge_tables(broken_drop)
     with manual_database.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM knowledge_chunks")) == 1
+
+
+@pytest.mark.asyncio
+async def test_reset_waits_for_whole_ingest_lifecycle(manual_database, monkeypatch):
+    lock = asyncio.Lock()
+    dropped = []
+
+    @asynccontextmanager
+    async def lifecycle():
+        async with lock:
+            yield
+
+    monkeypatch.setattr(repository, "knowledge_lifecycle_lock", lifecycle)
+    async with lifecycle():
+        resetting = asyncio.create_task(repository.reset_knowledge_tables(
+            lambda: dropped.append(True)
+        ))
+        await asyncio.sleep(0)
+        assert not resetting.done()
+        assert dropped == []
+    await asyncio.wait_for(resetting, 1)
+    assert dropped == [True]

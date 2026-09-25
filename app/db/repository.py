@@ -373,22 +373,31 @@ def _knowledge_lock_name(engine) -> str:
 
 
 @asynccontextmanager
-async def knowledge_write_lock():
-    """Serialize vector materialization with knowledge ingestion and reset."""
+async def _named_knowledge_lock(suffix: str):
     engine = db.async_session.kw["bind"]
-    name = _knowledge_lock_name(engine)
+    name = _knowledge_lock_name(engine) + suffix
     async with engine.connect() as connection:
         acquired = await connection.scalar(
             text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
         )
         await connection.commit()
         if acquired != 1:
-            raise TimeoutError("knowledge write lock unavailable")
+            raise TimeoutError("knowledge lock unavailable")
         try:
             yield
         finally:
             await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
             await connection.commit()
+
+
+def knowledge_write_lock():
+    """Serialize vector materialization with knowledge ingestion and reset."""
+    return _named_knowledge_lock("")
+
+
+def knowledge_lifecycle_lock():
+    """Keep a whole ingest/mining operation outside the reset window."""
+    return _named_knowledge_lock(":flow")
 
 
 async def reset_knowledge_tables(drop_vectors) -> None:
@@ -398,23 +407,24 @@ async def reset_knowledge_tables(drop_vectors) -> None:
     commit fails, rerunning reset can finish the clear; missing vectors never
     expose deleted knowledge through retrieval in the meantime.
     """
-    engine = db.async_session.kw["bind"]
-    name = _knowledge_lock_name(engine)
-    async with engine.connect() as connection:
-        acquired = await connection.scalar(
-            text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
-        )
-        await connection.commit()
-        if acquired != 1:
-            raise TimeoutError("knowledge reset lock unavailable")
-        try:
-            async with connection.begin():
-                drop_vectors()
-                await connection.execute(delete(QaExtractionStaging.__table__))
-                await connection.execute(delete(KnowledgeChunk.__table__))
-        finally:
-            await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+    async with knowledge_lifecycle_lock():
+        engine = db.async_session.kw["bind"]
+        name = _knowledge_lock_name(engine)
+        async with engine.connect() as connection:
+            acquired = await connection.scalar(
+                text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
+            )
             await connection.commit()
+            if acquired != 1:
+                raise TimeoutError("knowledge reset lock unavailable")
+            try:
+                async with connection.begin():
+                    drop_vectors()
+                    await connection.execute(delete(QaExtractionStaging.__table__))
+                    await connection.execute(delete(KnowledgeChunk.__table__))
+            finally:
+                await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+                await connection.commit()
 
 
 async def insert_staging_batch(

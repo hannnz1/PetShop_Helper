@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from app.kb import documents, dualwrite, sources
+from app.db import repository
 
 
 KB_DIR = sources.KB_DIR
@@ -29,12 +30,13 @@ def source_chunks(filename: str, markdown: str, content_type: str) -> list[docum
 
 async def main() -> None:
     total = 0
-    for filename, kind in DOCS.items():
-        markdown = (KB_DIR / filename).read_text(encoding="utf-8")
-        chunks = source_chunks(filename, markdown, kind)
-        ids = await dualwrite.write_pending(chunks)
-        total += len(ids)
-        print(f"{filename}: {len(ids)} 块")
+    async with repository.knowledge_lifecycle_lock():
+        for filename, kind in DOCS.items():
+            markdown = (KB_DIR / filename).read_text(encoding="utf-8")
+            chunks = source_chunks(filename, markdown, kind)
+            ids = await dualwrite.write_pending(chunks)
+            total += len(ids)
+            print(f"{filename}: {len(ids)} 块")
     print(f"本次建库处理 {total} 块；向量化请运行 make kb-vectorize")
 
 
