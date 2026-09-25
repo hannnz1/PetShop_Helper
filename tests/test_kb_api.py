@@ -137,6 +137,17 @@ def test_search_rejects_invalid_top_k_before_embedding():
     assert response.status_code == 422
 
 
+def test_search_reports_unavailable_without_exposing_upstream_error(monkeypatch):
+    async def unavailable(_query, top_k=None, min_score=None):
+        raise ConnectionError("private upstream endpoint")
+
+    monkeypatch.setattr(kb.retrieval, "search_knowledge", unavailable)
+    with _client() as client:
+        response = client.post("/api/kb/search", json={"query": "邮费是多少"})
+    assert response.status_code == 503
+    assert "private upstream endpoint" not in response.text
+
+
 def test_vectorize_closes_its_client(monkeypatch):
     class FakeClient:
         closed = False

@@ -1,6 +1,6 @@
-# PetShop_Helper：电商智能客服（第 1–2 章）
+# PetShop_Helper：电商智能客服（第 1–3 章开发中）
 
-FastAPI 服务通过 OpenAI 兼容的 **Chat Completions** 接口连接模型。`/api/chat` 返回带工具轨迹的 SSE 流，使用 MySQL 保存多轮会话；`/api/agent` 返回完整 JSON 及工具轨迹；`/api/extract` 将售后描述提取为固定字段。第 2 章包括五个 LangChain 工具：三个模拟数据查询、MySQL FAQ 查询和工单创建。订单、商品、物流查询结果均为演示数据。
+FastAPI 服务通过 OpenAI 兼容的 **Chat Completions** 接口连接模型。`/api/chat` 返回带工具轨迹的 SSE 流，使用 MySQL 保存多轮会话；`/api/agent` 返回完整 JSON 及工具轨迹；`/api/extract` 将售后描述提取为固定字段。第 2 章包括五个 LangChain 工具：三个模拟数据查询、FAQ 查询和工单创建。第 3 章正在把 FAQ 内部查询切换为 BGE-M3 + Milvus Lite 的 dense 语义检索，并建设 `/kb` 知识库工作台。订单、商品、物流查询结果均为演示数据。
 
 ## 配置与启动
 
@@ -71,6 +71,18 @@ Windows PowerShell 对应命令：
 
 `check_chat_socket.py` 使用确定性的假流和真实 localhost Uvicorn socket，检查首个 SSE 帧在生产者释放门闩前抵达，再核对后续帧与 `[DONE]`。这是离线传输集成测试，不能代替真实模型验收。全量 pytest 使用隔离的 `mewhelp_test` 数据库；fixture 会重建其中的测试表，不能将其指向业务数据库。
 
-第 1 章曾使用 `gpt-4o-mini` 完成真实模型验收：五条标注样例的订单号与诉求类型均匹配（5/5），两轮 SSE 对话能在第二轮接住“王小明”和“智能猫砂盆”。这属于历史验收结果；当前本机 `.env` 已切换至第 2 章 `glm-5.2`。`expected_solution` 仍需人工核对，其中“询问后续保养”的样例曾返回“未明确”。密钥不会写入仓库，其他机器仍需自行配置 `.env`。
+第 1 章曾使用 `gpt-4o-mini` 完成真实模型验收：五条标注样例的订单号与诉求类型均匹配（5/5），两轮 SSE 对话能在第二轮接住“王小明”和“智能猫砂盆”。这属于历史验收结果；第 2 章当时用 `glm-5.2` 验证 tool calling。`expected_solution` 仍需人工核对，其中“询问后续保养”的样例曾返回“未明确”。密钥不会写入仓库，其他机器仍需自行配置 `.env`。
 
 第 2 章的本机 `glm-5.2` tool-call 冒烟已通过；运行 `python scripts/smoke_toolcall.py` 可重新验证当前上游。完整阶段结论与已知限制见 [开发记录](dev-notes/ch02.md)。
+
+## 第 3 章当前可用的演示入口
+
+`.env` 还需本机配置 `SILICONFLOW_API_KEY`。真实 SiliconFlow `BAAI/bge-m3` 已返回两条 1024 维向量；`/kb`、`/admin` 页面和相关 API 已接入。Windows 可在项目根目录运行：
+
+```powershell
+& 'C:\msys64\usr\bin\make.exe' kb-preview
+& 'C:\msys64\usr\bin\make.exe' eval-mining
+.\.venv\Scripts\python.exe -m pytest tests\test_kb_manual.py tests\test_kb_api.py -q
+```
+
+`kb-preview` 只读源文件，当前输出 11 个知识块；`eval-mining` 会调用已配置的真实聊天上游，输入是仓库内的合成标注样例。完整建库、MySQL 幂等、浏览器全链与 `kb-reset` 仍在第 3 章验收范围内；本机 Docker Desktop Linux 引擎未启动时不能将离线测试当作这些验收已通过。过程和待补项目见 [第 3 章开发记录](dev-notes/ch03.md)。

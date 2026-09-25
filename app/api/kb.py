@@ -199,7 +199,10 @@ async def vectorize() -> dict:
 async def search(request: SearchRequest) -> dict:
     if not request.query.strip():
         raise HTTPException(400, "query is required")
-    hits = await retrieval.search_knowledge(
-        request.query, top_k=request.top_k, min_score=request.min_score,
-    )
+    try:
+        hits = await retrieval.search_knowledge(
+            request.query, top_k=request.top_k, min_score=request.min_score,
+        )
+    except Exception as exc:
+        raise HTTPException(503, "knowledge search unavailable") from exc
     return {"route": "dense", "hits": hits}
