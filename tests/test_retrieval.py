@@ -59,7 +59,7 @@ async def test_empty_collection_returns_empty(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_defaults_and_owned_client_close_on_success(monkeypatch):
+async def test_defaults_and_runtime_client_remains_open_on_success(monkeypatch):
     class FakeClient:
         closed = False
 
@@ -75,7 +75,7 @@ async def test_defaults_and_owned_client_close_on_success(monkeypatch):
         return _vector(1, 0)
 
     monkeypatch.setattr(retrieval.embeddings, "embed_query", embed)
-    monkeypatch.setattr(retrieval.milvus_client, "get_client", lambda: client)
+    monkeypatch.setattr(retrieval.milvus_client, "get_runtime_client", lambda: client)
     monkeypatch.setattr(retrieval.milvus_client, "ensure_collection", lambda _client: None)
     calls = []
 
@@ -86,11 +86,11 @@ async def test_defaults_and_owned_client_close_on_success(monkeypatch):
     monkeypatch.setattr(retrieval.milvus_client, "search", search)
     assert await retrieval.search_knowledge("邮费") == [{"score": 0.5, "id": 1}]
     assert calls == [2]
-    assert client.closed
+    assert not client.closed
 
 
 @pytest.mark.asyncio
-async def test_owned_client_closes_when_search_fails(monkeypatch):
+async def test_runtime_client_remains_open_when_search_fails(monkeypatch):
     class FakeClient:
         closed = False
 
@@ -103,7 +103,7 @@ async def test_owned_client_closes_when_search_fails(monkeypatch):
         return _vector(1, 0)
 
     monkeypatch.setattr(retrieval.embeddings, "embed_query", embed)
-    monkeypatch.setattr(retrieval.milvus_client, "get_client", lambda: client)
+    monkeypatch.setattr(retrieval.milvus_client, "get_runtime_client", lambda: client)
     monkeypatch.setattr(retrieval.milvus_client, "ensure_collection", lambda _client: None)
 
     def fail(*_args):
@@ -112,4 +112,4 @@ async def test_owned_client_closes_when_search_fails(monkeypatch):
     monkeypatch.setattr(retrieval.milvus_client, "search", fail)
     with pytest.raises(RuntimeError, match="search unavailable"):
         await retrieval.search_knowledge("邮费")
-    assert client.closed
+    assert not client.closed

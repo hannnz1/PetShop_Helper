@@ -18,6 +18,7 @@ from app.config import Settings, get_settings
 from app.core.jobs import JobRunner
 from app.core.llm import get_chat_model
 from app.core.memory import SessionStore
+from app.kb import milvus_client
 
 _INDEX = Path(__file__).parent / "static" / "index.html"
 _STATIC = Path(__file__).parent / "static"
@@ -47,19 +48,23 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
         application.state.active_sessions = set()
         application.state.active_session_owners = {}
         application.state.jobs = JobRunner()
+        milvus_client.add_runtime_owner()
         try:
             yield
         finally:
             try:
                 application.state.jobs.stop_all()
             finally:
-                if owned_model:
-                    root_async_client = getattr(shared_model, "root_async_client", None)
-                    root_client = getattr(shared_model, "root_client", None)
-                    if root_async_client is not None:
-                        await root_async_client.close()
-                    if root_client is not None:
-                        root_client.close()
+                try:
+                    milvus_client.release_runtime_owner()
+                finally:
+                    if owned_model:
+                        root_async_client = getattr(shared_model, "root_async_client", None)
+                        root_client = getattr(shared_model, "root_client", None)
+                        if root_async_client is not None:
+                            await root_async_client.close()
+                        if root_client is not None:
+                            root_client.close()
 
     application = FastAPI(title="PetShop_Helper", version="0.1.0", lifespan=lifespan)
     application.include_router(chat_router)

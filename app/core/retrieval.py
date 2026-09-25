@@ -16,13 +16,8 @@ async def search_knowledge(
     if limit <= 0:
         raise ValueError("top_k must be positive")
     vector = await embeddings.embed_query(query)
-    owned = client is None
-    if owned:
-        client = milvus_client.get_client()
-    try:
-        milvus_client.ensure_collection(client)
-        hits = milvus_client.search(client, vector, limit)
-        return [hit for hit in hits if hit["score"] >= threshold]
-    finally:
-        if owned:
-            client.close()
+    if client is None:
+        client = milvus_client.get_runtime_client()
+    milvus_client.ensure_collection(client)
+    hits = milvus_client.search(client, vector, limit)
+    return [hit for hit in hits if hit["score"] >= threshold]

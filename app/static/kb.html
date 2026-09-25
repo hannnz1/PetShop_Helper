@@ -39,6 +39,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 85px}.eyebrow{letter-spacing
   mountAdminNav('kb');
   const $=id=>document.getElementById(id);
   const logCache=new Map(), jobsCache=new Map();
+  let jobWasRunning=false;
   const names={ 'kb-preview':'预览全部材料','kb-build':'构建知识库','seed-conv':'写入合成对话','kb-mine':'挖掘对话知识','kb-vectorize':'补全向量','kb-reset':'重置知识库','eval-retrieval':'检索评估','eval-mining':'挖掘评估'};
   const stateNames={idle:'待运行',running:'运行中',succeeded:'已完成',failed:'失败',stopped:'已停止'};
   const heavy=new Set(['kb-mine','kb-reset']);
@@ -63,14 +64,26 @@ main{max-width:1200px;margin:auto;padding:35px 22px 85px}.eyebrow{letter-spacing
   $('previewManual').onclick=()=>preview(sourceBody());
   $('ingestManual').onclick=async()=>{const button=$('ingestManual');button.disabled=true;setStatus('ingestStatus','正在写入…');try{const data=await api('/api/kb/ingest','POST',{...sourceBody(),vectorize:$('vectorizeAfter').checked});setStatus('ingestStatus',`新增 ${data.inserted??0} 块，跳过重复 ${data.skipped??0} 块，向量化 ${data.vectorized??0} 块。`);await loadOverview();}catch(e){setStatus('ingestStatus',e.message,true);await loadOverview();}finally{button.disabled=false;}};
   function jobButton(name){const job=jobsCache.get(name), b=node('button',heavy.has(name)?'danger':'secondary',names[name]||name);b.type='button';b.disabled=!job||job.state==='running';b.title=job?'运行 make '+name:'作业尚未在后端注册';b.onclick=()=>startJob(name);return b;}
-  function mountButtons(){for(const [id,list] of [['sourceJobs',['kb-preview','kb-build']],['miningJobs',['seed-conv','kb-mine']],['vectorJobs',['kb-vectorize','kb-reset']]]){const host=$(id);host.replaceChildren();for(const name of list)host.append(jobButton(name));}}
+  function mountButtons(){for(const [id,list] of [['sourceJobs',['kb-preview','kb-build']],['miningJobs',['seed-conv','kb-mine']]]){const host=$(id);host.replaceChildren();for(const name of list)host.append(jobButton(name));}
+    const vectorHost=$('vectorJobs');vectorHost.replaceChildren();
+    const vectorButton=node('button','secondary',names['kb-vectorize']);vectorButton.type='button';vectorButton.onclick=()=>startJob('kb-vectorize');vectorHost.append(vectorButton);
+    const resetButton=node('button','danger',names['kb-reset']);resetButton.type='button';resetButton.onclick=()=>startJob('kb-reset');vectorHost.append(resetButton);
+  }
   function renderJobs(){const host=$('jobs');host.replaceChildren();if(!jobsCache.size){host.append(node('p','hint','作业运行器不可用或尚未注册作业。'));return;}
     for(const [name,job] of jobsCache){const box=node('article','job');const head=node('div','job-head');head.append(node('strong','',`${names[name]||name} · ${stateNames[job.state]||job.state}`));const acts=node('div','actions');acts.append(jobButton(name));if(job.state==='running'){const stop=node('button','secondary','停止');stop.onclick=async()=>{try{await api(`/api/jobs/${encodeURIComponent(name)}/stop`,'POST');await loadJobs();}catch(e){setStatus('pageStatus',e.message,true);}};acts.append(stop);}head.append(acts);box.append(head);
       const log=node('pre','',logCache.get(name)||'');log.setAttribute('aria-label',`${name} 日志尾`);box.append(log);host.append(box);}
   }
   async function loadJobs(){try{const data=await api('/api/jobs');jobsCache.clear();for(const job of data.jobs||[])jobsCache.set(job.name,job);for(const [name,job] of jobsCache){if(job.state!=='idle'||logCache.has(name)){try{const detail=await api(`/api/jobs/${encodeURIComponent(name)}`);if(typeof detail.log_tail==='string')logCache.set(name,detail.log_tail);}catch{}}}renderJobs();mountButtons();return [...jobsCache.values()].some(j=>j.state==='running');}
     catch(e){setStatus('pageStatus',`作业状态读不到：${e.message}`,true);jobsCache.clear();renderJobs();mountButtons();return false;}}
-  async function startJob(name){if(heavy.has(name)&&!window.confirm(`${names[name]} 是高开销或清库作业。确认运行 make ${name}？`))return;try{await api(`/api/jobs/${encodeURIComponent(name)}`,'POST',{confirm:heavy.has(name)});logCache.set(name,'');setStatus('pageStatus',`${names[name]} 已启动。`);await loadJobs();}catch(e){setStatus('pageStatus',e.message,true);}}
+  async function startJob(name){if(name==='kb-reset'){
+      if(!window.confirm('重置将删除第 3 章知识块、抽取暂存及知识向量。确认重置知识库？'))return;
+      try{await api('/api/kb/reset','POST',{confirm:true});setStatus('pageStatus','知识库已重置。');await loadOverview();}catch(e){setStatus('pageStatus',e.message,true);}return;
+    }
+    if(name==='kb-vectorize'){
+      try{const result=await api('/api/kb/vectorize','POST');setStatus('pageStatus',`向量化完成 ${result.vectorized??0} 块。`);await loadOverview();}catch(e){setStatus('pageStatus',e.message,true);}return;
+    }
+    if(heavy.has(name)&&!window.confirm(`${names[name]} 是高开销作业。确认运行 make ${name}？`))return;
+    try{await api(`/api/jobs/${encodeURIComponent(name)}`,'POST',{confirm:heavy.has(name)});jobWasRunning=true;logCache.set(name,'');setStatus('pageStatus',`${names[name]} 已启动。`);await loadJobs();}catch(e){setStatus('pageStatus',e.message,true);}}
   function renderSources(sources){const host=$('sourceList');host.replaceChildren();if(!sources?.length){host.append(node('p','hint','暂无可读取的材料清单。'));return;}for(const item of sources){const box=node('div','source');const left=node('div');left.append(node('strong','',item.filename),node('span','hint',`${item.content_type||'—'} · ${item.count??'读不到'} 块 · 关键条款 ${item.key_clauses??'—'}`));const b=node('button','secondary','看切块');b.onclick=async()=>{try{const data=await api('/api/kb/preview','POST',{filename:item.filename});showPreview(data);setStatus('ingestStatus',`${item.filename}：预览 ${data.count} 块，未写入。`);$('ingest').scrollIntoView({behavior:'smooth'});}catch(e){setStatus('sourceStatus',e.message,true);}};box.append(left,b);host.append(box);}}
   function renderRecent(recent){const host=$('recentRows');host.replaceChildren();if(!recent?.length){const td=node('td','hint','暂无记录或 MySQL 暂时不可读取。');td.colSpan=5;const tr=node('tr');tr.append(td);host.append(tr);return;}for(const c of recent){const tr=node('tr');for(const value of [c.id,`${c.content_type||'—'} / ${c.category||'—'}`,c.questions||'—',c.vectorize_status||'—',(c.answer||'').slice(0,150)])tr.append(node('td','',value));host.append(tr);}}
   async function loadOverview(){try{const data=await api('/api/kb/overview');const stats=data.mysql?.stats;const milvus=data.milvus;const metrics=$('metrics');metrics.replaceChildren(metric('知识块',stats?.total),metric('待向量化',stats?.pending),metric('Milvus 条数',milvus?.count),metric('关键条款',stats?.key_clauses),metric('双写一致',data.consistent===null?'读不到':data.consistent?'一致':'对不上'));
@@ -83,7 +96,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 85px}.eyebrow{letter-spacing
   for(const b of document.querySelectorAll('[data-query]'))b.onclick=()=>{$('query').value=b.dataset.query;$('query').focus();};
   $('searchNow').onclick=async()=>{const b=$('searchNow');b.disabled=true;setStatus('searchStatus','检索中…');$('searchResults').replaceChildren();try{const d=await api('/api/kb/search','POST',{query:$('query').value,top_k:Number($('topK').value)});const hits=d.hits||[];for(const [i,h] of hits.entries()){const row=node('article','row');row.append(node('strong','',`${i+1}. ${h.question||'未命名知识块'}`),node('div','hint',`ID ${h.id??'—'} · 相似度 ${typeof h.score==='number'?h.score.toFixed(3):'—'}`),node('div','answer',h.answer||''));$('searchResults').append(row);}setStatus('searchStatus',`Dense 路线返回 ${hits.length} 条。`);}catch(e){setStatus('searchStatus',e.message,true);}finally{b.disabled=false;}};
   $('refreshAll').onclick=async()=>{await Promise.all([loadOverview(),loadJobs()]);setStatus('pageStatus','状态已刷新。');};
-  Promise.all([loadOverview(),loadJobs()]);setInterval(async()=>{const running=await loadJobs();if(running)await loadOverview();},3500);
+  Promise.all([loadOverview(),loadJobs()]);setInterval(async()=>{const running=await loadJobs();if(running||jobWasRunning)await loadOverview();jobWasRunning=running;},3500);
 })();
 </script>
 </body>

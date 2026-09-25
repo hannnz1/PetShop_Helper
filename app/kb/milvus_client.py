@@ -1,6 +1,7 @@
 """Milvus Lite collection for knowledge-base vectors."""
 
 from pathlib import Path
+from threading import Lock
 
 from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
 
@@ -9,6 +10,9 @@ from app.config import get_settings
 
 COLLECTION = "knowledge"
 DIM = 1024
+_runtime_lock = Lock()
+_runtime_clients: dict[str, MilvusClient] = {}
+_runtime_owners = 0
 
 
 def get_client(uri: str | None = None) -> MilvusClient:
@@ -16,6 +20,47 @@ def get_client(uri: str | None = None) -> MilvusClient:
     if target.endswith(".db"):
         Path(target).parent.mkdir(parents=True, exist_ok=True)
     return MilvusClient(uri=target)
+
+
+def get_runtime_client() -> MilvusClient:
+    """Keep one local connection per URI during the web process lifetime."""
+    uri = get_settings().milvus_uri
+    with _runtime_lock:
+        client = _runtime_clients.get(uri)
+        if client is None:
+            client = get_client(uri=uri)
+            _runtime_clients[uri] = client
+        return client
+
+
+def close_runtime_clients() -> None:
+    """Force-release cached clients, primarily for standalone use and tests."""
+    with _runtime_lock:
+        _close_runtime_clients_locked()
+
+
+def _close_runtime_clients_locked() -> None:
+    for client in _runtime_clients.values():
+        client.close()
+    _runtime_clients.clear()
+
+
+def add_runtime_owner() -> None:
+    """Register one active FastAPI application in this process."""
+    global _runtime_owners
+    with _runtime_lock:
+        _runtime_owners += 1
+
+
+def release_runtime_owner() -> None:
+    """Close shared clients only after the final application exits."""
+    global _runtime_owners
+    with _runtime_lock:
+        if _runtime_owners < 1:
+            raise RuntimeError("No runtime Milvus owner to release")
+        _runtime_owners -= 1
+        if _runtime_owners == 0:
+            _close_runtime_clients_locked()
 
 
 def ensure_collection(client: MilvusClient) -> None:
@@ -105,4 +150,5 @@ def search(client: MilvusClient, vector: list[float], top_k: int) -> list[dict]:
 
 
 def count(client: MilvusClient) -> int:
+    client.load_collection(COLLECTION)
     return int(client.query(COLLECTION, filter="id >= 0", output_fields=["count(*)"])[0]["count(*)"])

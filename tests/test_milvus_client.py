@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from app.kb import milvus_client as mc
 
@@ -42,6 +43,67 @@ def test_upsert_is_idempotent_by_pk(client):
 def test_ensure_collection_is_idempotent(client):
     mc.ensure_collection(client)
     assert mc.count(client) == 0
+
+
+def test_count_loads_existing_released_collection():
+    class ReleasedClient:
+        loaded = False
+
+        def load_collection(self, name):
+            assert name == mc.COLLECTION
+            self.loaded = True
+
+        def query(self, name, *, filter, output_fields):
+            assert (name, filter, output_fields) == (mc.COLLECTION, "id >= 0", ["count(*)"])
+            if not self.loaded:
+                raise RuntimeError("collection released")
+            return [{"count(*)": 3}]
+
+    assert mc.count(ReleasedClient()) == 3
+
+
+def test_runtime_client_is_reused_and_closed_on_shutdown(monkeypatch):
+    created = []
+
+    class FakeClient:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    def create(uri=None):
+        created.append(uri)
+        return FakeClient()
+
+    monkeypatch.setattr(mc, "get_settings", lambda: SimpleNamespace(milvus_uri="runtime-test.db"))
+    monkeypatch.setattr(mc, "get_client", create)
+    first = mc.get_runtime_client()
+    second = mc.get_runtime_client()
+    assert first is second
+    assert created == ["runtime-test.db"]
+    mc.close_runtime_clients()
+    assert first.closed
+
+
+def test_runtime_client_stays_open_until_last_application_exits(monkeypatch):
+    created = []
+
+    class FakeClient:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(mc, "get_settings", lambda: SimpleNamespace(milvus_uri="shared-app.db"))
+    monkeypatch.setattr(mc, "get_client", lambda uri=None: created.append(FakeClient()) or created[-1])
+    mc.add_runtime_owner()
+    mc.add_runtime_owner()
+    client = mc.get_runtime_client()
+    mc.release_runtime_owner()
+    assert not client.closed
+    assert mc.get_runtime_client() is client
+    mc.release_runtime_owner()
+    assert client.closed
 
 
 def test_empty_upsert_is_noop(client):

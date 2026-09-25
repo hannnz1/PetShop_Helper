@@ -6,7 +6,7 @@ import hashlib
 import re
 import unicodedata
 
-from sqlalchemy import delete, func, insert, select, text, update
+from sqlalchemy import delete, func, insert, or_, select, text, update
 
 import app.db.base as db
 from app.db.models import Conversation, Faq, KnowledgeChunk, Message, QaExtractionStaging, Ticket
@@ -336,6 +336,7 @@ async def list_staging_by_status(status: str) -> list[QaExtractionStaging]:
         result = await session.execute(
             select(QaExtractionStaging)
             .where(QaExtractionStaging.status == status)
+            .where(or_(QaExtractionStaging.question != "", QaExtractionStaging.answer != ""))
             .order_by(QaExtractionStaging.id)
         )
         return list(result.scalars())
@@ -613,6 +614,7 @@ async def staging_stats() -> dict[str, int]:
     async with db.async_session() as session:
         state_rows = (await session.execute(
             select(QaExtractionStaging.status, func.count())
+            .where(or_(QaExtractionStaging.question != "", QaExtractionStaging.answer != ""))
             .group_by(QaExtractionStaging.status)
         )).all()
         batches = int((await session.execute(

@@ -84,10 +84,13 @@ def test_mining_job_is_registered_and_requires_confirmation():
     assert spec.heavy is True
 
 
-def test_reset_job_is_registered_and_requires_confirmation():
-    spec = jobs.JOB_SPECS["kb-reset"]
-    assert spec.target == "kb-reset"
-    assert spec.heavy is True
+def test_milvus_jobs_cannot_start_in_separate_web_process(tmp_path, monkeypatch):
+    client, _, calls = _client(tmp_path, monkeypatch)
+    with client:
+        for name in ("kb-vectorize", "kb-reset", "eval-retrieval"):
+            assert client.post(f"/api/jobs/{name}", json={"confirm": True}).status_code == 404
+            assert name not in {job["name"] for job in client.get("/api/jobs").json()["jobs"]}
+    assert calls == []
 
 
 def test_windows_stop_terminates_only_registered_process_tree(tmp_path, monkeypatch):

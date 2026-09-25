@@ -92,9 +92,9 @@ async def test_empty_extraction_is_durable_without_knowledge(db_session_factory,
     assert await repository.finalize_mined_staging() == {
         "kept": 0, "discarded": 0, "recovered": 0,
     }
-    discarded = await repository.list_staging_by_status("discarded")
-    assert len(discarded) == 1
-    assert (discarded[0].question, discarded[0].answer) == ("", "")
+    assert await repository.staging_batch_exists("mine-empty", "conv:11")
+    assert await repository.list_staging_by_status("discarded") == []
+    assert (await repository.staging_stats())["batches"] == 1
     assert await repository.list_pending_chunks() == []
 
 

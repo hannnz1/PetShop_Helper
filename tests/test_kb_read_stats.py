@@ -99,3 +99,16 @@ async def test_staging_stats_three_states_and_distinct_batches(read_database):
     assert await repository.staging_stats() == {
         "extracted": 1, "kept": 2, "discarded": 1, "batches": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_empty_extraction_marker_is_not_a_discarded_qa_pair(read_database):
+    with read_database.begin() as connection:
+        connection.execute(text("""INSERT INTO qa_extraction_staging
+            (id,batch_no,question,answer,status) VALUES
+            (1,'empty-source','','','discarded'),
+            (2,'real-source','不适合入库','无法核实','discarded')"""))
+    assert await repository.staging_stats() == {
+        "extracted": 0, "kept": 0, "discarded": 1, "batches": 2,
+    }
+    assert [row.id for row in await repository.list_staging_by_status("discarded")] == [2]

@@ -160,7 +160,7 @@ def test_search_reports_unavailable_without_exposing_upstream_error(monkeypatch)
     assert "private upstream endpoint" not in response.text
 
 
-def test_vectorize_closes_its_client(monkeypatch):
+def test_vectorize_reuses_runtime_client_without_closing_it(monkeypatch):
     class FakeClient:
         closed = False
 
@@ -168,7 +168,7 @@ def test_vectorize_closes_its_client(monkeypatch):
             self.closed = True
 
     fake_client = FakeClient()
-    monkeypatch.setattr(kb.milvus_client, "get_client", lambda: fake_client)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", lambda: fake_client)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: None)
 
     async def fake_vectorize(_client):
@@ -179,7 +179,7 @@ def test_vectorize_closes_its_client(monkeypatch):
         response = client.post("/api/kb/vectorize")
     assert response.status_code == 200
     assert response.json() == {"vectorized": 3}
-    assert fake_client.closed
+    assert not fake_client.closed
 
 
 def test_ingest_vectorizes_after_persisting_and_reuses_existing_ids(monkeypatch):
@@ -201,7 +201,7 @@ def test_ingest_vectorizes_after_persisting_and_reuses_existing_ids(monkeypatch)
         return await fake_write(chunks), len(chunks)
 
     monkeypatch.setattr(kb.dualwrite, "write_manual_report", fake_report, raising=False)
-    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: None)
     monkeypatch.setattr(kb.dualwrite, "vectorize_pending", fake_vectorize)
     with _client() as client:
@@ -211,7 +211,7 @@ def test_ingest_vectorizes_after_persisting_and_reuses_existing_ids(monkeypatch)
         })
     assert response.status_code == 200
     assert response.json()["ids"] == [9]
-    assert events == ["mysql", "milvus", "close"]
+    assert events == ["mysql", "milvus"]
 
 
 def test_ingest_vectorize_failure_keeps_pending_with_retry_message(monkeypatch):
@@ -232,7 +232,7 @@ def test_ingest_vectorize_failure_keeps_pending_with_retry_message(monkeypatch):
         return await fake_write(chunks), len(chunks)
 
     monkeypatch.setattr(kb.dualwrite, "write_manual_report", fake_report, raising=False)
-    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: None)
     monkeypatch.setattr(kb.dualwrite, "vectorize_pending", broken_vectorize)
     with _client() as client:
@@ -255,7 +255,7 @@ def test_overview_keeps_sources_when_databases_unavailable(monkeypatch):
 
     monkeypatch.setattr(kb.repository, "knowledge_stats", broken_stats, raising=False)
     monkeypatch.setattr(kb.repository, "staging_stats", broken_stats, raising=False)
-    monkeypatch.setattr(kb.milvus_client, "get_client", broken_milvus)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", broken_milvus)
     with _client() as client:
         response = client.get("/api/kb/overview")
     assert response.status_code == 200
@@ -286,7 +286,7 @@ def test_overview_reports_consistency_from_independent_counts(monkeypatch):
     monkeypatch.setattr(kb.repository, "knowledge_stats", stats, raising=False)
     monkeypatch.setattr(kb.repository, "staging_stats", staging, raising=False)
     monkeypatch.setattr(kb.repository, "list_recent_chunks", recent, raising=False)
-    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: None)
     monkeypatch.setattr(kb.milvus_client, "count", lambda _client: 1)
     with _client() as client:
@@ -314,7 +314,7 @@ def test_overview_pending_only_is_not_consistent(monkeypatch):
 
     monkeypatch.setattr(kb.repository, "knowledge_stats", stats)
     monkeypatch.setattr(kb.repository, "list_recent_chunks", recent)
-    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
     with _client() as client:
         response = client.get("/api/kb/overview")
     assert response.status_code == 200
@@ -333,7 +333,7 @@ def test_overview_reports_consistent_when_all_rows_are_vectorized(monkeypatch):
             pass
 
     monkeypatch.setattr(kb.repository, "knowledge_stats", stats)
-    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "count", lambda _client: 2)
     with _client() as client:
         response = client.get("/api/kb/overview")
@@ -371,7 +371,7 @@ def test_overview_does_not_create_milvus_collection(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: (_ for _ in ()).throw(
         AssertionError("read-only overview must not create collection")
     ))
@@ -379,3 +379,33 @@ def test_overview_does_not_create_milvus_collection(monkeypatch):
         response = client.get("/api/kb/overview")
     assert response.status_code == 200
     assert response.json()["milvus"] == {"available": True, "count": 0}
+
+
+def test_reset_requires_confirmation_and_uses_runtime_milvus_client(monkeypatch):
+    events = []
+
+    class FakeClient:
+        def has_collection(self, name):
+            events.append(("has", name))
+            return True
+
+        def drop_collection(self, name):
+            events.append(("drop", name))
+
+    async def fake_reset(drop_vectors):
+        events.append(("mysql-lock",))
+        drop_vectors()
+
+    monkeypatch.setattr(kb.milvus_client, "get_runtime_client", FakeClient)
+    monkeypatch.setattr(kb.repository, "reset_knowledge_tables", fake_reset)
+    with _client() as client:
+        assert client.post("/api/kb/reset", json={"confirm": False}).status_code == 400
+        assert client.post("/api/kb/reset", json={}).status_code == 422
+        assert events == []
+        response = client.post("/api/kb/reset", json={"confirm": True})
+    assert response.status_code == 200
+    assert events == [
+        ("mysql-lock",),
+        ("has", kb.milvus_client.COLLECTION),
+        ("drop", kb.milvus_client.COLLECTION),
+    ]

@@ -1,6 +1,7 @@
 """Knowledge-base review and ingestion endpoints."""
 
 from dataclasses import asdict, replace
+import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -12,6 +13,7 @@ from scripts.build_kb import source_chunks
 
 
 router = APIRouter(prefix="/api/kb", tags=["knowledge-base"])
+logger = logging.getLogger(__name__)
 
 
 def _source_inventory() -> list[dict]:
@@ -59,15 +61,12 @@ async def overview(request: Request) -> dict:
     except Exception:
         pass
     try:
-        client = milvus_client.get_client()
-        try:
-            milvus = {
-                "available": True,
-                "count": milvus_client.count(client)
-                if client.has_collection(milvus_client.COLLECTION) else 0,
-            }
-        finally:
-            client.close()
+        client = milvus_client.get_runtime_client()
+        milvus = {
+            "available": True,
+            "count": milvus_client.count(client)
+            if client.has_collection(milvus_client.COLLECTION) else 0,
+        }
     except Exception:
         pass
     consistent = None
@@ -110,6 +109,10 @@ class SearchRequest(BaseModel):
     query: str
     top_k: int | None = Field(default=None, ge=1, le=50)
     min_score: float | None = Field(default=None, ge=-1, le=1)
+
+
+class ResetRequest(BaseModel):
+    confirm: bool
 
 
 def _chunks(request: SourceRequest) -> list[documents.Chunk]:
@@ -173,6 +176,7 @@ async def _ingest_locked(request: SourceRequest, chunks: list[documents.Chunk]) 
         try:
             vectorized = await _vectorize_pending()
         except Exception as exc:
+            logger.exception("Knowledge vectorization failed after ingestion")
             raise HTTPException(
                 502, f"已入库 {len(ids)} 块（pending），向量化失败；补跑一次即可"
             ) from exc
@@ -185,22 +189,39 @@ async def _ingest_locked(request: SourceRequest, chunks: list[documents.Chunk]) 
 
 
 async def _vectorize_pending() -> int:
-    client = milvus_client.get_client()
-    try:
-        milvus_client.ensure_collection(client)
-        return await dualwrite.vectorize_pending(client)
-    finally:
-        client.close()
+    client = milvus_client.get_runtime_client()
+    milvus_client.ensure_collection(client)
+    return await dualwrite.vectorize_pending(client)
 
 
 @router.post("/vectorize")
 async def vectorize() -> dict:
-    """Complete pending MySQL→Milvus writes, closing the owned client."""
+    """Complete pending MySQL→Milvus writes using the web-owned client."""
     try:
         done = await _vectorize_pending()
         return {"vectorized": done}
     except Exception as exc:
+        logger.exception("Knowledge vectorization failed")
         raise HTTPException(502, "vectorization failed; pending chunks can be retried") from exc
+
+
+@router.post("/reset")
+async def reset_knowledge(request: ResetRequest) -> dict:
+    """Reset Chapter 3 data inside the Milvus-owning web process."""
+    if not request.confirm:
+        raise HTTPException(400, "reset requires confirmation")
+    try:
+        client = milvus_client.get_runtime_client()
+
+        def drop_vectors() -> None:
+            if client.has_collection(milvus_client.COLLECTION):
+                client.drop_collection(milvus_client.COLLECTION)
+
+        await repository.reset_knowledge_tables(drop_vectors)
+    except Exception as exc:
+        logger.exception("Knowledge reset failed")
+        raise HTTPException(503, "knowledge reset failed") from exc
+    return {"reset": True}
 
 
 @router.post("/search")
