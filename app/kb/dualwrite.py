@@ -16,6 +16,11 @@ async def write_pending_report(chunks: list[Chunk]) -> tuple[list[int], int]:
     return await repository.insert_knowledge_document_report(_rows(chunks))
 
 
+async def write_manual_report(chunks: list[Chunk]) -> tuple[list[int], int]:
+    """Use the manual question/body fingerprint under the MySQL lock."""
+    return await repository.insert_manual_knowledge_report(_rows(chunks))
+
+
 def _rows(chunks: list[Chunk]) -> list[dict]:
     return [
         {

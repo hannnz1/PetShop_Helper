@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core import retrieval
 from app.db import repository
-from app.kb import dedup, documents, dualwrite, milvus_client, sources
+from app.kb import documents, dualwrite, milvus_client, sources
 from scripts.build_kb import source_chunks
 
 
@@ -140,18 +140,17 @@ async def preview(request: SourceRequest) -> dict:
     chunks = _chunks(request)
     try:
         existing = {
-            (dedup.normalize_question(question), dedup.normalize_question(answer))
+            repository.manual_pair_key(question, answer)
             for question, answer in await repository.list_chunk_pairs()
-        }
+        } if request.filename is None else None
     except Exception:
         existing = None
     shown = []
     for chunk in chunks:
         row = asdict(chunk)
         row["duplicate"] = None if existing is None else (
-            dedup.normalize_question(chunk.questions),
-            dedup.normalize_question(chunk.answer),
-        ) in existing
+            repository.manual_pair_key(chunk.questions, chunk.answer) in existing
+        )
         shown.append(row)
     return {"count": len(chunks), "chunks": shown}
 
@@ -160,7 +159,8 @@ async def preview(request: SourceRequest) -> dict:
 async def ingest(request: SourceRequest) -> dict:
     """Persist pending chunks; exact repeat requests reuse document IDs."""
     chunks = _chunks(request)
-    ids, inserted = await dualwrite.write_pending_report(chunks)
+    writer = dualwrite.write_pending_report if request.filename is not None else dualwrite.write_manual_report
+    ids, inserted = await writer(chunks)
     if request.vectorize:
         try:
             vectorized = await _vectorize_pending()

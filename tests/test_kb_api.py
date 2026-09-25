@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import kb
+from app.db import repository
 
 
 def _client():
@@ -36,7 +37,7 @@ def test_preview_marks_existing_question_answer_pair_without_writing(monkeypatch
         raise AssertionError("preview must not write")
 
     monkeypatch.setattr(kb.repository, "list_chunk_pairs", existing)
-    monkeypatch.setattr(kb.dualwrite, "write_pending_report", forbidden)
+    monkeypatch.setattr(kb.dualwrite, "write_manual_report", forbidden, raising=False)
     with _client() as client:
         response = client.post("/api/kb/preview", json={
             "content_type": "faq", "markdown": "# 运费怎么算\n\n满99元包邮。",
@@ -66,7 +67,7 @@ def test_ingest_reuses_identical_source_chunks(monkeypatch):
         inserted = len(chunks) if len(calls) == 1 else 0
         return [101 for _ in chunks], inserted
 
-    monkeypatch.setattr(kb.dualwrite, "write_pending_report", fake_write, raising=False)
+    monkeypatch.setattr(kb.dualwrite, "write_manual_report", fake_write, raising=False)
     request = {"content_type": "policy", "markdown": "# 售后\n\n## 运费\n\n满99包邮。"}
     with _client() as client:
         first = client.post("/api/kb/ingest", json=request)
@@ -94,6 +95,17 @@ def test_ingest_preserves_two_table_chunks_with_same_heading(monkeypatch):
     # The file includes other sections too; both rows of its large table must survive.
     assert response.status_code == 200
     assert response.json()["inserted"] >= 2
+
+
+def test_manual_fingerprint_uses_question_and_answer():
+    first = repository.manual_pair_key("运费 怎么算？", "满 99 元包邮。")
+    same = repository.manual_pair_key("运费怎么算", "满99元包邮")
+    different_answer = repository.manual_pair_key("运费怎么算", "未满收10元运费")
+    assert first == same
+    assert first != different_answer
+    assert repository.manual_pair_key("费率", "每件 1.5 元") != repository.manual_pair_key(
+        "费率", "每件 15 元"
+    )
 
 
 def test_preview_rejects_empty_bad_type_and_path():
@@ -165,7 +177,7 @@ def test_ingest_vectorizes_after_persisting_and_reuses_existing_ids(monkeypatch)
     async def fake_report(chunks):
         return await fake_write(chunks), len(chunks)
 
-    monkeypatch.setattr(kb.dualwrite, "write_pending_report", fake_report, raising=False)
+    monkeypatch.setattr(kb.dualwrite, "write_manual_report", fake_report, raising=False)
     monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: None)
     monkeypatch.setattr(kb.dualwrite, "vectorize_pending", fake_vectorize)
@@ -196,7 +208,7 @@ def test_ingest_vectorize_failure_keeps_pending_with_retry_message(monkeypatch):
     async def fake_report(chunks):
         return await fake_write(chunks), len(chunks)
 
-    monkeypatch.setattr(kb.dualwrite, "write_pending_report", fake_report, raising=False)
+    monkeypatch.setattr(kb.dualwrite, "write_manual_report", fake_report, raising=False)
     monkeypatch.setattr(kb.milvus_client, "get_client", FakeClient)
     monkeypatch.setattr(kb.milvus_client, "ensure_collection", lambda _client: None)
     monkeypatch.setattr(kb.dualwrite, "vectorize_pending", broken_vectorize)

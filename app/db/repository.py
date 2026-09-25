@@ -164,6 +164,65 @@ async def insert_knowledge_document(chunks: list[dict]) -> list[int]:
     return ids
 
 
+def manual_pair_key(questions: str, answer: str) -> tuple[str, str]:
+    """The approved manual-ingest identity: normalized question and body."""
+    def normalize(value: str) -> str:
+        # Preserve internal punctuation such as the decimal point in 1.5.
+        folded = unicodedata.normalize("NFKC", value).casefold()
+        return re.sub(r"\s+", "", folded).rstrip("。.!?！？；;")
+
+    return normalize(questions), normalize(answer)
+
+
+async def insert_manual_knowledge_report(chunks: list[dict]) -> tuple[list[int], int]:
+    """Atomically insert only new manual question/body pairs.
+
+    The named lock is shared with source-document ingestion and mining so a
+    concurrent repeat cannot both pass the read-then-insert check. Existing
+    rows are reused; only new rows are linked, avoiding mutation of old docs.
+    """
+    if not chunks:
+        return [], 0
+    engine = db.async_session.kw["bind"]
+    name = _knowledge_lock_name(engine)
+    async with engine.connect() as connection:
+        acquired = await connection.scalar(
+            text("SELECT GET_LOCK(:name, :timeout)"), {"name": name, "timeout": 10}
+        )
+        await connection.commit()
+        if acquired != 1:
+            raise TimeoutError("knowledge ingestion lock unavailable")
+        try:
+            async with connection.begin():
+                table = KnowledgeChunk.__table__
+                existing = (await connection.execute(select(
+                    table.c.id, table.c.questions, table.c.answer
+                ).order_by(table.c.id))).mappings()
+                seen = {
+                    manual_pair_key(row["questions"], row["answer"]): row["id"]
+                    for row in existing
+                }
+                ids: list[int] = []
+                new_ids: list[int] = []
+                for chunk in chunks:
+                    key = manual_pair_key(chunk["questions"], chunk["answer"])
+                    chunk_id = seen.get(key)
+                    if chunk_id is None:
+                        chunk_id = await _insert_document_row(connection, chunk)
+                        seen[key] = chunk_id
+                        new_ids.append(chunk_id)
+                    ids.append(chunk_id)
+                for index, chunk_id in enumerate(new_ids):
+                    await connection.execute(update(table).where(table.c.id == chunk_id).values(
+                        prev_chunk_id=new_ids[index - 1] if index else None,
+                        next_chunk_id=new_ids[index + 1] if index + 1 < len(new_ids) else None,
+                    ))
+                return ids, len(new_ids)
+        finally:
+            await connection.scalar(text("SELECT RELEASE_LOCK(:name)"), {"name": name})
+            await connection.commit()
+
+
 async def insert_knowledge_document_report(chunks: list[dict]) -> tuple[list[int], int]:
     """Atomically insert and link a document, or return an exact prior run's IDs.
 
