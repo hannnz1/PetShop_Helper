@@ -17,6 +17,7 @@ from app.config import get_settings
 _DDL = Path(__file__).resolve().parent.parent / "sql" / "ch02-ddl.sql"
 _CH03_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql"
 _CH04_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch04-ddl.sql"
+_CH05_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch05-ddl.sql"
 _TABLES = (
     "faith_cases",
     "low_confidence_questions",
@@ -84,7 +85,7 @@ def _create_table_stmts() -> list[str]:
     """Create chapter schemas from their authoritative files in the test DB."""
 
     statements = ddl_statements()
-    for ddl in (_CH03_DDL, _CH04_DDL):
+    for ddl in (_CH03_DDL, _CH04_DDL, _CH05_DDL):
         lines = [
             line for line in ddl.read_text(encoding="utf-8").splitlines()
             if not line.lstrip().startswith("--")

@@ -8,6 +8,7 @@ import re
 import unicodedata
 
 from sqlalchemy import case, delete, func, insert, or_, select, text, update
+from sqlalchemy.exc import IntegrityError
 
 import app.db.base as db
 from app.db.models import (
@@ -97,6 +98,39 @@ async def create_ticket(conversation_id: int, description: str, ticket_type: str
         )
         conversation.status = "已转人工"
     return ticket_no
+
+
+class TicketRequestConflict(ValueError):
+    """An idempotency key has already been used for a different ticket request."""
+
+
+async def create_ticket_only(
+    conversation_id: int, description: str, ticket_type: str, request_id: str,
+) -> str:
+    """Create one ticket per request ID without changing handoff state."""
+    ticket_no = _new_ticket_no()
+    try:
+        async with db.async_session.begin() as session:
+            if await session.get(Conversation, conversation_id) is None:
+                raise ValueError(f"conversation {conversation_id} does not exist")
+            session.add(Ticket(
+                ticket_no=ticket_no, conversation_id=conversation_id,
+                description=description, ticket_type=ticket_type, request_id=request_id,
+            ))
+            await session.flush()
+        return ticket_no
+    except IntegrityError:
+        # The failed transaction has ended before this lookup. The unique key
+        # serializes concurrent retries, including across workers.
+        async with db.async_session() as session:
+            prior = await session.scalar(select(Ticket).where(Ticket.request_id == request_id))
+        if prior is None:
+            raise
+        if (prior.conversation_id, prior.description, prior.ticket_type) != (
+            conversation_id, description, ticket_type,
+        ):
+            raise TicketRequestConflict("request_id already used for another payload") from None
+        return prior.ticket_no
 
 
 async def insert_knowledge_chunk(

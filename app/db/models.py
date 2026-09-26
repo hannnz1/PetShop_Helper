@@ -70,9 +70,13 @@ class Faq(Base):
 
 class Ticket(Base):
     __tablename__ = "tickets"
-    __table_args__ = (Index("idx_conversation_id", "conversation_id"),)
+    __table_args__ = (
+        Index("idx_conversation_id", "conversation_id"),
+        Index("uq_tickets_request_id", "request_id", unique=True),
+    )
 
     ticket_no: Mapped[str] = mapped_column(String(32), primary_key=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     conversation_id: Mapped[int] = mapped_column(
         BIGINT(unsigned=True),
         ForeignKey("conversations.id", name="fk_tickets_conversation"),
