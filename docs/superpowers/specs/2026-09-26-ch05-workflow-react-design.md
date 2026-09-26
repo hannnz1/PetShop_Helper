@@ -1,6 +1,6 @@
 # PetShop_Helper 第 5 章设计：Workflow 骨架与有界 ReAct
 
-> 状态：设计已获用户确认；书面 spec 待评审。权威来源：`C:/Users/Administrator/Documents/PetShop_Helper开发文档/5/理论学习：Workflow 编排与 ReAct 循环.md`。Desktop 旧 MewHelp 的 Ch05 文档仅供比较，不继承其历史决策。
+> 状态：书面 spec 已获用户批准，实施计划待评审。权威来源：`C:/Users/Administrator/Documents/PetShop_Helper开发文档/5/理论学习：Workflow 编排与 ReAct 循环.md`。Desktop 旧 MewHelp 的 Ch05 文档仅供比较，不继承其历史决策。
 
 ## 目标与边界
 

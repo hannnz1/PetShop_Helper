@@ -9,3 +9,7 @@
 | 流式事件 | `astream(..., stream_mode=["messages", "updates"])` 在不启用子图流时返回 `(mode, payload)`；`messages` payload 是 `(message, metadata)`，metadata 可用于按节点过滤；`ainvoke(input, config=...)` 支持异步非流式调用 | [LangGraph pregel 源码](https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/pregel/main.py)、[messages 发射源码](https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/pregel/_messages.py) |
 
 验证边界：Context7 文档说明接口形状，但不证明本机依赖安装、SQLite 文件权限、现有 FastAPI lifespan 或 SSE 事件接线正常。实施计划首个任务必须用已安装版本做无模型调用的 StateGraph + checkpointer + 消息/更新流冒烟。
+
+计划编写前又用 Context7 核对 `/websites/fastapi_tiangolo`：`FastAPI(lifespan=asynccontextmanager)` 的启动/清理边界、应用 `state`、`include_router`，以及异步生成器交给 `StreamingResponse` 的用法。来源：[生命周期](https://fastapi.tiangolo.com/advanced/events/)、[流式响应](https://fastapi.tiangolo.com/advanced/custom-response/)、[应用参考](https://fastapi.tiangolo.com/reference/fastapi/)。
+
+SQLAlchemy 通过 Context7 `/websites/sqlalchemy_en_20` 核对 2.0 的 `AsyncSession`/事务及唯一约束冲突处理；同一个 `request_id` 的并发提交以数据库唯一约束为最终防线，捕获 `IntegrityError` 后须结束失败事务再查询已存在记录。来源：[AsyncIO 扩展](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)、[会话事务](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html/)。实施前仍需在当前 MySQL/asyncmy 版本上做隔离集成测试。
