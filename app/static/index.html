@@ -12,12 +12,14 @@
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.action-form{display:grid;gap:8px;width:min(100%,420px);margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#f8faf8}.action-form label{font-size:12px;color:var(--muted)}.action-form textarea,.action-form select{width:100%;border:1px solid var(--line);border-radius:7px;background:white;padding:7px;color:var(--ink)}.action-form textarea{min-height:76px;resize:vertical}.action-form .row{display:flex;gap:8px}.action-note{font-size:12px;color:var(--muted);margin-top:8px}.action-note.error-text{color:#99492f}
 .action-form[hidden]{display:none}
 .order-options{display:grid;gap:8px;margin-top:12px}.order-choice{display:block;text-align:left;width:100%;border:1px solid #b6cbbb;border-radius:9px;background:#f5faf5;color:var(--ink);padding:9px 12px}.order-choice strong{display:block}.order-choice small{color:var(--muted)}
+.conversation-section{min-height:0;display:flex;flex:1;flex-direction:column;gap:10px}.conversation-heading{font-size:12px;font-weight:700;color:#536c5b}.conversation-list{overflow:auto;min-height:0;display:grid;align-content:start;gap:6px}.conversation-item{width:100%;border:1px solid transparent;background:transparent;border-radius:10px;text-align:left;padding:10px;color:var(--ink)}.conversation-item:hover,.conversation-item:focus-visible{background:#f7faf6}.conversation-item.active{background:#fff;border-color:#b6cbbb}.conversation-title{display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.conversation-meta{display:flex;justify-content:space-between;gap:6px;color:var(--muted);font-size:11px}.summary-mark{color:var(--green)}.more-conversations{border:0;background:transparent;color:var(--green);padding:5px;text-align:left;font-size:12px}.sidebar-toggle{display:none}
+@media(max-width:760px){.sidebar-toggle{display:block;border:0;background:none;color:var(--green);font-size:12px;white-space:nowrap}.sidebar{display:flex;position:fixed;z-index:5;inset:0 auto 0 0;width:min(310px,85vw);padding:22px;box-shadow:12px 0 30px #213c3226;transform:translateX(-110%);transition:transform .2s}.sidebar.open{transform:translateX(0)}.sidebar-backdrop{position:fixed;inset:0;background:#213c3266;z-index:4}.sidebar-backdrop[hidden]{display:none}.side-foot{display:none}.sidebar .side-note{display:none}.sidebar{gap:16px}.conversation-section{min-height:0}.mobile-new{display:none}.tabs{width:100%;justify-content:space-between}.tab{white-space:nowrap}.welcome{margin-top:4vh}}
 </style>
 </head>
 <body>
 <div class="app">
-<aside class="sidebar"><div class="brand"><span class="mark">♧</span><div>PetShop<span class="tag" style="display:block">HELPER / 客服工作台</span></div></div><button class="new" id="newChat">＋ 开始新对话</button><button class="new" id="demoOrders">使用样例订单演示</button><div class="side-note">为每一份陪伴<br>提供贴心解答。</div><div class="side-foot">客服流程演示<br>订单、商品、物流查询使用模拟数据。<br>转人工仅提供官方渠道指引，不会接入真人。</div></aside>
-<main><header><div><h1>宠物生活，有问有答</h1><span class="status" id="status">准备就绪</span></div><nav class="tabs" aria-label="功能切换"><button class="tab active" data-panel="chatPanel">客服对话</button><button class="tab" data-panel="extractPanel">售后整理</button><a class="tab" href="/admin">后台管理</a><button class="mobile-new" id="mobileNew">新对话</button><button class="mobile-new" id="mobileDemo">样例订单</button></nav></header>
+<div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div><aside class="sidebar" id="sidebar"><div class="brand"><span class="mark">♧</span><div>PetShop<span class="tag" style="display:block">HELPER / 客服工作台</span></div></div><button class="new" id="newChat">＋ 开始新对话</button><button class="new" id="demoOrders">使用样例订单演示</button><div class="conversation-section"><span class="conversation-heading">最近会话</span><div class="conversation-list" id="conversationList" aria-label="最近会话"></div><button class="more-conversations" id="moreConversations" hidden>加载更多会话</button></div><div class="side-foot">客服流程演示<br>订单、商品、物流查询使用模拟数据。<br>转人工仅提供官方渠道指引，不会接入真人。</div></aside>
+<main><header><div><h1>宠物生活，有问有答</h1><span class="status" id="status">准备就绪</span></div><nav class="tabs" aria-label="功能切换"><button class="tab active" data-panel="chatPanel">客服对话</button><button class="tab" data-panel="extractPanel">售后整理</button><a class="tab" href="/admin">后台管理</a><button class="sidebar-toggle" id="sidebarToggle" aria-label="打开最近会话" aria-expanded="false">会话</button><button class="mobile-new" id="mobileNew">新对话</button><button class="mobile-new" id="mobileDemo">样例订单</button></nav></header>
 <section class="panel" id="chatPanel"><div class="messages" id="messages" role="log" aria-label="聊天记录"><div class="welcome" id="welcome"><span class="kicker">HELLO, PET PARENTS</span><h2>你好，我是小喵。<br>今天有什么可以帮你？</h2><p>商品咨询、购物疑问或售后问题，告诉我你的需要。</p><div class="suggestions"><button data-question="给猫咪挑选猫粮时要注意什么？">挑选宠物用品 <small>一起理清选购思路 ↗</small></button><button data-question="猫爬架收到后损坏了，申请售后需要准备什么？">处理售后问题 <small>了解需要准备的信息 ↗</small></button></div></div></div><form class="composer" id="chatForm"><label for="message" class="hint">向小喵提问</label><textarea id="message" placeholder="例如：我买的自动喂食器出了问题…" maxlength="20000" required></textarea><div class="compose-bottom"><span class="hint">Enter 发送 · Shift + Enter 换行</span><div><button type="button" class="secondary" id="stop" hidden>停止</button> <button class="primary" id="send">发送 ↑</button></div></div></form><div class="footnote">AI 回复仅供参考，订单与售后政策请以平台核实信息为准。</div></section>
 <section class="panel" id="extractPanel" hidden><div class="extract"><span class="tag">AFTER-SALES ASSISTANT</span><h2>把问题，说清楚。</h2><p>粘贴售后描述，整理订单号、诉求类型和期望方案。此操作仅提取信息，不会提交工单。</p><form id="extractForm"><label for="description">售后描述</label><textarea id="description" placeholder="订单 MH20260701123 的猫爬架到货就散架了，我想退款。" required maxlength="20000"></textarea><button class="primary" id="extractButton">整理售后信息</button></form><p id="extractStatus" role="status"></p><div class="result" id="extractResult" hidden><dl><dt>订单号</dt><dd id="orderId"></dd><dt>诉求类型</dt><dd id="requestType"></dd><dt>期望方案</dt><dd id="solution"></dd></dl><details><summary>查看 JSON</summary><pre id="jsonResult"></pre></details></div></div></section>
 </main></div>
@@ -27,8 +29,100 @@ const userKey = 'petshop.user_id', conversationKey = 'petshop.conversation_id', 
 let userId = localStorage.getItem(userKey);
 if (!userId) { userId = crypto.randomUUID(); localStorage.setItem(userKey, userId); }
 let conversationId = Number(localStorage.getItem(conversationKey)) || null;
-let controller = null, busy = false, pendingOrder = false;
+let controller = null, busy = false, pendingOrder = false, viewEpoch = 0, historyLoading = false;
+let conversationCursor = null, listRequest = 0, conversations = [];
 if (conversationId) $('status').textContent = '已接续上次会话';
+
+function pendingStorageKey(id) { return `${pendingKey}.${userId}.${id}`; }
+function readPending(id) {
+  if (!id) return null;
+  try {
+    const value = JSON.parse(localStorage.getItem(pendingStorageKey(id)) || 'null');
+    return value?.kind === 'select_order' && value.conversation_id === id ? value : null;
+  } catch { return null; }
+}
+function selectStoredConversation(id) {
+  conversationId = id;
+  if (id) localStorage.setItem(conversationKey, String(id));
+  else localStorage.removeItem(conversationKey);
+  renderConversationList();
+}
+function closeSidebar() {
+  $('sidebar').classList.remove('open'); $('sidebarBackdrop').hidden = true;
+  $('sidebarToggle').setAttribute('aria-expanded', 'false');
+}
+function renderConversationList() {
+  const host = $('conversationList'); host.replaceChildren();
+  for (const item of conversations) {
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'conversation-item' + (item.id === conversationId ? ' active' : '');
+    button.setAttribute('aria-current', item.id === conversationId ? 'true' : 'false');
+    const title = document.createElement('span'); title.className = 'conversation-title';
+    title.textContent = item.preview || '尚未提问的会话';
+    const meta = document.createElement('span'); meta.className = 'conversation-meta';
+    const date = document.createElement('span'); date.textContent = item.updated_at ? item.updated_at.replace('T', ' ').slice(0, 16) : '';
+    meta.append(date);
+    if (item.has_summary) { const mark = document.createElement('span'); mark.className = 'summary-mark'; mark.textContent = '已摘要'; meta.append(mark); }
+    button.append(title, meta); button.onclick = () => openConversation(item.id); host.append(button);
+  }
+  $('moreConversations').hidden = !conversationCursor;
+}
+async function loadConversations(more = false) {
+  const request = ++listRequest, requestedUser = userId;
+  const before = more ? conversationCursor : null;
+  if (more && !before) return;
+  try {
+    const params = new URLSearchParams({user_id: requestedUser, limit: '20'});
+    if (before) params.set('before', before);
+    const response = await fetch(`/api/conversations?${params}`);
+    if (!response.ok) return;
+    const page = await response.json();
+    if (request !== listRequest || requestedUser !== userId) return;
+    conversations = more ? [...conversations, ...page.items.filter(item => !conversations.some(old => old.id === item.id))] : page.items;
+    conversationCursor = page.next_cursor; renderConversationList();
+  } catch { /* The sidebar is optional; chatting remains available. */ }
+}
+function restorePending() {
+  const pending = readPending(conversationId);
+  pendingOrder = Boolean(pending);
+  if (pending) { $('welcome').hidden = true; showOrderChoices(bubble('assistant'), pending, false); }
+  setBusy(false);
+}
+async function openConversation(id) {
+  if (id === conversationId && $('messages').querySelector('.msg') && !historyLoading) { closeSidebar(); return; }
+  viewEpoch++; controller?.abort(); controller = null; busy = false; pendingOrder = false;
+  selectStoredConversation(id); closeSidebar();
+  $('messages').querySelectorAll('.msg').forEach(node => node.remove());
+  $('welcome').hidden = true; $('message').value = ''; historyLoading = true; setBusy(false);
+  const epoch = viewEpoch, requestedUser = userId;
+  let after = null;
+  try {
+    do {
+      const params = new URLSearchParams({user_id: requestedUser, limit: '50'});
+      if (after !== null) params.set('after', String(after));
+      const response = await fetch(`/api/conversations/${id}/messages?${params}`);
+      if (!response.ok) throw Error(await responseError(response));
+      const page = await response.json();
+      if (epoch !== viewEpoch || requestedUser !== userId) return;
+      for (const item of page.items) {
+        if (item.role === 'user') bubble('user', item.content);
+        else if (item.role === 'assistant') {
+          const answer = bubble('assistant'); answer.classList.remove('typing');
+          answer.innerHTML = renderMarkdown(item.content);
+        }
+      }
+      after = page.next_cursor;
+    } while (after !== null);
+    if (epoch === viewEpoch) restorePending();
+  } catch (error) {
+    if (epoch === viewEpoch) { const notice = bubble('assistant'); notice.classList.remove('typing'); notice.classList.add('error'); notice.textContent = `历史记录加载失败：${error.message}`; }
+  } finally {
+    if (epoch === viewEpoch) { historyLoading = false; setBusy(false); scrollBottom(); }
+  }
+}
+$('moreConversations').onclick = () => loadConversations(true);
+$('sidebarToggle').onclick = () => { const open = !$('sidebar').classList.contains('open'); $('sidebar').classList.toggle('open', open); $('sidebarBackdrop').hidden = !open; $('sidebarToggle').setAttribute('aria-expanded', String(open)); };
+$('sidebarBackdrop').onclick = closeSidebar;
 
 function escapeHtml(text) {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -133,11 +227,9 @@ function bubble(role, text) {
   $('messages').append(row); scrollBottom(); return content;
 }
 function setBusy(value) {
-  busy = value; $('send').disabled = value || pendingOrder; $('message').disabled = value || pendingOrder; $('stop').hidden = !value;
-  $('status').textContent = value ? '小喵正在回复…' : pendingOrder ? '请先选择订单' : '准备就绪';
-  $('newChat').disabled = value; $('mobileNew').disabled = value;
-  $('demoOrders').disabled = value; $('mobileDemo').disabled = value;
-  document.querySelectorAll('[data-question]').forEach(button => button.disabled = value);
+  busy = value; $('send').disabled = value || pendingOrder || historyLoading; $('message').disabled = value || pendingOrder || historyLoading; $('stop').hidden = !value;
+  $('status').textContent = value ? '小喵正在回复…' : historyLoading ? '正在加载历史…' : pendingOrder ? '请先选择订单' : '准备就绪';
+  document.querySelectorAll('[data-question]').forEach(button => button.disabled = value || historyLoading);
 }
 function addFeedback(answer) {
   const row = document.createElement('div'); row.className = 'feedback';
@@ -262,15 +354,15 @@ function renderActions(answer) {
   }
 }
 function newChat() {
-  if (busy) return;
-  conversationId = null; pendingOrder = false; localStorage.removeItem(conversationKey); localStorage.removeItem(pendingKey); setBusy(false);
+  viewEpoch++; controller?.abort(); controller = null; busy = false; historyLoading = false;
+  selectStoredConversation(null); pendingOrder = false; setBusy(false); closeSidebar();
   $('messages').querySelectorAll('.msg').forEach(node => node.remove());
   $('welcome').hidden = false; $('message').value = ''; $('message').focus();
 }
 $('newChat').onclick = newChat; $('mobileNew').onclick = newChat; $('stop').onclick = () => controller?.abort();
 function useDemoOrders() {
-  if (busy) return;
   newChat(); userId = 'demo-user'; localStorage.setItem(userKey, userId);
+  conversations = []; conversationCursor = null; renderConversationList(); loadConversations();
   $('status').textContent = '已切换到样例订单演示';
 }
 $('demoOrders').onclick = useDemoOrders; $('mobileDemo').onclick = useDemoOrders;
@@ -288,11 +380,10 @@ async function responseError(response) {
   let data; try { data = await response.json(); } catch { return `请求失败（${response.status}）`; }
   return typeof data.detail === 'string' ? data.detail : `请求失败（${response.status}），请检查输入或服务配置。`;
 }
-function showOrderChoices(answer, value) {
+function showOrderChoices(answer, value, persist = true) {
   if (value.kind !== 'select_order' || !Array.isArray(value.orders)) return;
-  pendingOrder = true; conversationId = value.conversation_id;
-  localStorage.setItem(conversationKey, String(conversationId));
-  localStorage.setItem(pendingKey, JSON.stringify(value));
+  pendingOrder = true; selectStoredConversation(value.conversation_id);
+  if (persist) localStorage.setItem(pendingStorageKey(conversationId), JSON.stringify(value));
   answer.classList.remove('typing');
   answer.textContent = '请选择需要处理的本人订单：';
   const host = answer.actionContainer; host.replaceChildren();
@@ -306,9 +397,10 @@ function showOrderChoices(answer, value) {
       if (busy) return;
       choices.querySelectorAll('button').forEach(button => button.disabled = true);
       pendingOrder = false; setBusy(false);
-      const succeeded = await runConversation('/api/actions/resume', {user_id: userId, conversation_id: conversationId,
+      const choiceConversationId = conversationId;
+      const succeeded = await runConversation('/api/actions/resume', {user_id: userId, conversation_id: choiceConversationId,
         order_id: order.order_id}, `选择订单 ${order.order_id}`);
-      if (!succeeded) {
+      if (!succeeded && conversationId === choiceConversationId) {
         pendingOrder = true; choices.querySelectorAll('button').forEach(button => button.disabled = false); setBusy(false);
       }
     };
@@ -317,19 +409,22 @@ function showOrderChoices(answer, value) {
   host.append(choices); scrollBottom();
 }
 async function runConversation(url, payload, userText) {
-  if (busy) return;
+  if (busy || historyLoading) return false;
+  const epoch = viewEpoch;
   $('welcome').hidden = true;
   if (userText) bubble('user', userText);
   const answer = bubble('assistant');
   let content = '', done = false, interrupted = false, buffer = '';
-  setBusy(true); controller = new AbortController();
+  setBusy(true); const requestController = new AbortController(); controller = requestController;
   try {
     const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload), signal: controller.signal});
+      body: JSON.stringify(payload), signal: requestController.signal});
+    if (epoch !== viewEpoch) return false;
     if (!response.ok) throw Error(await responseError(response));
     if (!response.body) throw Error('浏览器未提供流式响应。');
     const reader = response.body.getReader(), decoder = new TextDecoder();
     const handleFrame = frame => {
+      if (epoch !== viewEpoch) return;
       let eventName = 'message'; const data = [];
       for (const line of frame.split('\n')) {
         if (line.startsWith('event:')) eventName = line.slice(6).trim();
@@ -349,17 +444,19 @@ async function runConversation(url, payload, userText) {
       } else if (value.event === 'actions' && Array.isArray(value.items)) {
         answer.actionItems.push(...value.items);
       } else if (value.event === 'interrupt') {
-        interrupted = true; showOrderChoices(answer, value);
+        interrupted = true; showOrderChoices(answer, value); loadConversations();
       } else if (value.event === 'done' && Number.isSafeInteger(value.conversation_id) && value.conversation_id > 0) {
-        conversationId = value.conversation_id; localStorage.setItem(conversationKey, String(conversationId));
-        localStorage.removeItem(pendingKey);
+        selectStoredConversation(value.conversation_id);
+        localStorage.removeItem(pendingStorageKey(conversationId));
         renderActions(answer);
+        loadConversations();
       } else if (typeof value.delta === 'string') {
         content += value.delta; answer.classList.remove('typing'); answer.innerHTML = renderMarkdown(content, answer.citations); scrollBottom();
       }
     };
     while (true) {
       const {value, done: ended} = await reader.read(); buffer += ended ? decoder.decode() : decoder.decode(value, {stream: true});
+      if (epoch !== viewEpoch) return false;
       buffer = buffer.replace(/\r\n/g, '\n'); let end;
       while ((end = buffer.indexOf('\n\n')) >= 0) { handleFrame(buffer.slice(0, end)); buffer = buffer.slice(end + 2); }
       if (ended) break;
@@ -369,23 +466,26 @@ async function runConversation(url, payload, userText) {
     if (!interrupted) addFeedback(answer);
     return true;
   } catch (error) {
-    controller?.abort(); answer.classList.remove('typing'); answer.classList.add('error');
+    if (epoch !== viewEpoch) return false;
+    requestController.abort(); answer.classList.remove('typing'); answer.classList.add('error');
     const notice = error.name === 'AbortError' ? '已停止生成，本轮不会作为完整对话保存。' : error.message;
     answer.textContent = content ? content + '\n\n' + notice : notice;
     return false;
-  } finally { controller = null; setBusy(false); if (!pendingOrder) $('message').focus(); scrollBottom(); }
+  } finally { if (epoch === viewEpoch) { controller = null; setBusy(false); if (!pendingOrder) $('message').focus(); scrollBottom(); } }
 }
 $('chatForm').onsubmit = async event => {
-  event.preventDefault(); const message = $('message').value.trim(); if (!message || busy || pendingOrder) return;
+  event.preventDefault(); const message = $('message').value.trim(); if (!message || busy || pendingOrder || historyLoading) return;
   $('message').value = '';
   await runConversation('/api/chat', {user_id: userId, message, conversation_id: conversationId}, message);
 };
 try {
-  const pending = JSON.parse(localStorage.getItem(pendingKey) || 'null');
-  if (pending && pending.conversation_id === conversationId && pending.kind === 'select_order') {
-    $('welcome').hidden = true; showOrderChoices(bubble('assistant'), pending); setBusy(false);
-  }
-} catch { localStorage.removeItem(pendingKey); }
+  const legacy = JSON.parse(localStorage.getItem(pendingKey) || 'null');
+  if (legacy?.conversation_id && legacy.kind === 'select_order')
+    localStorage.setItem(pendingStorageKey(legacy.conversation_id), JSON.stringify(legacy));
+} catch { /* Old local data is optional. */ }
+localStorage.removeItem(pendingKey);
+loadConversations();
+if (conversationId) openConversation(conversationId);
 $('extractForm').onsubmit = async event => {
   event.preventDefault(); const text = $('description').value.trim(); if (!text) return;
   $('extractButton').disabled = true; $('extractResult').hidden = true; $('extractStatus').className = ''; $('extractStatus').textContent = '正在整理…';
