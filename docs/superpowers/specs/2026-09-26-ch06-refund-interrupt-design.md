@@ -1,6 +1,6 @@
 # PetShop_Helper 第 6 章设计：指代消解、选单中断与退款申请
 
-> 状态：待用户书面评审。依据：`C:/Users/Administrator/Documents/PetShop_Helper开发文档/6.md`、已批准的第 5 章设计，以及本轮用户选定的样例订单架构。第 4/5 章真实上游验收仍为 `pending_upstream`，本章不自动调用余额不足的 glm 上游。
+> 状态：用户已批准书面 spec，实施计划待评审。依据：`C:/Users/Administrator/Documents/PetShop_Helper开发文档/6.md`、已批准的第 5 章设计，以及本轮用户选定的样例订单架构。第 4/5 章真实上游验收仍为 `pending_upstream`，本章不自动调用余额不足的 glm 上游。
 
 ## 目标与边界
 
