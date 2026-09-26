@@ -1,0 +1,4 @@
+{"kind":"answer","query":"满多少包邮？","evidence":"[1] 满99元包邮。","must_contain":["99","[1]"],"forbid_any":["次日达","10元"]}
+{"kind":"answer","query":"退款多久到账？","evidence":"(无证据)","must_contain":["暂时没有查到相关信息"],"forbid_any":["3天","24小时"]}
+{"kind":"faithfulness","evidence":"[1] 满99元包邮。","answer":"满99元包邮[1]。","faithful":true}
+{"kind":"faithfulness","evidence":"[1] 满99元包邮。","answer":"满99元包邮且次日达[1]。","faithful":false}
