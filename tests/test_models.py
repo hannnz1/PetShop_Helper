@@ -15,6 +15,7 @@ def test_mappings_match_key_mysql_ddl_properties():
     assert set(Base.metadata.tables) == {
         "conversations", "messages", "faq", "tickets",
         "knowledge_chunks", "qa_extraction_staging",
+        "low_confidence_questions", "faith_cases",
     }
     for table_name in ("conversations", "messages", "faq"):
         table = Base.metadata.tables[table_name]

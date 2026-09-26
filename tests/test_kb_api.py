@@ -128,6 +128,7 @@ def test_preview_rejects_empty_bad_type_and_path():
 
 
 def test_search_returns_dense_hits(monkeypatch):
+    monkeypatch.setattr(kb.milvus_client, "hybrid_enabled", lambda: False)
     async def fake_search(query, top_k=None, min_score=None):
         assert (query, top_k, min_score) == ("邮费是多少", 2, 0.5)
         return [{"id": 7, "score": 0.8, "question": "运费怎么算", "answer": "满99包邮"}]

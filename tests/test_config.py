@@ -129,6 +129,7 @@ def test_get_settings_is_cached(monkeypatch):
 
 def test_ch03_embedding_settings_are_optional_until_live_gate(monkeypatch):
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.delenv("MILVUS_URI", raising=False)
     settings = Settings(
         chat_model="test-model", chat_base_url="https://example.test/v1",
         chat_api_key="test-key", _env_file=None,
@@ -154,6 +155,7 @@ def test_ch03_embedding_key_uses_design_documents_name(monkeypatch):
 
 def test_ch04_retrieval_defaults_preserve_pre_migration_milvus(monkeypatch):
     monkeypatch.delenv("RERANK_API_KEY", raising=False)
+    monkeypatch.delenv("MILVUS_URI", raising=False)
     settings = Settings(
         chat_model="test-model", chat_base_url="https://example.test/v1",
         chat_api_key="test-key", _env_file=None,

@@ -1,9 +1,12 @@
 """The public FAQ tool contract when retrieval is backed by vectors."""
 
+from types import SimpleNamespace
+
 from app.tools.business import query_faq
 
 
 async def test_query_faq_maps_hits_to_contract(monkeypatch):
+    monkeypatch.setattr("app.tools.business.get_settings", lambda: SimpleNamespace(milvus_uri="data/milvus_knowledge.db"))
     calls = []
 
     async def fake_search(keyword):
@@ -24,6 +27,7 @@ async def test_query_faq_maps_hits_to_contract(monkeypatch):
 
 
 async def test_query_faq_empty_returns_message(monkeypatch):
+    monkeypatch.setattr("app.tools.business.get_settings", lambda: SimpleNamespace(milvus_uri="data/milvus_knowledge.db"))
     async def fake_search(keyword):
         assert keyword == "无关问题"
         return []
