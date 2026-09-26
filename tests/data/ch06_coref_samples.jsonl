@@ -1,0 +1,5 @@
+{"id":"C1","history":"用户：订单1001到哪了\n客服：请查看订单页面","query":"那它能退吗","expected":"订单1001能退吗","kind":"reference"}
+{"id":"C2","history":"用户：自动饮水机还有货吗\n客服：请以商品页面为准","query":"这个包邮吗","expected":"自动饮水机包邮吗","kind":"reference"}
+{"id":"C3","history":"用户：订单1002已经发货了吗\n客服：请查看订单页面","query":"那单能退吗","expected":"订单1002能退吗","kind":"reference"}
+{"id":"C4","history":"用户：订单1001到哪了\n客服：请查看订单页面","query":"订单1001能退吗","expected":"订单1001能退吗","kind":"complete"}
+{"id":"C5","history":"","query":"那它能退吗","expected":"那它能退吗","kind":"no_history"}

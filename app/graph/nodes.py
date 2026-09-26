@@ -5,6 +5,7 @@ from langgraph.runtime import Runtime
 
 from app.config import get_settings
 from app.core.agent import ContextBudgetExceeded, FAQ_REFUSAL
+from app.core import coref as coref_service
 from app.core.intent import safe_classify
 from app.core.memory import estimate_tokens
 from app.core.prompts import GRAPH_AGENT_SYSTEM, GRAPH_FINAL_SYSTEM
@@ -15,14 +16,40 @@ from app.tools.infra import execute_tool_call
 from app.tools.registry import get_chat_tools
 
 
-async def coref(state: dict) -> dict:
-    """Chapter 5 passes the user wording through; Chapter 6 resolves references."""
-    return {"query": state["query"]}
+def _history_text(messages: list, max_turns: int = 6, max_tokens: int | None = None) -> str:
+    """Use recent complete turns, excluding this turn's final human message."""
+    prior = messages[:-1] if messages and isinstance(messages[-1], HumanMessage) else messages
+    pairs = []
+    pending = None
+    for message in prior:
+        if isinstance(message, HumanMessage):
+            pending = message
+        elif isinstance(message, AIMessage) and not message.tool_calls and pending is not None:
+            pairs.append((pending, message))
+            pending = None
+    budget = max_tokens if max_tokens is not None else max(0, get_settings().token_budget // 4)
+    kept = []
+    for user, assistant in reversed(pairs[-max_turns:]):
+        candidate = [f"用户：{user.content}", f"客服：{assistant.content}", *kept]
+        if estimate_tokens([HumanMessage(content="\n".join(candidate))]) > budget:
+            break
+        kept = candidate
+    return "\n".join(kept)
+
+
+async def coref(state: dict, runtime: Runtime[dict]) -> dict:
+    """Resolve for downstream understanding while preserving the raw query."""
+    model = runtime.context.get("model") if runtime.context else None
+    if model is None:
+        return {"resolved_query": state["query"]}
+    history = _history_text(state.get("messages", []))
+    resolved = await coref_service.resolve(state["query"], history, model)
+    return {"resolved_query": resolved}
 
 
 async def classify_intent_node(state: dict, runtime: Runtime[dict]) -> dict:
     classifier = runtime.context.get("classifier") if runtime.context else None
-    intent = await safe_classify(classifier, state["query"]) if classifier else "unknown"
+    intent = await safe_classify(classifier, state.get("resolved_query") or state["query"]) if classifier else "unknown"
     return {"intent": intent, "route": route_by_intent(intent)}
 
 
@@ -153,7 +180,7 @@ def _strong_evidence(payload: object) -> bool:
 
 async def forced_rag(state: dict) -> dict:
     """Always retrieve first; malformed or failed evidence cannot enter Agent."""
-    query = state["query"]
+    query = state.get("resolved_query") or state["query"]
     try:
         payload = await query_faq.ainvoke({"keyword": query})
     except Exception as exc:  # noqa: BLE001 - retrieval failure is a refusal

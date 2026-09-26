@@ -71,11 +71,11 @@
 
 **Interfaces:** `resolve(query: str, history: str, model: BaseChatModel) -> str`; graph stores `resolved_query`, keeps original `query`; classifier receives resolved text.
 
-- [ ] 写失败测试：完整句保意、"那它能退吗"从最近历史补订单、空答/模型异常回原句、当前问题不作为自己的历史、MySQL 审计仍用原文。
-- [ ] 跑 `pytest -q tests/test_ch06_coref.py` 确认红。
-- [ ] 增加 LangChain Prompt 和最多 6 轮完整消息构建；在 `coref` 节点调用并传给分类/检索，不修改原始用户消息。
-- [ ] 跑核心图与 API 回归，检查 token 预算和异常回退。
-- [ ] 提交并追记标注样例验证（Prompt 效果不以单测代替）。
+- [x] 写失败测试：完整句保意、"那它能退吗"从最近历史补订单、空答/模型异常回原句、当前问题不作为自己的历史、MySQL 审计仍用原文。
+- [x] 跑 `pytest -q tests/test_ch06_coref.py` 确认红。
+- [x] 增加 LangChain Prompt 和最多 6 轮完整消息构建；在 `coref` 节点调用并传给分类/检索，不修改原始用户消息。
+- [x] 跑核心图与 API 回归，检查 token 预算和异常回退。
+- [x] 提交并追记标注样例验证（Prompt 效果不以单测代替）。
 
 ### Task 4: 本人订单节点与选择中断
 
