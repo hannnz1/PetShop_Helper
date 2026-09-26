@@ -69,6 +69,13 @@ def test_recall_at_five_does_not_count_rank_six_but_mrr_does():
     assert out["retrieval"]["vector"]["A_policy"]["mrr"] == 1/6
 
 
+def test_cache_recovers_after_interrupted_final_line(tmp_path):
+    cache = tmp_path / "retrieval.jsonl"
+    cache.write_text('{"key":"interrupted"', encoding="utf-8")
+    eval_ch04._append_cache(cache, "complete", [{"id": 1}])
+    assert eval_ch04._read_cache(cache)["complete"] == [{"id": 1}]
+
+
 @pytest.mark.asyncio
 async def test_partial_report_survives_generation_skip(tmp_path, monkeypatch):
     sample = {"id": "A1", "bucket": "A_policy", "query": "运费？", "expect_section": ["运费怎么算"],
@@ -91,3 +98,52 @@ async def test_partial_report_survives_generation_skip(tmp_path, monkeypatch):
     saved = json.loads((tmp_path / "reports/rag_eval.json").read_text(encoding="utf-8"))
     assert saved["evidence_coverage"]["bm25"]["A_policy"] == 1.0
     assert "RETRIEVAL" in (tmp_path / "reports/rag_eval.txt").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_retrieval_cache_resumes_without_repeating_upstream_calls(tmp_path, monkeypatch):
+    sample = {"id": "A1", "query": "满多少包邮"}
+    counts = {"rewrite": 0, "search": 0}
+
+    async def understand(query):
+        counts["rewrite"] += 1
+        return {"standard": query, "expanded": ["运费"]}
+
+    async def search(query, **kwargs):
+        counts["search"] += 1
+        return [{"id": 7, "section_path": "运费", "answer": "满99元包邮"}]
+
+    monkeypatch.setattr(eval_ch04.query_understanding, "understand", understand)
+    monkeypatch.setattr(eval_ch04.retrieval, "search_knowledge", search)
+    cache = tmp_path / "retrieval.jsonl"
+    first = await eval_ch04._retrieve_all([sample], [], cache_path=cache)
+    second = await eval_ch04._retrieve_all([sample], [], cache_path=cache)
+    assert first == second
+    assert counts == {"rewrite": 1, "search": 4}
+    assert len(cache.read_text(encoding="utf-8").splitlines()) == 5
+
+
+@pytest.mark.asyncio
+async def test_cache_retries_only_failed_retrieval_and_ignores_changed_question(tmp_path, monkeypatch):
+    sample = {"id": "A1", "query": "满多少包邮"}
+    searches = []
+
+    async def understand(query):
+        return {"standard": query, "expanded": []}
+
+    async def search(query, **kwargs):
+        searches.append(kwargs["strategy"])
+        if kwargs["strategy"] == "bm25" and searches.count("bm25") == 1:
+            raise RuntimeError("temporary")
+        return [{"answer": query}]
+
+    monkeypatch.setattr(eval_ch04.query_understanding, "understand", understand)
+    monkeypatch.setattr(eval_ch04.retrieval, "search_knowledge", search)
+    cache = tmp_path / "retrieval.jsonl"
+    first = await eval_ch04._retrieve_all([sample], [], cache_path=cache)
+    assert first[("bm25", "A1")] == []
+    await eval_ch04._retrieve_all([sample], [], cache_path=cache)
+    assert searches.count("bm25") == 2
+    assert len(searches) == 5
+    await eval_ch04._retrieve_all([{"id": "A1", "query": "退货邮费"}], [], cache_path=cache)
+    assert len(searches) == 9

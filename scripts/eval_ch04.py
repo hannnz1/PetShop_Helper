@@ -6,6 +6,7 @@ The retrieval/evidence report is written even when generation is unavailable.
 
 import argparse
 import asyncio
+import hashlib
 import json
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from app.config import get_settings
 from app.core import query_understanding, retrieval
 from app.core.llm import get_chat_model
 from app.core.prompts import FAITHFULNESS_PROMPT, RAG_ANSWER_PROMPT
+from app.db import repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +28,8 @@ STRATEGIES = ("vector", "bm25", "hybrid", "hybrid_rerank")
 K = 10
 RECALL_K = 5
 CALL_TIMEOUT = 45.0
+CACHE_VERSION = 1
+CACHE_DIR = ROOT / "work/ch04-eval-cache"
 
 
 class _CoverageJudge(BaseModel):
@@ -118,13 +122,84 @@ def _load_samples(path: Path = SAMPLES) -> list[dict]:
     return rows
 
 
-async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str, str], list[dict]]:
+def _read_cache(path: Path | None) -> dict[str, object]:
+    if path is None or not path.is_file():
+        return {}
+    entries = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # An interrupted append can leave a partial final line.
+        if isinstance(row, dict) and isinstance(row.get("key"), str):
+            entries[row["key"]] = row.get("value")
+    return entries
+
+
+def _append_cache(path: Path | None, key: str, value: object) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as stream:
+        # A crash may leave an incomplete last row. Start a fresh line before
+        # appending so the next valid result remains readable.
+        if path.stat().st_size:
+            with path.open("rb") as existing:
+                existing.seek(-1, 2)
+                if existing.read(1) != b"\n":
+                    stream.write("\n")
+        stream.write(json.dumps({"key": key, "value": value}, ensure_ascii=False, default=str) + "\n")
+
+
+def _cache_key(kind: str, sample: dict) -> str:
+    return json.dumps([kind, sample["id"], sample["query"]], ensure_ascii=False)
+
+
+async def _cache_path() -> Path:
+    """Change the cache file when KB authority, model config or pipeline code changes."""
+    settings = get_settings()
+    chunks = await repository.list_all_chunks()
+    authority = [
+        [row.id, row.category, row.questions, row.answer, row.section_path,
+         row.content_type, row.vectorize_status]
+        for row in chunks
+    ]
+    code = [
+        (ROOT / name).read_bytes().hex()
+        for name in ("scripts/eval_ch04.py", "app/core/retrieval.py",
+                     "app/core/query_understanding.py", "app/core/rerank.py",
+                     "app/core/embeddings.py")
+    ]
+    scope = [CACHE_VERSION, authority, code, settings.milvus_uri,
+             settings.chat_base_url, settings.chat_model, settings.structured_output_method,
+             settings.embed_base_url, settings.embed_model,
+             settings.rerank_base_url, settings.rerank_model,
+             settings.recall_top_k, K]
+    digest = hashlib.sha256(json.dumps(scope, ensure_ascii=False, default=str).encode()).hexdigest()[:20]
+    return CACHE_DIR / f"retrieval-{digest}.jsonl"
+
+
+async def _retrieve_all(
+    samples: list[dict], lines: list[str], cache_path: Path | None = None,
+) -> dict[tuple[str, str], list[dict]]:
     gate = asyncio.Semaphore(8)
     rewrite_gate = asyncio.Semaphore(3)
     results = {}
     rewritten: dict[str, tuple[str, str]] = {}
+    cached = _read_cache(cache_path)
+    progress = {"rewrite": 0, "retrieval": 0}
+
+    def tick(stage: str, total: int) -> None:
+        progress[stage] += 1
+        if progress[stage] % 50 == 0 or progress[stage] == total:
+            print(f"{stage}: {progress[stage]}/{total}", flush=True)
 
     async def rewrite(sample: dict):
+        key = _cache_key("rewrite", sample)
+        if isinstance(cached.get(key), list) and len(cached[key]) == 2:
+            rewritten[sample["id"]] = tuple(cached[key])
+            tick("rewrite", len(samples))
+            return
         async with rewrite_gate:
             try:
                 understood = await asyncio.wait_for(
@@ -134,13 +209,21 @@ async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str
                 expanded = understood["expanded"]
                 lexical = standard + (" " + " ".join(expanded) if expanded else "")
                 rewritten[sample["id"]] = (standard, lexical)
+                _append_cache(cache_path, key, [standard, lexical])
             except Exception as exc:  # noqa: BLE001 - keep retrieval measurable on raw query
                 lines.append(f"REWRITE_ERROR {sample['id']}: {type(exc).__name__}")
                 rewritten[sample["id"]] = (sample["query"], sample["query"])
+            finally:
+                tick("rewrite", len(samples))
 
     await asyncio.gather(*(rewrite(sample) for sample in samples))
 
     async def one(strategy: str, sample: dict):
+        key = _cache_key(strategy, sample)
+        if isinstance(cached.get(key), list):
+            results[(strategy, sample["id"])] = cached[key]
+            tick("retrieval", len(STRATEGIES) * len(samples))
+            return
         async with gate:
             try:
                 value = await asyncio.wait_for(
@@ -151,9 +234,12 @@ async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str
                     timeout=90,
                 )
                 results[(strategy, sample["id"])] = value
+                _append_cache(cache_path, key, value)
             except Exception as exc:  # noqa: BLE001 - keep partial report usable
                 lines.append(f"RETRIEVAL_ERROR {strategy}/{sample['id']}: {type(exc).__name__}")
                 results[(strategy, sample["id"])] = []
+            finally:
+                tick("retrieval", len(STRATEGIES) * len(samples))
 
     await asyncio.gather(*(one(strategy, sample) for strategy in STRATEGIES for sample in samples))
     return results
@@ -275,10 +361,14 @@ def _write_report(report: dict, lines: list[str]) -> None:
     (REPORT_DIR / "rag_eval.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-async def main(skip_generation: bool = False, samples_path: Path = SAMPLES) -> dict:
+async def main(skip_generation: bool = False, samples_path: Path = SAMPLES,
+               use_cache: bool = False) -> dict:
     samples = _load_samples(samples_path)
     lines = [f"RAG evaluation: {len(samples)} questions, Top-{K}"]
-    hits = await _retrieve_all(samples, lines)
+    cache_path = await _cache_path() if use_cache else None
+    if cache_path is not None:
+        print(f"retrieval cache: {cache_path}", flush=True)
+    hits = await _retrieve_all(samples, lines, cache_path=cache_path)
     summary = _deterministic_summary(samples, hits)
     lines.append("RETRIEVAL " + json.dumps(summary["retrieval"], ensure_ascii=False))
     lines.append("EVIDENCE " + json.dumps(summary["evidence_coverage"], ensure_ascii=False))
@@ -309,5 +399,6 @@ async def main(skip_generation: bool = False, samples_path: Path = SAMPLES) -> d
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-generation", action="store_true")
+    parser.add_argument("--fresh", action="store_true", help="ignore the local retrieval cache")
     options = parser.parse_args()
-    asyncio.run(main(skip_generation=options.skip_generation))
+    asyncio.run(main(skip_generation=options.skip_generation, use_cache=not options.fresh))
