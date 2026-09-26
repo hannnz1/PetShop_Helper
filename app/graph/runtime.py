@@ -23,9 +23,11 @@ class GraphRuntime:
     """One-worker runtime; the application owns its context-manager lifetime."""
 
     def __init__(self, checkpoint_path: Path,
-                 graph_factory: Callable[[AsyncSqliteSaver], Any]) -> None:
+                 graph_factory: Callable[[AsyncSqliteSaver], Any],
+                 classifier: Any | None = None) -> None:
         self.checkpoint_path = Path(checkpoint_path)
         self.graph_factory = graph_factory
+        self.classifier = classifier
         self.graph: Any | None = None
         self._saver_context: Any | None = None
         self._active: set[int] = set()
@@ -73,7 +75,7 @@ class GraphRuntime:
             return await self.graph.ainvoke(
                 new_turn(user_id, resolved, message),
                 {"configurable": {"thread_id": str(resolved)}},
-                context={"model": model},
+                context={"model": model, "classifier": self.classifier},
             )
         finally:
             self._active.remove(resolved)
@@ -90,7 +92,7 @@ class GraphRuntime:
             async for event in self.graph.astream(
                 new_turn(user_id, resolved, message),
                 {"configurable": {"thread_id": str(resolved)}},
-                context={"model": model},
+                context={"model": model, "classifier": self.classifier},
                 stream_mode=["messages", "updates"],
             ):
                 yield event

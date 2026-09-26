@@ -11,8 +11,9 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import Settings
-from app.core import agent
+from app.graph.runtime import GraphRuntime
 from app.main import create_app
+from langchain_core.messages import AIMessageChunk
 
 
 class GatedFakeProducer:
@@ -20,12 +21,12 @@ class GatedFakeProducer:
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def stream(self, user_id, message, conversation_id, model=None):
+    async def stream(self, user_id, message, conversation_id, *, model):
         self.entered.set()
-        yield {"type": "delta", "text": "首帧"}
+        yield "messages", (AIMessageChunk(content="首帧"), {"langgraph_node": "final_answer"})
         await self.release.wait()
-        yield {"type": "delta", "text": "第二帧"}
-        yield {"type": "done", "conversation_id": 1}
+        yield "messages", (AIMessageChunk(content="第二帧"), {"langgraph_node": "final_answer"})
+        yield "updates", {"log_turn": {"conversation_id": 1}}
 
 
 async def _next_frame(lines) -> str:
@@ -41,8 +42,8 @@ async def _next_frame(lines) -> str:
 
 async def check_socket_stream() -> None:
     fake = GatedFakeProducer()
-    original_stream = agent.stream_agent_turn
-    agent.stream_agent_turn = fake.stream
+    original_stream = GraphRuntime.astream_turn
+    GraphRuntime.astream_turn = fake.stream
     settings = Settings(
         _env_file=None,
         chat_model="offline-fake",
@@ -98,7 +99,7 @@ async def check_socket_stream() -> None:
             await asyncio.wait_for(server_task, 5)
         finally:
             sock.close()
-            agent.stream_agent_turn = original_stream
+            GraphRuntime.astream_turn = original_stream
 
 
 if __name__ == "__main__":

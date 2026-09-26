@@ -130,7 +130,8 @@ async def log_turn(state: dict) -> dict:
             tool_call_id=run["tool_call_id"],
         )
     await repository.append_message(conversation_id, "assistant", content=state["answer"])
-    return {"trace": {"intent": state.get("intent"), "route": state.get("route"),
+    return {"conversation_id": conversation_id,
+            "trace": {"intent": state.get("intent"), "route": state.get("route"),
                       "steps": state.get("steps", 0), "tokens_used": state.get("tokens_used", 0)}}
 
 

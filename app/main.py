@@ -21,6 +21,8 @@ from app.core.jobs import JobRunner
 from app.core.llm import get_chat_model
 from app.core.memory import SessionStore
 from app.kb import milvus_client
+from app.graph.build import build_graph
+from app.graph.runtime import GraphRuntime
 
 _INDEX = Path(__file__).parent / "static" / "index.html"
 _STATIC = Path(__file__).parent / "static"
@@ -52,7 +54,9 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
         application.state.jobs = JobRunner()
         milvus_client.add_runtime_owner()
         try:
-            yield
+            async with GraphRuntime(Path(config.graph_checkpoint_path), build_graph) as graph:
+                application.state.graph = graph
+                yield
         finally:
             try:
                 application.state.jobs.stop_all()

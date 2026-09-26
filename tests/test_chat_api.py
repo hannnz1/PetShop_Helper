@@ -1,36 +1,42 @@
-"""Chapter-two streaming HTTP contract."""
+"""Graph-backed SSE contract and safe error framing."""
 
 import json
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessageChunk
 from sqlalchemy.exc import OperationalError
 
 from app.config import Settings
 from app.core import agent
+from app.graph.runtime import ConversationBusy, ConversationNotFound
 from app.main import create_app
 from app.tools.infra import ToolInfrastructureError
 
 
-def _client(monkeypatch, producer):
-    monkeypatch.setattr(agent, "stream_agent_turn", producer)
-    settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1", chat_api_key="test")
-    return TestClient(create_app(settings=settings, model=object()))
+@contextmanager
+def _client(tmp_path, producer):
+    settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1",
+                        chat_api_key="test", graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
+    with TestClient(create_app(settings=settings, model=object())) as client:
+        client.app.state.graph.astream_turn = producer
+        yield client
 
 
 def _frames(response):
     return [frame for frame in response.text.split("\n\n") if frame]
 
 
-def test_stream_tools_deltas_and_done(monkeypatch):
-    async def producer(user_id, message, conversation_id, model=None):
+def test_stream_tools_deltas_and_done(tmp_path):
+    async def producer(user_id, message, conversation_id, *, model):
         assert (user_id, message, conversation_id) == ("u1", "查物流", None)
-        yield {"type": "tool", "name": "query_logistics"}
-        yield {"type": "delta", "text": "演示"}
-        yield {"type": "delta", "text": "运输中"}
-        yield {"type": "done", "conversation_id": 12}
+        yield "updates", {"agent_tools": {"tool_results": [{"name": "query_logistics"}]}}
+        yield "messages", (AIMessageChunk(content="演示"), {"langgraph_node": "final_answer"})
+        yield "messages", (AIMessageChunk(content="运输中"), {"langgraph_node": "final_answer"})
+        yield "updates", {"log_turn": {"conversation_id": 12}}
 
-    with _client(monkeypatch, producer) as client:
+    with _client(tmp_path, producer) as client:
         response = client.post("/api/chat", json={"user_id": "u1", "message": "查物流"})
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -43,15 +49,15 @@ def test_stream_tools_deltas_and_done(monkeypatch):
     ]
 
 
-def test_stream_forwards_citations_before_answer(monkeypatch):
+def test_stream_forwards_citations_before_answer(tmp_path):
     citation = {"n": 1, "id": 5, "section_path": "运费政策"}
 
     async def producer(*args, **kwargs):
-        yield {"type": "citations", "items": [citation]}
-        yield {"type": "delta", "text": "满99元包邮[1]"}
-        yield {"type": "done", "conversation_id": 12}
+        yield "updates", {"forced_rag": {"citations": [citation]}}
+        yield "messages", (AIMessageChunk(content="满99元包邮[1]"), {"langgraph_node": "final_answer"})
+        yield "updates", {"log_turn": {"conversation_id": 12}}
 
-    with _client(monkeypatch, producer) as client:
+    with _client(tmp_path, producer) as client:
         response = client.post("/api/chat", json={"user_id": "u1", "message": "包邮吗"})
     assert [json.loads(frame[6:]) for frame in _frames(response)[:-1]] == [
         {"event": "citations", "items": [citation]},
@@ -61,7 +67,8 @@ def test_stream_forwards_citations_before_answer(monkeypatch):
 
 
 @pytest.mark.parametrize("failure,expected", [
-    (agent.ConversationNotFound(99), "会话不存在"),
+    (ConversationNotFound(), "会话不存在"),
+    (ConversationBusy(), "会话正在处理"),
     (agent.ContextBudgetExceeded("too big"), "上下文预算"),
     (ValueError("other problem"), "上游模型暂时不可用"),
     (ToolInfrastructureError("timeout"), "数据库暂时不可用"),
@@ -70,27 +77,27 @@ def test_stream_forwards_citations_before_answer(monkeypatch):
     (OSError("secret"), "数据库暂时不可用"),
     (RuntimeError("secret"), "上游模型暂时不可用"),
 ])
-def test_stream_failure_after_tool_status_has_no_done(monkeypatch, failure, expected):
+def test_stream_failure_after_tool_status_has_no_done(tmp_path, failure, expected):
     async def producer(*args, **kwargs):
-        yield {"type": "tool", "name": "create_ticket"}
+        yield "updates", {"agent_tools": {"tool_results": [{"name": "query_order"}]}}
         raise failure
 
-    with _client(monkeypatch, producer) as client:
+    with _client(tmp_path, producer) as client:
         response = client.post("/api/chat", json={"user_id": "u1", "message": "投诉"})
     frames = _frames(response)
-    assert json.loads(frames[0][6:]) == {"event": "tool", "name": "create_ticket"}
+    assert json.loads(frames[0][6:]) == {"event": "tool", "name": "query_order"}
     assert frames[1].startswith("event: error\ndata: ")
     assert expected in frames[1]
     assert "[DONE]" not in response.text
     assert "secret" not in response.text
 
 
-def test_chat_invalid_request_422(monkeypatch):
+def test_chat_invalid_request_422(tmp_path):
     async def never(*args, **kwargs):
         raise AssertionError("invalid request reached producer")
         yield
 
-    with _client(monkeypatch, never) as client:
+    with _client(tmp_path, never) as client:
         assert client.post("/api/chat", json={"user_id": "u1", "message": " "}).status_code == 422
         assert client.post("/api/chat", json={"message": "hello"}).status_code == 422
         assert client.post("/api/chat", json={"user_id": "u1", "message": "hi", "conversation_id": -1}).status_code == 422

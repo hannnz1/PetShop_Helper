@@ -10,6 +10,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core import agent
+from app.graph.runtime import ConversationBusy, ConversationNotFound
 from app.schemas.chat import ChatRequest
 from app.tools.infra import ToolInfrastructureError
 
@@ -30,24 +31,40 @@ def _error(message: str) -> str:
 
 
 @router.post("/api/chat")
-async def chat(req: ChatRequest, model: BaseChatModel = Depends(get_model)) -> StreamingResponse:
+async def chat(req: ChatRequest, request: Request,
+               model: BaseChatModel = Depends(get_model)) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
         completed = False
         try:
-            async for event in agent.stream_agent_turn(
+            async for mode, payload in request.app.state.graph.astream_turn(
                 req.user_id, req.message, req.conversation_id, model=model
             ):
-                if event["type"] == "tool":
-                    yield _sse({"event": "tool", "name": event["name"]})
-                elif event["type"] == "citations":
-                    yield _sse({"event": "citations", "items": event["items"]})
-                elif event["type"] == "delta":
-                    yield _sse({"delta": event["text"]})
-                elif event["type"] == "done":
-                    completed = True
-                    yield _sse({"event": "done", "conversation_id": event["conversation_id"]})
-        except agent.ConversationNotFound:
+                if mode == "messages":
+                    chunk, metadata = payload
+                    if metadata.get("langgraph_node") == "final_answer" and isinstance(chunk.content, str) and chunk.content:
+                        yield _sse({"delta": chunk.content})
+                    continue
+                if mode != "updates":
+                    continue
+                for node, update in payload.items():
+                    if node == "agent_tools":
+                        for run in update.get("tool_results", []):
+                            yield _sse({"event": "tool", "name": run["name"]})
+                    elif node == "forced_rag" and update.get("citations"):
+                        yield _sse({"event": "citations", "items": update["citations"]})
+                    elif node in {"chitchat_reply", "complaint_reply", "fallback_reply"}:
+                        if update.get("answer"):
+                            yield _sse({"delta": update["answer"]})
+                        if update.get("suggested_actions"):
+                            yield _sse({"event": "actions", "items": update["suggested_actions"]})
+                    elif node == "log_turn":
+                        completed = True
+                        yield _sse({"event": "done", "conversation_id": update["conversation_id"]})
+        except ConversationNotFound:
             yield _error("会话不存在")
+            return
+        except ConversationBusy:
+            yield _error("会话正在处理上一条消息")
             return
         except agent.ContextBudgetExceeded:
             yield _error("消息超出上下文预算")

@@ -29,3 +29,4 @@ class AgentResponse(BaseModel):
     answer: str
     tool_calls: list[ToolCallView]
     tool_results: list[ToolResultView]
+    suggested_actions: list[dict] = Field(default_factory=list)
