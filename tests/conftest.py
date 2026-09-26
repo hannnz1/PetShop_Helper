@@ -130,6 +130,9 @@ async def _test_engine():
                 await conn.execute(text("SET FOREIGN_KEY_CHECKS=1"))
             for statement in _create_table_stmts():
                 await conn.execute(text(statement))
+            from scripts.migrate_ch07 import GUARD_TRIGGERS
+            for statement in GUARD_TRIGGERS.values():
+                await conn.execute(text(statement))
             await conn.commit()
         yield engine
     finally:

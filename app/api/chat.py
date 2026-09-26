@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core import agent
 from app.core.context_budget import ContextBudgetExceeded
+from app.core.summarizer import schedule_summary
 from app.graph.runtime import (
     ConversationBusy, ConversationNotFound, ConversationPending,
     GraphDivergence, ResumeNotPending,
@@ -116,6 +117,7 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     if completed:
         yield _sse({"event": "done", "conversation_id": completed_conversation_id})
         yield "data: [DONE]\n\n"
+        schedule_summary(completed_conversation_id)
     else:
         yield _error("上游模型暂时不可用，请稍后重试")
 

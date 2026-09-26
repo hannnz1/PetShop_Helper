@@ -13,6 +13,25 @@ from app.config import get_settings  # noqa: E402
 
 _COLUMNS = ("summary", "summary_upto_msg_id", "layer1_from_msg_id")
 
+# Single-statement triggers deliberately live outside semicolon-split DDL.
+# They guard direct SQL writes as well as repository updates.
+GUARD_TRIGGERS = {
+    "ch07_conversation_anchor_guard": """CREATE TRIGGER ch07_conversation_anchor_guard
+        BEFORE UPDATE ON conversations FOR EACH ROW BEGIN
+          IF COALESCE(NEW.summary_upto_msg_id, 0) < COALESCE(OLD.summary_upto_msg_id, 0)
+             OR COALESCE(NEW.layer1_from_msg_id, 0) < COALESCE(OLD.layer1_from_msg_id, 0)
+             OR COALESCE(NEW.summary_upto_msg_id, 0) > COALESCE(NEW.layer1_from_msg_id, 0)
+          THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Ch07 anchor cannot rewind or cross';
+          END IF;
+        END""",
+    "ch07_summary_immutable_update": """CREATE TRIGGER ch07_summary_immutable_update
+        BEFORE UPDATE ON conversation_summaries FOR EACH ROW
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Ch07 summary segments are append only'""",
+    "ch07_summary_immutable_delete": """CREATE TRIGGER ch07_summary_immutable_delete
+        BEFORE DELETE ON conversation_summaries FOR EACH ROW
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Ch07 summary segments are append only'""",
+}
+
 
 async def apply_migration(engine) -> str:
     database = engine.url.database
@@ -34,15 +53,24 @@ async def apply_migration(engine) -> str:
             SELECT table_name FROM information_schema.tables
             WHERE table_schema=:db AND table_name='conversation_summaries'
         """), {"db": database})).scalars())
-        if set(_COLUMNS) <= columns and tables:
-            return "already applied"
+        complete = set(_COLUMNS) <= columns and bool(tables)
         for column, statement in zip(_COLUMNS, statements[:3]):
             if column not in columns:
                 await conn.execute(text(statement))
         if not tables:
             await conn.execute(text(statements[3]))
+        triggers = set((await conn.execute(text("""
+            SELECT trigger_name FROM information_schema.triggers
+            WHERE trigger_schema=:db AND trigger_name IN
+              ('ch07_conversation_anchor_guard', 'ch07_summary_immutable_update',
+               'ch07_summary_immutable_delete')
+        """), {"db": database})).scalars())
+        for name, statement in GUARD_TRIGGERS.items():
+            if name not in triggers:
+                await conn.execute(text(statement))
+                complete = False
         await conn.commit()
-        return "applied"
+        return "already applied" if complete else "applied"
 
 
 async def main() -> None:

@@ -99,6 +99,68 @@ class ContextSnapshot:
     summaries: tuple[SummarySegment, ...]
 
 
+@dataclass(frozen=True)
+class SummaryWork:
+    summary_upto_msg_id: int
+    layer1_from_msg_id: int
+    messages: tuple[VisibleMessage, ...]
+
+
+async def list_summary_candidates() -> list[int]:
+    """Find persisted Layer2 gaps after a restart; the worker rechecks tokens."""
+    async with db.async_session() as session:
+        rows = await session.scalars(select(Conversation.id).where(
+            Conversation.layer1_from_msg_id.is_not(None),
+            Conversation.layer1_from_msg_id > func.coalesce(Conversation.summary_upto_msg_id, 0),
+        ).order_by(Conversation.id))
+        return list(rows)
+
+
+async def get_summary_work(conversation_id: int) -> SummaryWork | None:
+    """Return only unsummarized visible rows through the completed Layer2 boundary."""
+    async with db.async_session() as session:
+        conversation = await session.get(Conversation, conversation_id)
+        if conversation is None:
+            return None
+        upto = conversation.summary_upto_msg_id or 0
+        boundary = conversation.layer1_from_msg_id or 0
+        rows = (await session.scalars(select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.id > upto, Message.id <= boundary,
+            Message.role.in_(("user", "assistant")),
+            Message.content.is_not(None),
+        ).order_by(Message.id))).all()
+        return SummaryWork(upto, boundary, tuple(
+            VisibleMessage(row.id, row.role, row.content) for row in rows
+        ))
+
+
+async def commit_summary_segment(conversation_id: int, expected_upto: int,
+                                 from_msg_id: int, upto_msg_id: int, content: str) -> bool:
+    """Serialize segment append and anchor movement across workers."""
+    async with db.async_session.begin() as session:
+        conversation = await session.get(Conversation, conversation_id, with_for_update=True)
+        if (conversation is None or (conversation.summary_upto_msg_id or 0) != expected_upto
+                or from_msg_id <= expected_upto or upto_msg_id > (conversation.layer1_from_msg_id or 0)):
+            return False
+        last = await session.scalar(select(ConversationSummary).where(
+            ConversationSummary.conversation_id == conversation_id,
+        ).order_by(ConversationSummary.seq.desc()).limit(1))
+        if last is not None and (last.upto_msg_id != expected_upto or from_msg_id <= last.upto_msg_id):
+            return False
+        endpoint = await session.get(Message, upto_msg_id)
+        if (endpoint is None or endpoint.conversation_id != conversation_id
+                or endpoint.role != "assistant" or endpoint.tool_calls is not None):
+            return False
+        session.add(ConversationSummary(conversation_id=conversation_id,
+                                        seq=(last.seq + 1 if last else 1),
+                                        from_msg_id=from_msg_id, upto_msg_id=upto_msg_id,
+                                        content=content))
+        conversation.summary_upto_msg_id = upto_msg_id
+        conversation.summary = content[:200] if content else ""
+        return True
+
+
 async def get_context_snapshot(conversation_id: int, user_id: str) -> ContextSnapshot | None:
     """Read one user's visible history and append-only summary segments."""
     async with db.async_session.begin() as session:

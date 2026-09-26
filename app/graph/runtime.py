@@ -11,6 +11,7 @@ from langgraph.types import Command
 
 from app.config import Settings
 from app.db import repository
+from app.core.summarizer import schedule_summary
 from app.graph.state import new_turn
 
 logger = logging.getLogger(__name__)
@@ -133,12 +134,17 @@ class GraphRuntime:
             snapshot = await repository.get_context_snapshot(resolved, user_id)
             if snapshot is None:
                 raise ConversationNotFound()
-            return await self.graph.ainvoke(
+            prior_marker = await repository.last_message_id(resolved)
+            result = await self.graph.ainvoke(
                 new_turn(user_id, resolved, message),
                 {"configurable": {"thread_id": str(resolved)}},
                 context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
                          "settings": self.settings},
             )
+            final_marker = (result.get("trace") or {}).get("audit_message_id")
+            if final_marker is not None and final_marker > (prior_marker or 0):
+                schedule_summary(resolved)
+            return result
         finally:
             self._active.remove(resolved)
 

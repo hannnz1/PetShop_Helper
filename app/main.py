@@ -21,6 +21,7 @@ from app.core.jobs import JobRunner
 from app.core.llm import get_chat_model
 from app.core.intent import ModelIntentClassifier
 from app.core.memory import SessionStore
+from app.core.summarizer import close_summary_tasks, configure_summary_model, schedule_recovery
 from app.kb import milvus_client
 from app.graph.build import build_graph
 from app.graph.runtime import GraphRuntime
@@ -52,6 +53,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
         application.state.settings = config
         context_log = open_context_log(Path(__file__).parent.parent / "log" / "app.log")
         application.state.model = shared_model
+        configure_summary_model(shared_model)
         application.state.store = SessionStore()
         application.state.active_sessions = set()
         application.state.active_session_owners = {}
@@ -62,8 +64,10 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
             async with GraphRuntime(Path(config.graph_checkpoint_path), build_graph,
                                     classifier=classifier, settings=config) as graph:
                 application.state.graph = graph
+                await schedule_recovery()
                 yield
         finally:
+            await close_summary_tasks()
             try:
                 application.state.jobs.stop_all()
             finally:

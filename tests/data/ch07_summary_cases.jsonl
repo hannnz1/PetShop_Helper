@@ -1,0 +1,4 @@
+{"id":"order_unresolved","batch":"用户：订单 1001 的猫粮想退款。客服：已收到，仍需核对平台售后规则。","must_include":["1001","猫粮","退款","未确认"],"must_exclude":["已退款","七天"],"reference":"订单 1001 的猫粮，用户希望退款；退款条件尚未确认。"}
+{"id":"contact_request","batch":"用户：我的联系方式是 13800001111，关于订单 2002 的猫砂请回电。客服：目前未回电。","must_include":["13800001111","2002","猫砂","回电"],"must_exclude":["已回电"],"reference":"订单 2002 的猫砂，用户留 13800001111 请求回电；尚未回电。"}
+{"id":"greeting_only","batch":"用户：你好。客服：您好，有什么可以帮您？","must_include":[],"must_exclude":["订单","退款"],"reference":"无明确事实"}
+{"id":"uncertain_policy","batch":"用户：这款 LP100 维修要几天？客服：目前无法确认维修时长，请以平台正式规则为准。","must_include":["LP100","维修时长","无法确认"],"must_exclude":["三天","七天","已维修"],"reference":"用户询问 LP100 的维修时长；目前无法确认。"}
