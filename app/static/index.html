@@ -11,6 +11,7 @@
 .app{grid-template-columns:250px minmax(0,1fr)}main,.bubble,.answer{min-width:0}.answer li{overflow-wrap:anywhere}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.action-form{display:grid;gap:8px;width:min(100%,420px);margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#f8faf8}.action-form label{font-size:12px;color:var(--muted)}.action-form textarea,.action-form select{width:100%;border:1px solid var(--line);border-radius:7px;background:white;padding:7px;color:var(--ink)}.action-form textarea{min-height:76px;resize:vertical}.action-form .row{display:flex;gap:8px}.action-note{font-size:12px;color:var(--muted);margin-top:8px}.action-note.error-text{color:#99492f}
 .action-form[hidden]{display:none}
+.order-options{display:grid;gap:8px;margin-top:12px}.order-choice{display:block;text-align:left;width:100%;border:1px solid #b6cbbb;border-radius:9px;background:#f5faf5;color:var(--ink);padding:9px 12px}.order-choice strong{display:block}.order-choice small{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -22,11 +23,11 @@
 </main></div>
 <script>
 const $ = id => document.getElementById(id);
-const userKey = 'petshop.user_id', conversationKey = 'petshop.conversation_id';
+const userKey = 'petshop.user_id', conversationKey = 'petshop.conversation_id', pendingKey = 'petshop.pending_order';
 let userId = localStorage.getItem(userKey);
 if (!userId) { userId = crypto.randomUUID(); localStorage.setItem(userKey, userId); }
 let conversationId = Number(localStorage.getItem(conversationKey)) || null;
-let controller = null, busy = false;
+let controller = null, busy = false, pendingOrder = false;
 if (conversationId) $('status').textContent = '已接续上次会话';
 
 function escapeHtml(text) {
@@ -132,8 +133,8 @@ function bubble(role, text) {
   $('messages').append(row); scrollBottom(); return content;
 }
 function setBusy(value) {
-  busy = value; $('send').disabled = value; $('message').disabled = value; $('stop').hidden = !value;
-  $('status').textContent = value ? '小喵正在回复…' : '准备就绪';
+  busy = value; $('send').disabled = value || pendingOrder; $('message').disabled = value || pendingOrder; $('stop').hidden = !value;
+  $('status').textContent = value ? '小喵正在回复…' : pendingOrder ? '请先选择订单' : '准备就绪';
   $('newChat').disabled = value; $('mobileNew').disabled = value;
   document.querySelectorAll('[data-question]').forEach(button => button.disabled = value);
 }
@@ -168,6 +169,42 @@ function renderActions(answer) {
         host.append(note);
       };
       host.append(button);
+    } else if (action.type === 'refund_form') {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = '申请退款';
+      const form = document.createElement('form'); form.className = 'action-form'; form.hidden = true;
+      const orderId = String(action.draft?.order_id || '');
+      const orderLabel = document.createElement('div'); orderLabel.textContent = `订单 ${orderId} · 申请将由人工审核`;
+      const reasonLabel = document.createElement('label'); reasonLabel.textContent = '退款原因';
+      const reason = document.createElement('select');
+      for (const name of ['七天无理由', '质量问题', '发错货', '不想要了', '其他']) {
+        const option = document.createElement('option'); option.value = name; option.textContent = name; reason.append(option);
+      }
+      if ([...reason.options].some(option => option.value === action.draft?.reason)) reason.value = action.draft.reason;
+      const row = document.createElement('div'); row.className = 'row';
+      const submit = document.createElement('button'); submit.className = 'primary'; submit.textContent = '确认提交申请';
+      const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'secondary'; cancel.textContent = '取消';
+      const note = document.createElement('div'); note.className = 'action-note';
+      cancel.onclick = () => { form.hidden = true; button.disabled = false; };
+      button.onclick = () => { form.hidden = false; button.disabled = true; reason.focus(); };
+      row.append(submit, cancel); form.append(orderLabel, reasonLabel, reason, row);
+      const requestId = crypto.randomUUID();
+      form.onsubmit = async event => {
+        event.preventDefault(); submit.disabled = true; cancel.disabled = true; reason.disabled = true;
+        note.textContent = '正在提交…'; note.classList.remove('error-text');
+        try {
+          const response = await fetch('/api/actions/create-refund', {method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: userId, conversation_id: conversationId, order_id: orderId,
+              reason: reason.value, request_id: requestId})});
+          if (!response.ok) throw Error(await responseError(response));
+          const result = await response.json();
+          note.textContent = `申请 ${result.refund_no} 已提交，状态：${result.status}。`;
+          form.hidden = true; button.textContent = `申请 ${result.refund_no}`; button.disabled = true;
+        } catch (error) {
+          note.textContent = error.message; note.classList.add('error-text');
+          submit.disabled = false; cancel.disabled = false; reason.disabled = false;
+        }
+      };
+      host.append(button, form, note);
     } else if (action.type === 'create_ticket') {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = '建工单';
       const form = document.createElement('form'); form.className = 'action-form'; form.hidden = true;
@@ -205,7 +242,7 @@ function renderActions(answer) {
 }
 function newChat() {
   if (busy) return;
-  conversationId = null; localStorage.removeItem(conversationKey);
+  conversationId = null; pendingOrder = false; localStorage.removeItem(conversationKey); localStorage.removeItem(pendingKey); setBusy(false);
   $('messages').querySelectorAll('.msg').forEach(node => node.remove());
   $('welcome').hidden = false; $('message').value = ''; $('message').focus();
 }
@@ -224,13 +261,44 @@ async function responseError(response) {
   let data; try { data = await response.json(); } catch { return `请求失败（${response.status}）`; }
   return typeof data.detail === 'string' ? data.detail : `请求失败（${response.status}），请检查输入或服务配置。`;
 }
-$('chatForm').onsubmit = async event => {
-  event.preventDefault(); const message = $('message').value.trim(); if (!message || busy) return;
-  $('welcome').hidden = true; bubble('user', message); const answer = bubble('assistant');
-  let content = '', done = false, buffer = ''; setBusy(true); $('message').value = ''; controller = new AbortController();
+function showOrderChoices(answer, value) {
+  if (value.kind !== 'select_order' || !Array.isArray(value.orders)) return;
+  pendingOrder = true; conversationId = value.conversation_id;
+  localStorage.setItem(conversationKey, String(conversationId));
+  localStorage.setItem(pendingKey, JSON.stringify(value));
+  answer.classList.remove('typing');
+  answer.textContent = '请选择需要处理的本人订单：';
+  const host = answer.actionContainer; host.replaceChildren();
+  const choices = document.createElement('div'); choices.className = 'order-options';
+  for (const order of value.orders) {
+    const choice = document.createElement('button'); choice.type = 'button'; choice.className = 'order-choice';
+    const title = document.createElement('strong'); title.textContent = `订单 ${order.order_id} · ${order.product}`;
+    const detail = document.createElement('small'); detail.textContent = `${order.status} · ¥${order.amount}`;
+    choice.append(title, detail);
+    choice.onclick = async () => {
+      if (busy) return;
+      choices.querySelectorAll('button').forEach(button => button.disabled = true);
+      pendingOrder = false; setBusy(false);
+      const succeeded = await runConversation('/api/actions/resume', {user_id: userId, conversation_id: conversationId,
+        order_id: order.order_id}, `选择订单 ${order.order_id}`);
+      if (!succeeded) {
+        pendingOrder = true; choices.querySelectorAll('button').forEach(button => button.disabled = false); setBusy(false);
+      }
+    };
+    choices.append(choice);
+  }
+  host.append(choices); scrollBottom();
+}
+async function runConversation(url, payload, userText) {
+  if (busy) return;
+  $('welcome').hidden = true;
+  if (userText) bubble('user', userText);
+  const answer = bubble('assistant');
+  let content = '', done = false, interrupted = false, buffer = '';
+  setBusy(true); controller = new AbortController();
   try {
-    const response = await fetch('/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: userId, message, conversation_id: conversationId}), signal: controller.signal});
+    const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload), signal: controller.signal});
     if (!response.ok) throw Error(await responseError(response));
     if (!response.body) throw Error('浏览器未提供流式响应。');
     const reader = response.body.getReader(), decoder = new TextDecoder();
@@ -252,9 +320,12 @@ $('chatForm').onsubmit = async event => {
           .map(item => [item.n, item]));
         if (content) answer.innerHTML = renderMarkdown(content, answer.citations);
       } else if (value.event === 'actions' && Array.isArray(value.items)) {
-        answer.actionItems = value.items;
+        answer.actionItems.push(...value.items);
+      } else if (value.event === 'interrupt') {
+        interrupted = true; showOrderChoices(answer, value);
       } else if (value.event === 'done' && Number.isSafeInteger(value.conversation_id) && value.conversation_id > 0) {
         conversationId = value.conversation_id; localStorage.setItem(conversationKey, String(conversationId));
+        localStorage.removeItem(pendingKey);
         renderActions(answer);
       } else if (typeof value.delta === 'string') {
         content += value.delta; answer.classList.remove('typing'); answer.innerHTML = renderMarkdown(content, answer.citations); scrollBottom();
@@ -266,15 +337,28 @@ $('chatForm').onsubmit = async event => {
       while ((end = buffer.indexOf('\n\n')) >= 0) { handleFrame(buffer.slice(0, end)); buffer = buffer.slice(end + 2); }
       if (ended) break;
     }
-    if (!done) throw Error('连接已中断，回复未完成，请重试。');
-    if (!content) throw Error('模型未返回文本，请重试。');
-    addFeedback(answer);
+    if (!done && !interrupted) throw Error('连接已中断，回复未完成，请重试。');
+    if (!content && !interrupted) throw Error('模型未返回文本，请重试。');
+    if (!interrupted) addFeedback(answer);
+    return true;
   } catch (error) {
     controller?.abort(); answer.classList.remove('typing'); answer.classList.add('error');
     const notice = error.name === 'AbortError' ? '已停止生成，本轮不会作为完整对话保存。' : error.message;
     answer.textContent = content ? content + '\n\n' + notice : notice;
-  } finally { controller = null; setBusy(false); $('message').focus(); scrollBottom(); }
+    return false;
+  } finally { controller = null; setBusy(false); if (!pendingOrder) $('message').focus(); scrollBottom(); }
+}
+$('chatForm').onsubmit = async event => {
+  event.preventDefault(); const message = $('message').value.trim(); if (!message || busy || pendingOrder) return;
+  $('message').value = '';
+  await runConversation('/api/chat', {user_id: userId, message, conversation_id: conversationId}, message);
 };
+try {
+  const pending = JSON.parse(localStorage.getItem(pendingKey) || 'null');
+  if (pending && pending.conversation_id === conversationId && pending.kind === 'select_order') {
+    $('welcome').hidden = true; showOrderChoices(bubble('assistant'), pending); setBusy(false);
+  }
+} catch { localStorage.removeItem(pendingKey); }
 $('extractForm').onsubmit = async event => {
   event.preventDefault(); const text = $('description').value.trim(); if (!text) return;
   $('extractButton').disabled = true; $('extractResult').hidden = true; $('extractStatus').className = ''; $('extractStatus').textContent = '正在整理…';

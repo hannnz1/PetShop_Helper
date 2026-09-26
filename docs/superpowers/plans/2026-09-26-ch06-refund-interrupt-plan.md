@@ -143,9 +143,9 @@
 
 **Interfaces:** `interrupt(select_order)` 渲染本人订单卡并调用 resume；`actions(refund_form)` 渲染固定原因下拉和确认/取消；只有确认才发 `create-refund`。
 
-- [ ] 直接修改现有页面并用离线假 SSE/内存动作服务浏览器演示：缺单选单续跑、取消无 POST、确认显示申请号、重复按钮禁用、错误订单不泄露。
-- [ ] 页面 UI 按用户约定不套 brainstorm、TDD、code review；后端保护仍由 Task 7/8 测试。
-- [ ] 提交并逐项追记实际浏览器观察与返工。
+- [x] 直接修改现有页面并用离线假 SSE/内存动作服务浏览器演示：缺单选单续跑、取消无 POST、确认显示申请号、重复按钮禁用、错误订单不泄露。
+- [x] 页面 UI 按用户约定不套 brainstorm、TDD、code review；后端保护仍由 Task 7/8 测试。
+- [x] 提交并逐项追记实际浏览器观察与返工。
 
 ### Task 10: 四路径验收与独立复核
 
