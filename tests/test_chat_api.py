@@ -43,6 +43,23 @@ def test_stream_tools_deltas_and_done(monkeypatch):
     ]
 
 
+def test_stream_forwards_citations_before_answer(monkeypatch):
+    citation = {"n": 1, "id": 5, "section_path": "运费政策"}
+
+    async def producer(*args, **kwargs):
+        yield {"type": "citations", "items": [citation]}
+        yield {"type": "delta", "text": "满99元包邮[1]"}
+        yield {"type": "done", "conversation_id": 12}
+
+    with _client(monkeypatch, producer) as client:
+        response = client.post("/api/chat", json={"user_id": "u1", "message": "包邮吗"})
+    assert [json.loads(frame[6:]) for frame in _frames(response)[:-1]] == [
+        {"event": "citations", "items": [citation]},
+        {"delta": "满99元包邮[1]"},
+        {"event": "done", "conversation_id": 12},
+    ]
+
+
 @pytest.mark.parametrize("failure,expected", [
     (agent.ConversationNotFound(99), "会话不存在"),
     (agent.ContextBudgetExceeded("too big"), "上下文预算"),

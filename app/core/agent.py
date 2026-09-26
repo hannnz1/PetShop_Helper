@@ -1,6 +1,7 @@
 """One tool-planning round with persisted conversations and two answer exits."""
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from typing import AsyncIterator
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -29,6 +30,35 @@ class AgentResult:
     answer: str
     tool_calls: list[dict]
     tool_runs: list[ToolRun]
+    citations: list[dict] = field(default_factory=list)
+
+
+FAQ_REFUSAL = "暂时没有查到足够的知识库信息来回答这个问题，建议您核对平台正式规则或联系官方客服。"
+
+
+def _faq_result(runs: list[ToolRun]) -> dict | None:
+    """Recognize only successful, new-format RAG FAQ tool results."""
+
+    for run in runs:
+        if run.name != "query_faq" or not run.ok:
+            continue
+        try:
+            payload = json.loads(run.tool_message.content)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(payload, dict) and type(payload.get("sufficient")) is bool:
+            return payload
+    return None
+
+
+async def _record_faq_refusal(conversation_id: int, message: str, faq: dict) -> None:
+    source = faq.get("source")
+    if source not in {"retrieval_low_conf", "self_check"}:
+        source = "self_check"
+    reason = faq.get("reason")
+    await repository.insert_low_confidence(
+        conversation_id, message, source, reason if isinstance(reason, str) else None,
+    )
 
 
 @dataclass
@@ -157,11 +187,17 @@ async def run_agent_turn(
         return AgentResult(turn.conversation_id, _text(turn.planned), [], [])
 
     runs = await _run_tools(turn)
+    faq = _faq_result(runs)
+    if faq is not None and not faq["sufficient"]:
+        await _record_faq_refusal(turn.conversation_id, message, faq)
+        await repository.append_message(turn.conversation_id, "assistant", content=FAQ_REFUSAL)
+        return AgentResult(turn.conversation_id, FAQ_REFUSAL, turn.planned.tool_calls, runs)
     convergence = _convergence_messages(turn, runs, get_settings().token_budget)
     final: AIMessage = await model.ainvoke(convergence)
     answer = _text(final)
     await repository.append_message(turn.conversation_id, "assistant", content=answer)
-    return AgentResult(turn.conversation_id, answer, turn.planned.tool_calls, runs)
+    citations = faq.get("citations", []) if faq is not None else []
+    return AgentResult(turn.conversation_id, answer, turn.planned.tool_calls, runs, citations)
 
 
 async def stream_agent_turn(
@@ -183,6 +219,15 @@ async def stream_agent_turn(
         yield {"type": "tool", "name": call.get("name") or ""}
 
     runs = await _run_tools(turn)
+    faq = _faq_result(runs)
+    if faq is not None and not faq["sufficient"]:
+        await _record_faq_refusal(turn.conversation_id, message, faq)
+        await repository.append_message(turn.conversation_id, "assistant", content=FAQ_REFUSAL)
+        yield {"type": "delta", "text": FAQ_REFUSAL}
+        yield {"type": "done", "conversation_id": turn.conversation_id}
+        return
+    if faq is not None:
+        yield {"type": "citations", "items": faq.get("citations", [])}
     convergence = _convergence_messages(turn, runs, get_settings().token_budget)
     chunks: list[str] = []
     async for chunk in model.astream(convergence):

@@ -39,6 +39,8 @@ async def chat(req: ChatRequest, model: BaseChatModel = Depends(get_model)) -> S
             ):
                 if event["type"] == "tool":
                     yield _sse({"event": "tool", "name": event["name"]})
+                elif event["type"] == "citations":
+                    yield _sse({"event": "citations", "items": event["items"]})
                 elif event["type"] == "delta":
                     yield _sse({"delta": event["text"]})
                 elif event["type"] == "done":
