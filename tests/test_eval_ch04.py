@@ -77,6 +77,34 @@ def test_cache_recovers_after_interrupted_final_line(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_unfaithful_case_saves_exact_evidence_order_without_breaking_report(monkeypatch):
+    saved = []
+
+    async def upsert(eval_id, **fields):
+        saved.append((eval_id, fields))
+        return 1, False
+
+    monkeypatch.setattr(eval_ch04.repository, "upsert_faith_case", upsert)
+    hits = [{"id": 42, "section_path": "运费", "question": "邮费", "answer": "满99包邮"},
+            {"id": 13, "section_path": "退货", "question": "退货邮费", "answer": "由买家承担"}]
+    errors = []
+    sample = {"id": "A1", "bucket": "A_policy", "query": "退货运费谁出"}
+    await eval_ch04._save_unfaithful_case(sample, "平台承担[2]", "与证据相反", hits, "judge", errors)
+    assert errors == []
+    assert saved[0][0] == "A1"
+    assert saved[0][1]["citations"] == [
+        {"n": 1, "chunk_id": 42, "section_path": "运费", "question": "邮费", "answer": "满99包邮"},
+        {"n": 2, "chunk_id": 13, "section_path": "退货", "question": "退货邮费", "answer": "由买家承担"},
+    ]
+
+    async def broken(*args, **kwargs):
+        raise ConnectionError("secret")
+    monkeypatch.setattr(eval_ch04.repository, "upsert_faith_case", broken)
+    await eval_ch04._save_unfaithful_case(sample, "平台承担[2]", "与证据相反", hits, "judge", errors)
+    assert errors == ["ledger A1: ConnectionError"]
+
+
+@pytest.mark.asyncio
 async def test_partial_report_survives_generation_skip(tmp_path, monkeypatch):
     sample = {"id": "A1", "bucket": "A_policy", "query": "运费？", "expect_section": ["运费怎么算"],
               "expect_points": ["满99元包邮"], "should_refuse": False}

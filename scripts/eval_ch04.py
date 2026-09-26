@@ -260,6 +260,27 @@ async def _try_call(coroutine, label: str, errors: list[str]):
         return None
 
 
+async def _save_unfaithful_case(
+    sample: dict, answer: str, reason: str, hits: list[dict],
+    judge_model: str, errors: list[str],
+) -> None:
+    """Store the exact ranked evidence sent to the judge; failure is advisory."""
+    citations = [
+        {"n": index, "chunk_id": hit.get("id"),
+         "section_path": hit.get("section_path", ""),
+         "question": hit.get("question", ""), "answer": hit.get("answer", "")}
+        for index, hit in enumerate(hits, 1)
+    ]
+    try:
+        await repository.upsert_faith_case(
+            sample["id"], bucket=sample["bucket"], query=sample["query"],
+            answer=answer, reason=reason, citations=citations,
+            judge_model=judge_model,
+        )
+    except Exception as exc:  # noqa: BLE001 - ledger must not erase evaluation results
+        errors.append(f"ledger {sample['id']}: {type(exc).__name__}")
+
+
 async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict | None:
     settings = get_settings()
     model = get_chat_model()
@@ -317,6 +338,11 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
                     )
                     record["faithful"] = faith.faithful if faith is not None else None
                     record["faith_reason"] = faith.reason if faith is not None else ""
+                    if faith is not None and not faith.faithful:
+                        await _save_unfaithful_case(
+                            sample, answer, faith.reason, found,
+                            settings.chat_model, errors,
+                        )
             else:
                 record["refused"] = "暂时没有查到" in answer or "无法" in answer or "不能" in answer
             records.append(record)
@@ -348,6 +374,12 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
         "answer_coverage": answer_coverage,
         "faithfulness": sum(faith) / len(faith) if faith else None,
         "refusal_rate": sum(refusals) / len(refusals) if refusals else None,
+        "faithfulness_cases": [
+            {"id": record["id"], "bucket": record["bucket"],
+             "answer": record["answer"], "reason": record.get("faith_reason", "")}
+            for record in records
+            if record["strategy"] == "hybrid_rerank" and record.get("faithful") is False
+        ],
         "records": records,
         "errors": errors,
     }

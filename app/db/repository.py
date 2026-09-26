@@ -2,15 +2,16 @@
 
 from uuid import uuid4
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import hashlib
 import re
 import unicodedata
 
-from sqlalchemy import delete, func, insert, or_, select, text, update
+from sqlalchemy import case, delete, func, insert, or_, select, text, update
 
 import app.db.base as db
 from app.db.models import (
-    Conversation, Faq, KnowledgeChunk, LowConfidenceQuestion,
+    Conversation, FaithCase, Faq, KnowledgeChunk, LowConfidenceQuestion,
     Message, QaExtractionStaging, Ticket,
 )
 
@@ -655,3 +656,120 @@ async def insert_low_confidence(
         session.add(row)
         await session.flush()
         return row.id
+
+
+FAITH_STATUSES = ("未解决", "已解决", "无需解决")
+
+
+def _utc_naive() -> datetime:
+    """MySQL DATETIME stores the chosen UTC instant without zone metadata."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _faith_case_dict(row: FaithCase) -> dict:
+    return {
+        "id": row.id, "eval_id": row.eval_id, "bucket": row.bucket,
+        "query": row.query, "strategy": row.strategy,
+        "answer": row.answer, "reason": row.reason,
+        "citations": row.citations or [], "judge_model": row.judge_model,
+        "status": row.status, "seen_count": row.seen_count,
+        "first_seen_at": row.first_seen_at.isoformat() if row.first_seen_at else None,
+        "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
+        "resolution": row.resolution,
+        "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+        "reopened": row.status == "未解决" and row.resolved_at is not None,
+    }
+
+
+async def upsert_faith_case(
+    eval_id: str, *, bucket: str, query: str, answer: str, reason: str,
+    strategy: str = "hybrid_rerank", citations: list[dict] | None = None,
+    judge_model: str | None = None,
+) -> tuple[int, bool]:
+    """Keep one row per labeled question; recurrence reopens a reviewed case."""
+    if not eval_id.strip() or not query.strip():
+        raise ValueError("eval_id and query must not be blank")
+    async with db.async_session.begin() as session:
+        row = await session.scalar(
+            select(FaithCase).where(FaithCase.eval_id == eval_id).with_for_update()
+        )
+        if row is None:
+            row = FaithCase(
+                eval_id=eval_id, bucket=bucket, query=query, strategy=strategy,
+                answer=answer, reason=reason, citations=citations,
+                judge_model=judge_model, status="未解决", seen_count=1,
+                first_seen_at=_utc_naive(), last_seen_at=_utc_naive(),
+            )
+            session.add(row)
+            await session.flush()
+            return row.id, False
+        reopened = row.status != "未解决"
+        row.bucket = bucket
+        row.query = query
+        row.strategy = strategy
+        row.answer = answer
+        row.reason = reason
+        row.citations = citations
+        row.judge_model = judge_model
+        row.seen_count += 1
+        row.last_seen_at = _utc_naive()
+        if reopened:
+            row.status = "未解决"
+        return row.id, reopened
+
+
+async def list_faith_cases(status: str | None = None, page: int = 1, size: int = 20) -> dict:
+    if status is not None and status not in FAITH_STATUSES:
+        raise ValueError("unsupported faith-case status")
+    if page <= 0 or not 1 <= size <= 100:
+        raise ValueError("invalid faith-case pagination")
+    async with db.async_session() as session:
+        status_rows = (await session.execute(
+            select(FaithCase.status, func.count()).group_by(FaithCase.status)
+        )).all()
+        statement = select(FaithCase)
+        if status is not None:
+            statement = statement.where(FaithCase.status == status)
+        total = int((await session.scalar(
+            select(func.count()).select_from(statement.subquery())
+        )) or 0)
+        rows = (await session.execute(
+            statement.order_by(
+                case((FaithCase.status == "未解决", 0), else_=1),
+                FaithCase.last_seen_at.desc(), FaithCase.id.desc(),
+            ).offset((page - 1) * size).limit(size)
+        )).scalars().all()
+    counts = {key: 0 for key in FAITH_STATUSES}
+    counts.update({key: int(value) for key, value in status_rows})
+    return {"items": [_faith_case_dict(row) for row in rows], "total": total,
+            "page": page, "size": size, "pages": (total + size - 1) // size,
+            "counts": counts}
+
+
+async def set_faith_case_status(
+    case_id: int, status: str, resolution: str | None = None,
+) -> dict | None:
+    if status not in FAITH_STATUSES:
+        raise ValueError("unsupported faith-case status")
+    explanation = (resolution or "").strip()
+    if status != "未解决" and not explanation:
+        raise ValueError("resolution is required for reviewed cases")
+    async with db.async_session.begin() as session:
+        row = await session.get(FaithCase, case_id, with_for_update=True)
+        if row is None:
+            return None
+        row.status = status
+        row.resolution = explanation if status != "未解决" else None
+        row.resolved_at = _utc_naive() if status != "未解决" else None
+        await session.flush()
+        return _faith_case_dict(row)
+
+
+async def faith_case_status_map(eval_ids: list[str]) -> dict[str, str]:
+    if not eval_ids:
+        return {}
+    async with db.async_session() as session:
+        rows = (await session.execute(
+            select(FaithCase.eval_id, FaithCase.status).where(FaithCase.eval_id.in_(eval_ids))
+        )).all()
+    return dict(rows)

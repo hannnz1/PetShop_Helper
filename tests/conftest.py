@@ -18,6 +18,7 @@ _DDL = Path(__file__).resolve().parent.parent / "sql" / "ch02-ddl.sql"
 _CH03_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql"
 _CH04_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch04-ddl.sql"
 _TABLES = (
+    "faith_cases",
     "low_confidence_questions",
     "messages", "tickets", "conversations", "faq",
     "qa_extraction_staging", "knowledge_chunks",

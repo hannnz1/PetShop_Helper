@@ -10,6 +10,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
 .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:20px 0}.primary{background:var(--green);border:0;color:white;border-radius:9px;padding:9px 16px}.secondary{background:white;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 15px}.status{font-size:13px;color:var(--muted)}.status.warn{color:var(--warn)}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card,.section{background:white;border:1px solid var(--line);border-radius:17px;box-shadow:0 8px 24px #26463608}.card{padding:19px}.card small{display:block;color:var(--muted);font-size:12px}.card strong{display:block;font-size:27px;margin-top:5px}.section{padding:24px;margin-top:18px}.section[hidden],.empty[hidden]{display:none}.empty{border:1px dashed #abc8af;border-radius:15px;padding:28px;background:#fff}.subtle{font-size:12px;color:var(--muted)}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 18px}.tabs button{border:1px solid var(--line);background:#f7faf7;border-radius:8px;padding:6px 12px}.tabs button.active{background:#dff1e5;color:var(--green);font-weight:700}
 .metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.metric-group{min-width:0}.metric-group h3{font-size:14px;margin:0 0 9px}.bar-row{display:grid;grid-template-columns:115px 1fr 50px;align-items:center;gap:8px;margin:9px 0;font-size:12px}.bar-row .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.track{height:12px;border-radius:99px;background:#edf3ed;overflow:hidden}.fill{height:100%;background:#81bba0;border-radius:99px}.bar-row.best .fill{background:var(--green)}.bar-row.best .name{font-weight:750}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:610px}th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted)}td{font-variant-numeric:tabular-nums}tr.best{background:#edf7ee;font-weight:700}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#122a24;color:#d5e9dc;border-radius:11px;padding:16px;max-height:350px;overflow:auto;font:12px/1.55 Consolas,monospace}.generation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gen-card{padding:16px;border-radius:12px;background:#f5f9f5}.gen-card strong{font-size:22px;display:block}footer{margin-top:25px;color:var(--muted);font-size:12px}
+.fcase{border:1px solid var(--line);border-radius:13px;padding:17px;margin:12px 0;background:#fbfdfb}.fcase-head{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.fcase h3{font-size:16px;margin:0}.badge{border-radius:99px;padding:2px 9px;font-size:12px;background:#e8f3ea;color:var(--green)}.badge.warn{background:#fff0db;color:var(--warn)}.fcase p{margin:8px 0;overflow-wrap:anywhere}.fcase blockquote{margin:10px 0;padding:8px 12px;border-left:3px solid #8ab99e;background:#f0f6f0;white-space:pre-wrap}.fcase details{margin:12px 0}.fcase details div{padding:8px;border-top:1px solid var(--line);white-space:pre-wrap}.fcase .used{color:var(--green);font-weight:700}.fcase-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.fcase textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit}.fcase .form-error{color:#a13737}.pagebar{display:flex;align-items:center;gap:10px;justify-content:flex-end}
 @media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-grid,.generation{grid-template-columns:1fr}.bar-row{grid-template-columns:100px 1fr 50px}}@media(max-width:460px){.grid{grid-template-columns:1fr 1fr}.card strong{font-size:22px}.section{padding:17px}}
 </style>
 </head>
@@ -24,6 +25,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
     <section class="section"><h2>完整分桶数据</h2><div class="table-wrap"><table><thead><tr><th>策略</th><th>政策 MRR</th><th>型号 MRR</th><th>口语 MRR</th><th>跨文档 MRR</th><th>平均 Recall@5</th><th>证据覆盖</th></tr></thead><tbody id="table"></tbody></table></div></section>
     <section class="section"><h2>生成质量</h2><div id="generation"></div></section>
   </div>
+  <section class="section"><h2>编造个案台账</h2><p class="subtle">本轮判出率依据当前报告；台账记录跨轮累计，人工处置需要说明。</p><div class="grid" id="faithSummary"></div><div class="tabs" id="faithTabs"></div><div id="faithList" role="status">读取台账中…</div><div class="pagebar"><button class="secondary" id="faithPrev" type="button">上一页</button><span id="faithPage"></span><button class="secondary" id="faithNext" type="button">下一页</button></div></section>
   <section class="section"><h2>本轮作业日志</h2><p class="subtle">只显示本地白名单作业 <code>eval-rag</code> 的末尾日志。报告中的指标来自保存的 JSON。</p><pre id="log">尚无运行日志。</pre></section>
   <footer>商品型号资料来自本地知识库；业务规则和演示参数请以正式商品页及平台规则为准。</footer>
 </main><script src="/static/admin.js"></script><script>
@@ -32,7 +34,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
   const $ = id => document.getElementById(id);
   const labels = {vector:'Dense',bm25:'BM25',hybrid:'Hybrid',hybrid_rerank:'Hybrid + Rerank'};
   const buckets = {A_policy:'政策',B_model:'型号',C_colloquial:'口语',E_multi:'跨文档'};
-  let current = null, metric = 'mrr', timer = null;
+  let current = null, metric = 'mrr', timer = null, faithStatus = '', faithPage = 1, faithPages = 0;
   const percent = value => value == null ? '—' : `${(value*100).toFixed(1)}%`;
   const node = (tag, className, text) => {const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=String(text);return el;};
   function weighted(bucketsData, key){let total=0,sum=0;for(const data of Object.values(bucketsData||{})){const count=Number(data.count)||0;total+=count;sum+=(Number(data[key])||0)*count;}return total?sum/total:null;}
@@ -72,14 +74,60 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
     for(const strategy of strategies){const score=average(Object.values(values.answer_coverage?.[strategy]||{}));gen.append(card((labels[strategy]||strategy)+' 答案覆盖',percent(score)));}
   }
   async function load(){try{const r=await fetch('/api/rag-eval/overview');if(!r.ok)throw Error('HTTP '+r.status);render(await r.json());}catch(e){$('status').textContent='读取失败：'+e.message;$('status').classList.add('warn');}}
-  async function poll(){await load();if(current?.job?.state!=='running'){clearInterval(timer);timer=null;$('rerun').disabled=false;}}
-  $('refresh').onclick=load;
+  function faithCase(item){
+    const root=node('article','fcase'),head=node('div','fcase-head');head.append(node('h3','',item.eval_id+' · '+item.query));
+    head.append(node('span','badge'+(item.status==='未解决'?' warn':''),item.status));
+    if(item.reopened)head.append(node('span','badge warn','复发'));
+    root.append(head,node('p','subtle',`${item.bucket} · 累计判出 ${item.seen_count} 次 · 最近 ${item.last_seen_at||'—'}`));
+    root.append(node('blockquote','',item.answer),node('p','', '裁判理由：'+item.reason));
+    if(item.resolution)root.append(node('p','subtle','上次处置：'+item.resolution));
+    const details=node('details',''),summary=node('summary','','证据快照（'+(item.citations||[]).length+' 条）');details.append(summary);
+    const used=new Set([...item.answer.matchAll(/\[(\d+)\]/g)].map(match=>Number(match[1])));
+    for(const evidence of item.citations||[]){const line=node('div',used.has(evidence.n)?'used':'',`[${evidence.n}] ${evidence.section_path||''} · #${evidence.chunk_id||'—'}\n${evidence.question||''}: ${evidence.answer||''}`);details.append(line);}root.append(details);
+    const actions=node('div','fcase-actions');
+    for(const status of ['已解决','无需解决','未解决']){
+      if(status===item.status)continue;
+      const button=node('button','secondary',status==='未解决'?'退回未解决':status);button.type='button';
+      button.onclick=()=>{
+        const prior=root.querySelector('.review-form');if(prior)prior.remove();
+        if(status==='未解决'){saveFaith(item.id,status,'',root);return;}
+        const form=node('div','review-form'),input=node('textarea','','');input.placeholder=status==='已解决'?'说明如何解决':'说明为什么无需解决';
+        const submit=node('button','primary','提交处置'),error=node('p','form-error','');submit.type='button';
+        submit.onclick=()=>{if(!input.value.trim()){error.textContent='请填写处置说明';return;}saveFaith(item.id,status,input.value.trim(),root,error);};
+        form.append(input,submit,error);root.append(form);input.focus();
+      };actions.append(button);
+    }root.append(actions);return root;
+  }
+  async function saveFaith(id,status,resolution,root,error){
+    try{const response=await fetch(`/api/rag-eval/faith-cases/${id}/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,resolution})});if(!response.ok)throw Error('处置失败（'+response.status+'）');await loadFaith();}
+    catch(exc){
+      if(!error){error=root.querySelector('.form-error');if(!error){error=node('p','form-error','');root.append(error);}}
+      error.textContent=exc.message;
+    }
+  }
+  async function loadFaith(){
+    try{const params=new URLSearchParams({page:String(faithPage),size:'5'});if(faithStatus)params.set('status',faithStatus);
+      const response=await fetch('/api/rag-eval/faith-cases?'+params);if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();
+      faithPages=data.pages||0;const h=data.hallucination||{},summary=$('faithSummary');summary.replaceChildren();
+      summary.append(card('本轮判出率',percent(h.judged_rate)),card('本轮确认率',percent(h.confirmed_rate)),card('累计台账',h.ledger?.total??0),card('未解决',data.counts?.['未解决']??0));
+      const tabs=$('faithTabs');tabs.replaceChildren();for(const [status,label] of [['','全部'],['未解决','未解决'],['已解决','已解决'],['无需解决','无需解决']]){
+        const button=node('button',faithStatus===status?'active':'',label);button.type='button';button.onclick=()=>{faithStatus=status;faithPage=1;loadFaith();};tabs.append(button);
+      }
+      const list=$('faithList');list.replaceChildren();if(!data.items.length)list.append(node('p','', '当前筛选下没有个案。'));
+      for(const item of data.items)list.append(faithCase(item));
+      $('faithPage').textContent=faithPages?`${faithPage} / ${faithPages}`:'0 / 0';$('faithPrev').disabled=faithPage<=1;$('faithNext').disabled=faithPage>=faithPages;
+    }catch(exc){$('faithList').textContent='台账暂不可用：'+exc.message;}
+  }
+  async function poll(){await load();await loadFaith();if(current?.job?.state!=='running'){clearInterval(timer);timer=null;$('rerun').disabled=false;}}
+  $('refresh').onclick=()=>{load();loadFaith();};
+  $('faithPrev').onclick=()=>{if(faithPage>1){faithPage--;loadFaith();}};
+  $('faithNext').onclick=()=>{if(faithPage<faithPages){faithPage++;loadFaith();}};
   $('rerun').onclick=async()=>{
     if(!window.confirm('这轮会对评估题逐条调用已配置的检索与模型服务，可能持续较久并消耗 API 额度。确认重跑吗？'))return;
     $('rerun').disabled=true;$('status').textContent='正在启动评估…';
     try{const r=await fetch('/api/jobs/eval-rag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})});if(!r.ok)throw Error('启动失败（'+r.status+'）');await load();if(!timer)timer=setInterval(poll,2500);}
     catch(e){$('status').textContent=e.message;$('status').classList.add('warn');$('rerun').disabled=false;}
   };
-  load();
+  load();loadFaith();
 })();
 </script></body></html>

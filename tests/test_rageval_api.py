@@ -52,3 +52,44 @@ def test_dashboard_preserves_saved_metrics_and_chooses_best(tmp_path, monkeypatc
     assert body["generation"] is None and body["generation_done"] is False
     assert body["best"] == {"strategy": "vector", "mrr": 0.75}
     assert body["present"] is True
+
+
+def test_faith_case_api_uses_current_report_and_handles_review_errors(tmp_path, monkeypatch):
+    report = {
+        "meta": {"question_count": 300},
+        "retrieval": {"hybrid_rerank": {"A_policy": {"count": 240}}},
+        "evidence_coverage": {},
+        "generation": {"refusal_rate": 1.0, "faithfulness_cases": [{"id": "A30"}]},
+    }
+    (tmp_path / "rag_eval.json").write_text(json.dumps(report), encoding="utf-8")
+
+    async def list_cases(**kwargs):
+        assert kwargs == {"status": None, "page": 1, "size": 20}
+        return {"items": [], "total": 0, "page": 1, "size": 20, "pages": 0,
+                "counts": {"未解决": 1, "已解决": 2, "无需解决": 0}}
+
+    async def status_map(ids):
+        assert ids == ["A30"]
+        return {"A30": "未解决", "C2": "已解决"}
+
+    async def set_status(case_id, status, resolution):
+        if case_id == 404:
+            return None
+        if not resolution or not resolution.strip():
+            raise ValueError("resolution is required for reviewed cases")
+        return {"id": case_id, "status": status, "resolution": resolution}
+
+    monkeypatch.setattr(rageval.repository, "list_faith_cases", list_cases)
+    monkeypatch.setattr(rageval.repository, "faith_case_status_map", status_map)
+    monkeypatch.setattr(rageval.repository, "set_faith_case_status", set_status)
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.get("/api/rag-eval/faith-cases")
+        assert response.status_code == 200
+        assert response.json()["hallucination"]["judged"] == 1
+        assert response.json()["hallucination"]["ledger"]["total"] == 3
+        assert client.post("/api/rag-eval/faith-cases/1/status",
+                           json={"status": "已解决", "resolution": "   "}).status_code == 400
+        assert client.post("/api/rag-eval/faith-cases/404/status",
+                           json={"status": "已解决", "resolution": "已核验"}).status_code == 404
+        assert client.post("/api/rag-eval/faith-cases/1/status",
+                           json={"status": "不存在"}).status_code == 422
