@@ -7,7 +7,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.dialects.mysql import BIGINT, ENUM
 from sqlalchemy.schema import FetchedValue
 
-from app.db.models import Conversation, Faq, Message, Ticket
+from app.db.models import Conversation, Faq, Message, RefundRequest, SampleOrder, Ticket
 from app.db.base import Base
 
 
@@ -16,6 +16,7 @@ def test_mappings_match_key_mysql_ddl_properties():
         "conversations", "messages", "faq", "tickets",
         "knowledge_chunks", "qa_extraction_staging",
         "low_confidence_questions", "faith_cases",
+        "sample_orders", "refund_requests",
     }
     for table_name in ("conversations", "messages", "faq"):
         table = Base.metadata.tables[table_name]
@@ -38,6 +39,11 @@ def test_mappings_match_key_mysql_ddl_properties():
         assert isinstance(updated_at.server_onupdate, FetchedValue)
 
     assert {column.name for column in inspect(Ticket).primary_key} == {"ticket_no"}
+    assert {column.name for column in inspect(SampleOrder).primary_key} == {"order_id"}
+    assert {column.name for column in inspect(RefundRequest).primary_key} == {"refund_no"}
+    assert {fk.target_fullname for fk in RefundRequest.__table__.foreign_keys} == {
+        "conversations.id", "sample_orders.order_id",
+    }
     for model in (Message, Ticket):
         assert {fk.target_fullname for fk in model.__table__.foreign_keys} == {"conversations.id"}
 

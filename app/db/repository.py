@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 import app.db.base as db
 from app.db.models import (
     Conversation, FaithCase, Faq, KnowledgeChunk, LowConfidenceQuestion,
-    Message, QaExtractionStaging, Ticket,
+    Message, QaExtractionStaging, RefundRequest, SampleOrder, Ticket,
 )
 
 
@@ -127,6 +127,65 @@ async def create_ticket(conversation_id: int, description: str, ticket_type: str
 
 class TicketRequestConflict(ValueError):
     """An idempotency key has already been used for a different ticket request."""
+
+
+class RefundRequestConflict(ValueError):
+    """The request ID belongs to a different refund application payload."""
+
+
+class OrderNotOwned(ValueError):
+    """The sample order does not belong to this conversation's user."""
+
+
+def _sample_order_dict(order: SampleOrder) -> dict:
+    return {
+        "order_id": order.order_id, "user_id": order.user_id,
+        "status": order.status, "product": order.product,
+        "amount": float(order.amount),
+    }
+
+
+async def list_sample_orders(user_id: str) -> list[dict]:
+    async with db.async_session() as session:
+        rows = (await session.scalars(
+            select(SampleOrder).where(SampleOrder.user_id == user_id).order_by(SampleOrder.order_id)
+        )).all()
+    return [_sample_order_dict(row) for row in rows]
+
+
+async def get_owned_sample_order(user_id: str, order_id: str) -> dict | None:
+    async with db.async_session() as session:
+        order = await session.get(SampleOrder, order_id)
+    return _sample_order_dict(order) if order is not None and order.user_id == user_id else None
+
+
+async def create_refund_request(
+    conversation_id: int, user_id: str, order_id: str, reason: str, request_id: str,
+) -> str:
+    """Persist one pending application only for an owned sample order."""
+    refund_no = f"R{uuid4().hex[:31]}"
+    try:
+        async with db.async_session.begin() as session:
+            conversation = await session.get(Conversation, conversation_id)
+            order = await session.get(SampleOrder, order_id)
+            if conversation is None or conversation.user_id != user_id or order is None or order.user_id != user_id:
+                raise OrderNotOwned("conversation or sample order not owned")
+            session.add(RefundRequest(
+                refund_no=refund_no, request_id=request_id, conversation_id=conversation_id,
+                user_id=user_id, order_id=order_id, reason=reason, status="待人工审核",
+            ))
+            await session.flush()
+        return refund_no
+    except IntegrityError:
+        async with db.async_session() as session:
+            prior = await session.scalar(select(RefundRequest).where(RefundRequest.request_id == request_id))
+        if prior is None:
+            raise
+        if (prior.conversation_id, prior.user_id, prior.order_id, prior.reason) != (
+            conversation_id, user_id, order_id, reason,
+        ):
+            raise RefundRequestConflict("request_id already used for another refund payload") from None
+        return prior.refund_no
 
 
 async def create_ticket_only(

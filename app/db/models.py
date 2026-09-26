@@ -4,8 +4,9 @@ The DDL is applied independently; these classes never create or migrate tables.
 """
 
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text, text
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, String, Text, text
 from sqlalchemy.dialects.mysql import BIGINT, ENUM, INTEGER, TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.schema import FetchedValue
@@ -89,6 +90,40 @@ class Ticket(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP")
     )
+
+
+class SampleOrder(Base):
+    """Opt-in demonstration order; never inferred from a random order number."""
+
+    __tablename__ = "sample_orders"
+    __table_args__ = (Index("idx_sample_orders_user", "user_id"),)
+
+    order_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(64))
+    product: Mapped[str] = mapped_column(String(255))
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class RefundRequest(Base):
+    """Confirmed application pending human review, not an executed refund."""
+
+    __tablename__ = "refund_requests"
+    __table_args__ = (
+        Index("uq_refund_requests_request_id", "request_id", unique=True),
+        Index("idx_refund_requests_conversation", "conversation_id"),
+        Index("idx_refund_requests_order", "order_id"),
+    )
+
+    refund_no: Mapped[str] = mapped_column(String(32), primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(64))
+    conversation_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), ForeignKey("conversations.id"))
+    user_id: Mapped[str] = mapped_column(String(64))
+    order_id: Mapped[str] = mapped_column(String(64), ForeignKey("sample_orders.order_id"))
+    reason: Mapped[str] = mapped_column(ENUM("七天无理由", "质量问题", "发错货", "不想要了", "其他"))
+    status: Mapped[str] = mapped_column(ENUM("待人工审核"), server_default=text("'待人工审核'"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 
 class KnowledgeChunk(Base):

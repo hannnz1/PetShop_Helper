@@ -59,11 +59,11 @@
 
 **Interfaces:** `list_sample_orders(user_id: str) -> list[dict]`; `get_owned_sample_order(user_id: str, order_id: str) -> dict | None`; `create_refund_request(conversation_id: int, user_id: str, order_id: str, reason: str, request_id: str) -> str`; raises `RefundRequestConflict` on same key/different payload.
 
-- [ ] 写隔离 MySQL 失败测试：本人/他人订单隔离、无订单空列表、提交前零写入、相同请求幂等、参数变化 409、申请状态“待人工审核”。
-- [ ] 跑 `pytest -q tests/test_ch06_repository.py` 确认红。
-- [ ] 用非破坏性 DDL/迁移建 `sample_orders`、`refund_requests`，事务性仓储写入；种子脚本显式导入固定演示用户/订单，不在应用启动时自动播种。
-- [ ] 跑定向测试和迁移二次运行；确认不触碰现有工单及业务记录。
-- [ ] 提交并追记迁移结果。
+- [x] 写隔离 MySQL 失败测试：本人/他人订单隔离、无订单空列表、提交前零写入、相同请求幂等、参数变化 409、申请状态“待人工审核”。
+- [x] 跑 `pytest -q tests/test_ch06_repository.py` 确认红。
+- [x] 用非破坏性 DDL/迁移建 `sample_orders`、`refund_requests`，事务性仓储写入；种子脚本显式导入固定演示用户/订单，不在应用启动时自动播种。
+- [x] 跑定向测试和迁移二次运行；确认不触碰现有工单及业务记录。
+- [x] 提交并追记迁移结果。
 
 ### Task 3: 指代消解与短历史
 
