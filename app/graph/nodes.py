@@ -40,7 +40,8 @@ async def fetch_order(state: dict) -> dict:
             return {"order_id": "", "order_data": {}, "no_orders": True,
                     "reason": "当前没有可供选择的演示订单"}
         # LangGraph resumes this node from its beginning; only reads precede it.
-        order_id = interrupt({"type": "select_order", "orders": orders})
+        order_id = interrupt({"type": "select_order", "orders": orders,
+                              "conversation_id": state.get("conversation_id")})
         order = await repository.get_owned_sample_order(user_id, str(order_id))
     return {"order_id": str(order_id), "order_data": order, "no_orders": False}
 

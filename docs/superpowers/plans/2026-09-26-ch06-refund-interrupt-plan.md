@@ -119,11 +119,11 @@
 
 **Interfaces:** `GraphRuntime.prepare_resume_turn(user_id: str, conversation_id: int, order_id: str, *, model: BaseChatModel) -> AsyncIterator[tuple[str, Any]]`; `POST /api/actions/resume` 返回 SSE；`interrupt` 帧含 `kind`, `conversation_id`, `orders`，无 `done`。
 
-- [ ] 写失败测试：合法缺单→中断→同会话恢复；新消息撞 pending 返回 409；旧会话无检查点/其他 pending 不可冒充选单；越权 404、忙碌 409，均在 HTTP 200 前；正常已完成不可再 resume。
-- [ ] 跑定向测试确认红。
-- [ ] 结合 Task 1 本机载荷修改审计预检：仅识别 `select_order` 合法 pending 且 MySQL 标记一致；续跑以相同 thread 的 `Command(resume=order_id)` 运行，共用 SSE 帧转换。
-- [ ] 跑定向、跨接口续聊和本地 socket 冒烟；异常不发成功 `done`。
-- [ ] 提交并追记。
+- [x] 写失败测试：合法缺单→中断→同会话恢复；新消息撞 pending 返回 409；旧会话无检查点/其他 pending 不可冒充选单；越权 404、忙碌 409，均在 HTTP 200 前；正常已完成不可再 resume。
+- [x] 跑定向测试确认红。
+- [x] 结合 Task 1 本机载荷修改审计预检：仅识别 `select_order` 合法 pending 且 MySQL 标记一致；续跑以相同 thread 的 `Command(resume=order_id)` 运行，共用 SSE 帧转换。
+- [x] 跑定向、跨接口续聊和本地 socket 冒烟；异常不发成功 `done`。
+- [x] 提交并追记。
 
 ### Task 8: 确认后创建退款申请
 

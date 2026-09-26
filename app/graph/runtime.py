@@ -7,6 +7,7 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.types import Command
 
 from app.db import repository
 from app.graph.state import new_turn
@@ -24,6 +25,14 @@ class ConversationBusy(Exception):
 
 class GraphDivergence(Exception):
     """SQLite state and authoritative MySQL audit require operator recovery."""
+
+
+class ConversationPending(Exception):
+    """A select-order interrupt must be resumed before a new chat turn."""
+
+
+class ResumeNotPending(Exception):
+    """This thread is not waiting for an order selection."""
 
 
 class GraphRuntime:
@@ -71,17 +80,42 @@ class GraphRuntime:
             raise ConversationBusy()
         self._active.add(conversation_id)
 
-    async def _check_audit(self, conversation_id: int) -> None:
+    @staticmethod
+    def _select_order_pending(snapshot: Any, conversation_id: int) -> bool:
+        interrupts = getattr(snapshot, "interrupts", ())
+        return (
+            tuple(snapshot.next) == ("fetch_order",)
+            and len(interrupts) == 1
+            and isinstance(interrupts[0].value, dict)
+            and interrupts[0].value.get("type") == "select_order"
+            and snapshot.values.get("conversation_id") == conversation_id
+        )
+
+    async def _check_audit(
+        self, conversation_id: int, *, resume: bool = False,
+        expected_user_id: str | None = None,
+    ) -> None:
         if not self.enforce_audit:
             return
         config = {"configurable": {"thread_id": str(conversation_id)}}
         snapshot = await self.graph.aget_state(config)
         marker = (snapshot.values.get("trace") or {}).get("audit_message_id")
         latest = await repository.last_message_id(conversation_id)
-        if snapshot.next or marker != latest or (snapshot.values and marker is None):
+        pending = self._select_order_pending(snapshot, conversation_id)
+        if (marker != latest or (snapshot.values and marker is None and not pending)
+                or (expected_user_id is not None and snapshot.values
+                    and snapshot.values.get("user_id") != expected_user_id)):
             logger.warning("Graph audit divergence conversation_id=%s checkpoint_marker=%s mysql_marker=%s pending=%s",
                            conversation_id, marker, latest, bool(snapshot.next))
             raise GraphDivergence(conversation_id)
+        if snapshot.next:
+            if pending:
+                if resume:
+                    return
+                raise ConversationPending(conversation_id)
+            raise GraphDivergence(conversation_id)
+        if resume:
+            raise ResumeNotPending(conversation_id)
 
     async def ainvoke_turn(
         self, user_id: str, message: str, conversation_id: int | None,
@@ -92,7 +126,7 @@ class GraphRuntime:
         resolved = await self._conversation_id(user_id, conversation_id)
         self._claim(resolved)
         try:
-            await self._check_audit(resolved)
+            await self._check_audit(resolved, expected_user_id=user_id)
             return await self.graph.ainvoke(
                 new_turn(user_id, resolved, message),
                 {"configurable": {"thread_id": str(resolved)}},
@@ -124,7 +158,7 @@ class GraphRuntime:
         resolved = await self._conversation_id(user_id, conversation_id)
         self._claim(resolved)
         try:
-            await self._check_audit(resolved)
+            await self._check_audit(resolved, expected_user_id=user_id)
         except BaseException:
             self._active.remove(resolved)
             raise
@@ -133,6 +167,35 @@ class GraphRuntime:
             try:
                 async for event in self.graph.astream(
                     new_turn(user_id, resolved, message),
+                    {"configurable": {"thread_id": str(resolved)}},
+                    context={"model": model, "classifier": self.classifier},
+                    stream_mode=["messages", "updates"],
+                ):
+                    yield event
+            finally:
+                self._active.remove(resolved)
+
+        return events()
+
+    async def prepare_resume_turn(
+        self, user_id: str, conversation_id: int, order_id: str,
+        *, model: BaseChatModel,
+    ) -> AsyncIterator[tuple[str, Any]]:
+        """Authorize and verify a pending select-order frame before SSE headers."""
+        if self.graph is None:
+            raise RuntimeError("graph runtime is not open")
+        resolved = await self._conversation_id(user_id, conversation_id)
+        self._claim(resolved)
+        try:
+            await self._check_audit(resolved, resume=True, expected_user_id=user_id)
+        except BaseException:
+            self._active.remove(resolved)
+            raise
+
+        async def events() -> AsyncIterator[tuple[str, Any]]:
+            try:
+                async for event in self.graph.astream(
+                    Command(resume=order_id),
                     {"configurable": {"thread_id": str(resolved)}},
                     context={"model": model, "classifier": self.classifier},
                     stream_mode=["messages", "updates"],

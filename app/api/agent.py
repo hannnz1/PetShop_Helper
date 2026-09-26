@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.chat import get_model
 from app.core import agent
-from app.graph.runtime import ConversationBusy, ConversationNotFound, GraphDivergence
+from app.graph.runtime import ConversationBusy, ConversationNotFound, ConversationPending, GraphDivergence
 from app.schemas.agent import AgentRequest, AgentResponse, ToolCallView, ToolResultView
 from app.tools.infra import ToolInfrastructureError
 
@@ -27,6 +27,8 @@ async def run_agent(req: AgentRequest, request: Request,
         raise HTTPException(status_code=404, detail="会话不存在") from None
     except ConversationBusy:
         raise HTTPException(status_code=409, detail="会话正在处理上一条消息") from None
+    except ConversationPending:
+        raise HTTPException(status_code=409, detail="请先完成当前订单选择") from None
     except GraphDivergence:
         raise HTTPException(status_code=503, detail="会话状态需恢复，请开启新对话") from None
     except agent.ContextBudgetExceeded:
@@ -37,6 +39,15 @@ async def run_agent(req: AgentRequest, request: Request,
     except Exception:
         logger.warning("Agent model or orchestration failure user_id=%s", req.user_id)
         raise HTTPException(status_code=502, detail="上游模型暂时不可用，请稍后重试") from None
+
+    interrupts = result.get("__interrupt__")
+    if interrupts:
+        payload = interrupts[0].value
+        return AgentResponse(
+            conversation_id=payload["conversation_id"], answer="",
+            tool_calls=[], tool_results=[],
+            suggested_actions=[{"type": "select_order", "orders": payload["orders"]}],
+        )
 
     return AgentResponse(
         conversation_id=result["conversation_id"],

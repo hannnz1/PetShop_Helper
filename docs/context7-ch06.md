@@ -14,3 +14,5 @@
 ## 本机安装版本冒烟
 
 `scripts/smoke_ch06_interrupt.py` 在当前 `.venv` 无模型运行结果：`ainvoke` 返回 `__interrupt__[0].value.type=select_order`；`astream(stream_mode=["messages","updates"])` 的中断出现在 `updates` 负载的 `__interrupt__`；中断后 `aget_state().next == ("pick_order",)`。关闭并重开 `AsyncSqliteSaver` 后，相同 `thread_id` 的 `Command(resume="1001")` 返回 `order_id=1001`，`next` 变空，节点只读计数共 3 次（两条测试会话，含一次恢复重跑），恢复流产生 1 个消息块。对应测试 `tests/graph/test_interrupt_smoke.py` 通过。这是当前版本的实测形状，Task 7 按此解析。
+
+Task 7 另核对官方 [`aget_state`](https://reference.langchain.com/python/langgraph/pregel/main/Pregel/aget_state) 与 [`StateSnapshot`](https://reference.langchain.com/python/langgraph/types/StateSnapshot)：本机待选单快照的 `next=("pick_order",)`（实际业务节点为 `fetch_order`）、`snapshot.interrupts[0].value.type="select_order"`，`tasks[0].interrupts` 有同一载荷。续跑前同时比较 MySQL 审计标记、节点名、载荷类型与会话归属；普通新消息在合法 pending 上返回 409。
