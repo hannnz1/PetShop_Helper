@@ -11,6 +11,10 @@
 
 Context7 只确认 API 形态。分层边界、预算公式、事务并发与 SSE 生命周期属于本项目设计，需要通过独立测试验证。
 
+## Task 2 implementation lookup
+
+Before implementing the budgeter on 2026-09-27, rechecked the already resolved LangChain reference entry above. Its official [`count_tokens_approximately`](https://reference.langchain.com/python/langchain-core/messages/utils/count_tokens_approximately) API accepts `chars_per_token`; Task 2 passes the configured CJK calibration through that argument for both message estimates and representative-turn sizing. The result remains an estimate, not provider usage. `trim_messages` remains the existing final history gate with `allow_partial=False`; Task 2 adds no new library API.
+
 ## Task 1 implementation lookup
 
 On 2026-09-27, resolved SQLAlchemy again to `/websites/sqlalchemy_en_20` before adding migration and boundary APIs. [AsyncIO ORM](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html) confirms `AsyncConnection.execute(text(...), parameters)`, `async_sessionmaker.begin()` transactional sessions, and `AsyncSession.get(..., with_for_update=True)`. [SQL expression docs](https://docs.sqlalchemy.org/en/20/core/sqlelement.html) confirm named bound parameters in `text()`. These support schema inspection with bound database name and locking the conversation row before advancing an anchor.

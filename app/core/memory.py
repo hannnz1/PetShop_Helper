@@ -5,6 +5,8 @@ from copy import deepcopy
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.messages.utils import count_tokens_approximately, trim_messages
 
+from app.config import get_settings
+
 
 class SessionStore:
     """Keep successful conversation turns by session ID in process memory."""
@@ -24,9 +26,10 @@ class SessionStore:
         self._sessions[session_id] = deepcopy(messages)
 
 
-def estimate_tokens(messages: list[BaseMessage]) -> int:
+def estimate_tokens(messages: list[BaseMessage], *, chars_per_token: float | None = None) -> int:
     """Estimate a conservative CJK-friendly budget, not provider-exact usage."""
-    return count_tokens_approximately(messages, chars_per_token=1.0)
+    calibration = get_settings().cjk_chars_per_token if chars_per_token is None else chars_per_token
+    return count_tokens_approximately(messages, chars_per_token=calibration)
 
 
 def _validate_complete_turns(messages: list[BaseMessage]) -> None:
