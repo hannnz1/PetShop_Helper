@@ -10,3 +10,7 @@
 | FastAPI | `/websites/fastapi_tiangolo` | `@app.get` 的异步读接口；`BackgroundTasks` 可在响应发出后运行任务，流式响应的完成和失败边界仍须按本仓库 SSE 流程验证 | [路径操作](https://fastapi.tiangolo.com)，[后台任务](https://fastapi.tiangolo.com/tutorial/background-tasks/) |
 
 Context7 只确认 API 形态。分层边界、预算公式、事务并发与 SSE 生命周期属于本项目设计，需要通过独立测试验证。
+
+## Task 1 implementation lookup
+
+On 2026-09-27, resolved SQLAlchemy again to `/websites/sqlalchemy_en_20` before adding migration and boundary APIs. [AsyncIO ORM](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html) confirms `AsyncConnection.execute(text(...), parameters)`, `async_sessionmaker.begin()` transactional sessions, and `AsyncSession.get(..., with_for_update=True)`. [SQL expression docs](https://docs.sqlalchemy.org/en/20/core/sqlelement.html) confirm named bound parameters in `text()`. These support schema inspection with bound database name and locking the conversation row before advancing an anchor.

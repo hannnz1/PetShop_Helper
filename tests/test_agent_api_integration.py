@@ -61,5 +61,5 @@ async def test_chat_and_agent_http_use_real_core_and_mysql(db_session_factory, d
         assert "您好" in continued.json()["answer"]
 
     rows = await repository.list_messages(conversation_id)
-    assert [row.role for row in rows] == ["user", "tool", "assistant", "user", "assistant"]
-    assert rows[2].content == "演示记录显示物流运输中"
+    assert [row.role for row in rows] == ["user", "assistant", "user", "assistant"]
+    assert rows[1].content == "演示记录显示物流运输中"

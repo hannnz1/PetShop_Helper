@@ -31,6 +31,9 @@ class Conversation(Base):
         server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
         server_onupdate=FetchedValue(),
     )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_upto_msg_id: Mapped[int | None] = mapped_column(BIGINT(unsigned=True), nullable=True)
+    layer1_from_msg_id: Mapped[int | None] = mapped_column(BIGINT(unsigned=True), nullable=True)
 
 
 class Message(Base):
@@ -49,6 +52,21 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP")
     )
+
+
+class ConversationSummary(Base):
+    __tablename__ = "conversation_summaries"
+    __table_args__ = (Index("uq_conversation_summaries_seq", "conversation_id", "seq", unique=True),)
+
+    id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("conversations.id", name="fk_conversation_summaries_conversation")
+    )
+    seq: Mapped[int] = mapped_column(INTEGER(unsigned=True))
+    from_msg_id: Mapped[int] = mapped_column(BIGINT(unsigned=True))
+    upto_msg_id: Mapped[int] = mapped_column(BIGINT(unsigned=True))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 
 class Faq(Base):

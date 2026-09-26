@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import re
@@ -12,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 import app.db.base as db
 from app.db.models import (
-    Conversation, FaithCase, Faq, KnowledgeChunk, LowConfidenceQuestion,
+    Conversation, ConversationSummary, FaithCase, Faq, KnowledgeChunk, LowConfidenceQuestion,
     Message, QaExtractionStaging, RefundRequest, SampleOrder, Ticket,
 )
 
@@ -74,16 +75,92 @@ async def last_message_id(conversation_id: int) -> int | None:
         ))
 
 
+@dataclass(frozen=True)
+class VisibleMessage:
+    id: int
+    role: str
+    content: str
+
+
+@dataclass(frozen=True)
+class SummarySegment:
+    seq: int
+    from_msg_id: int
+    upto_msg_id: int
+    content: str
+
+
+@dataclass(frozen=True)
+class ContextSnapshot:
+    conversation_id: int
+    summary_upto_msg_id: int
+    layer1_from_msg_id: int
+    messages: tuple[VisibleMessage, ...]
+    summaries: tuple[SummarySegment, ...]
+
+
+async def get_context_snapshot(conversation_id: int, user_id: str) -> ContextSnapshot | None:
+    """Read one user's visible history and append-only summary segments."""
+    async with db.async_session.begin() as session:
+        conversation = await session.get(Conversation, conversation_id)
+        if conversation is None or conversation.user_id != user_id:
+            return None
+        summary_upto = conversation.summary_upto_msg_id or 0
+        messages = (await session.scalars(
+            select(Message).where(
+                Message.conversation_id == conversation_id,
+                Message.id > summary_upto,
+                Message.role.in_(("user", "assistant")),
+                Message.content.is_not(None),
+            ).order_by(Message.id)
+        )).all()
+        summaries = (await session.scalars(
+            select(ConversationSummary).where(
+                ConversationSummary.conversation_id == conversation_id,
+            ).order_by(ConversationSummary.seq)
+        )).all()
+        return ContextSnapshot(
+            conversation_id=conversation_id,
+            summary_upto_msg_id=summary_upto,
+            layer1_from_msg_id=conversation.layer1_from_msg_id or 0,
+            messages=tuple(VisibleMessage(m.id, m.role, m.content) for m in messages),
+            summaries=tuple(SummarySegment(s.seq, s.from_msg_id, s.upto_msg_id, s.content) for s in summaries),
+        )
+
+
+async def advance_layer1(conversation_id: int, upto_msg_id: int) -> bool:
+    """Move the recent-history boundary only through a complete visible turn."""
+    async with db.async_session.begin() as session:
+        conversation = await session.get(Conversation, conversation_id, with_for_update=True)
+        if conversation is None or upto_msg_id <= max(
+            conversation.layer1_from_msg_id or 0, conversation.summary_upto_msg_id or 0,
+        ):
+            return False
+        target = await session.scalar(select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.id == upto_msg_id,
+            Message.role == "assistant",
+            Message.content.is_not(None),
+        ))
+        if target is None or target.tool_calls is not None:
+            return False
+        prior = await session.scalar(select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.id < upto_msg_id,
+            Message.role.in_(("user", "assistant")),
+        ).order_by(Message.id.desc()).limit(1))
+        if prior is None or prior.role != "user":
+            return False
+        conversation.layer1_from_msg_id = upto_msg_id
+        return True
+
+
 async def append_turn_messages(
     conversation_id: int, query: str, tool_results: list[dict], answer: str,
 ) -> int:
-    """Commit a complete graph turn atomically; return its audit marker."""
+    """Commit visible originals atomically; return final assistant audit marker."""
     async with db.async_session.begin() as session:
         rows = [Message(conversation_id=conversation_id, role="user", content=query)]
-        rows.extend(Message(
-            conversation_id=conversation_id, role="tool",
-            content=run["content"], tool_call_id=run["tool_call_id"],
-        ) for run in tool_results)
         final = Message(conversation_id=conversation_id, role="assistant", content=answer)
         rows.append(final)
         session.add_all(rows)

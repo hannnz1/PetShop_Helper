@@ -12,13 +12,26 @@ class Classifier:
 
 
 @pytest.mark.asyncio
-async def test_batch_audit_rolls_back_on_late_tool_error(db_session_factory, db_clean):
+async def test_batch_audit_rolls_back_on_late_answer_error(db_session_factory, db_clean):
     conversation_id = await repository.create_conversation("owner")
     with pytest.raises(DataError):
         await repository.append_turn_messages(conversation_id, "你好", [
             {"content": "x", "tool_call_id": "a" * 65},
-        ], "您好")
+        ], "x" * 70000)
     assert await repository.list_messages(conversation_id) == []
+
+
+@pytest.mark.asyncio
+async def test_new_turn_audit_records_only_visible_rows_and_final_marker(db_session_factory, db_clean):
+    conversation_id = await repository.create_conversation("owner")
+    marker = await repository.append_turn_messages(conversation_id, "查询订单", [
+        {"content": "工具结果", "tool_call_id": "old-tool"},
+    ], "处理好了")
+    rows = await repository.list_messages(conversation_id)
+    assert [(row.role, row.content) for row in rows] == [
+        ("user", "查询订单"), ("assistant", "处理好了"),
+    ]
+    assert marker == rows[-1].id == await repository.last_message_id(conversation_id)
 
 
 @pytest.mark.asyncio
