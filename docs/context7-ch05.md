@@ -13,3 +13,5 @@
 计划编写前又用 Context7 核对 `/websites/fastapi_tiangolo`：`FastAPI(lifespan=asynccontextmanager)` 的启动/清理边界、应用 `state`、`include_router`，以及异步生成器交给 `StreamingResponse` 的用法。来源：[生命周期](https://fastapi.tiangolo.com/advanced/events/)、[流式响应](https://fastapi.tiangolo.com/advanced/custom-response/)、[应用参考](https://fastapi.tiangolo.com/reference/fastapi/)。
 
 SQLAlchemy 通过 Context7 `/websites/sqlalchemy_en_20` 核对 2.0 的 `AsyncSession`/事务及唯一约束冲突处理；同一个 `request_id` 的并发提交以数据库唯一约束为最终防线，捕获 `IntegrityError` 后须结束失败事务再查询已存在记录。来源：[AsyncIO 扩展](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)、[会话事务](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html/)。实施前仍需在当前 MySQL/asyncmy 版本上做隔离集成测试。
+
+Task 9 前补查 Context7 `/websites/langchain_oss_python`：`ChatPromptTemplate.from_messages(...) | model.with_structured_output(PydanticModel, method=...)` 可构成异步 `ainvoke` 链；OpenAI 集成官方示例使用 Pydantic schema 和 `json_schema`，当前项目已有 `json_mode` 配置与售后提取实测，故分类器沿用同一可配置 method。来源：[LangChain 模型结构化输出](https://docs.langchain.com/oss/python/integrations/chat/openai)、[Runnable 异步调用](https://docs.langchain.com/oss/python/integrations/chat/sambanova)。本机用 `RunnableLambda` 假模型验证链路，真实上游分类准确率待额度恢复。
