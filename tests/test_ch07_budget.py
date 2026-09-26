@@ -21,7 +21,7 @@ def settings(**overrides):
 
 
 def fixed_costs():
-    return FixedCosts(system_tools=650, retrieval_evidence=800, summary=250, safety=250)
+    return FixedCosts(system_tools=678, retrieval_evidence=1700, summary=250, safety=250)
 
 
 def test_demo_window_derives_roughly_5650_history_with_70_30_layers():
@@ -30,7 +30,7 @@ def test_demo_window_derives_roughly_5650_history_with_70_30_layers():
         max_user_input_tokens=2000, max_agent_steps=3,
         tool_result_max_tokens=1200, rerank_top_k=5,
     ), fixed_costs())
-    assert budget.current_peak == 8400
+    assert budget.current_peak == 7472
     assert budget.history_total == 5650
     assert (budget.layer1, budget.layer2) == (3955, 1695)
 
@@ -42,8 +42,18 @@ def test_react_peak_reserves_all_prior_assistant_tool_calls_and_results():
     budget = derive_budget(config, fixed_costs())
     # Four model steps can have three completed tool exchanges before the
     # fourth call. Each assistant response includes its tool-call payload.
-    assert budget.current_peak == 300 + 3 * (400 + 500)
+    assert budget.current_peak == 300 + 4 * config.chat_max_tokens + 3 * 500
     assert budget.history_total <= 12000 - fixed_costs().total - 400 - budget.current_peak
+
+
+def test_final_answer_call_sees_last_agent_response_as_well_as_tool_exchanges():
+    config = settings(max_user_input_tokens=250, chat_max_tokens=1200,
+                      max_output_tokens=900, max_agent_steps=3,
+                      tool_result_max_tokens=700)
+    budget = derive_budget(config, fixed_costs())
+    # agent_llm can run three times. final_answer then sees all three assistant
+    # messages (including tool-call payloads) and two returned tool batches.
+    assert budget.current_peak == 250 + 3 * 1200 + 2 * 700
 
 
 def test_default_target_keeps_twenty_short_turns_in_first_layer():

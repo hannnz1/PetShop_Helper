@@ -57,18 +57,24 @@ def _effective_window(settings: Settings) -> int:
     return settings.model_context_window
 
 
+def _output_reserve(settings: Settings) -> int:
+    # The model is currently instantiated with chat_max_tokens. A smaller new
+    # reserve must not undercount the final generation until wiring converges.
+    return max(settings.max_output_tokens, settings.chat_max_tokens)
+
+
 def derive_budget(settings: Settings, fixed: FixedCosts) -> ContextBudget:
     """Allocate at most the measured available space and steady-turn target."""
     if min(vars(fixed).values()) < 0:
         raise ValueError("fixed costs must be nonnegative")
-    # The last model call may see every earlier tool exchange in this turn.
-    # Each earlier assistant generation (including tool-call arguments) can
-    # reach max_output_tokens; tool_result_max_tokens is the per-step aggregate.
+    # final_answer is a separate call after up to max_agent_steps agent_llm
+    # outputs. It sees all those assistant messages (including tool-call args)
+    # and up to max_agent_steps - 1 aggregate tool-result batches.
     prior_exchanges = settings.max_agent_steps - 1
-    current_peak = settings.max_user_input_tokens + prior_exchanges * (
-        settings.max_output_tokens + settings.tool_result_max_tokens
-    )
-    available = max(0, _effective_window(settings) - fixed.total - settings.max_output_tokens - current_peak)
+    current_peak = (settings.max_user_input_tokens
+                    + settings.max_agent_steps * settings.chat_max_tokens
+                    + prior_exchanges * settings.tool_result_max_tokens)
+    available = max(0, _effective_window(settings) - fixed.total - _output_reserve(settings) - current_peak)
     representative = [HumanMessage("问" * (settings.steady_turn_chars // 2)),
                       AIMessage("答" * (settings.steady_turn_chars - settings.steady_turn_chars // 2))]
     target = settings.expected_history_turns * estimate_tokens(
@@ -82,7 +88,7 @@ def derive_budget(settings: Settings, fixed: FixedCosts) -> ContextBudget:
 def validate_context_budget(settings: Settings, fixed: FixedCosts) -> None:
     """Fail startup when a peak turn cannot fit without losing required inputs."""
     budget = derive_budget(settings, fixed)
-    required = fixed.total + settings.max_output_tokens + budget.current_peak
+    required = fixed.total + _output_reserve(settings) + budget.current_peak
     window = _effective_window(settings)
     if required > window:
         raise ContextBudgetExceeded(
