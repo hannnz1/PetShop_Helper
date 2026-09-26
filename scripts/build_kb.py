@@ -1,4 +1,4 @@
-r"""Ingest the three reviewed Markdown fixtures into pending MySQL knowledge.
+r"""Ingest the reviewed Markdown fixtures into pending MySQL knowledge.
 
 Windows: .\.venv\Scripts\python.exe -m scripts.build_kb
 Unix: uv run python -m scripts.build_kb

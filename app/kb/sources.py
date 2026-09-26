@@ -8,6 +8,7 @@ SOURCE_TYPES = {
     "product-faq.md": "faq",
     "returns-policy.md": "policy",
     "after-sales-manual.md": "manual",
+    "product-models.md": "faq",
 }
 CONTENT_TYPES = frozenset({"faq", "policy", "manual", "mined"})
 
