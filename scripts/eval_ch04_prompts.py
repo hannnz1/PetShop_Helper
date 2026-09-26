@@ -35,7 +35,7 @@ async def main() -> None:
 
     prompts = _samples("rag_prompt_samples.jsonl")
     answer_chain = RAG_ANSWER_PROMPT | get_chat_model()
-    faithful_chain = FAITHFULNESS_PROMPT | get_chat_model().with_structured_output(
+    faithful_chain = FAITHFULNESS_PROMPT | get_chat_model(temperature=0).with_structured_output(
         _Faithful, method=get_settings().structured_output_method,
     )
     prompt_passed = 0

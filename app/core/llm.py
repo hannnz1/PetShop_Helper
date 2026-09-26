@@ -6,7 +6,8 @@ from app.config import Settings, get_settings
 
 
 def get_chat_model(
-    streaming: bool = False, settings: Settings | None = None
+    streaming: bool = False, settings: Settings | None = None,
+    temperature: float | None = None,
 ) -> ChatOpenAI:
     """Build a chat-completions client from the current application settings."""
 
@@ -21,4 +22,5 @@ def get_chat_model(
         streaming=streaming,
         stream_usage=False,
         use_responses_api=False,
+        **({"temperature": temperature} if temperature is not None else {}),
     )

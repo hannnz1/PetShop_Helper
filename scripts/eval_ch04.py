@@ -285,7 +285,7 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
     settings = get_settings()
     model = get_chat_model()
     answer_chain = RAG_ANSWER_PROMPT | model
-    judge_model = model.with_structured_output(
+    judge_model = get_chat_model(temperature=0).with_structured_output(
         _CoverageJudge, method=settings.structured_output_method,
     )
     coverage_prompt = (
@@ -293,7 +293,7 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
         "不得把相关但未回答的要点算入。只输出 JSON：covered_count 整数、reason 字符串。\n"
         "用户问题：{query}\n标注要点：{points}\n证据：{evidence}\n回答：{answer}"
     )
-    faith_chain = FAITHFULNESS_PROMPT | model.with_structured_output(
+    faith_chain = FAITHFULNESS_PROMPT | get_chat_model(temperature=0).with_structured_output(
         _FaithJudge, method=settings.structured_output_method,
     )
     gate = asyncio.Semaphore(3)
