@@ -16,6 +16,8 @@ class ConversationState(TypedDict, total=False):
     evidence: str
     citations: list[dict]
     sufficient: bool
+    source: str
+    reason: str
     answer: str
     planned_tool_calls: list[dict]
     tool_calls: list[dict]
