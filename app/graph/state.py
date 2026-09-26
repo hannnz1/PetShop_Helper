@@ -18,6 +18,8 @@ class ConversationState(TypedDict, total=False):
     intent: str
     route: str
     evidence: str
+    history_ctx: str
+    model_ctx: dict
     citations: list[dict]
     sufficient: bool
     source: str
@@ -40,6 +42,7 @@ def new_turn(user_id: str, conversation_id: int, message: str) -> ConversationSt
         "resolved_query": "",
         "order_id": "", "order_data": {}, "no_orders": False,
         "intent": "", "route": "", "evidence": "", "citations": [],
+        "history_ctx": "", "model_ctx": {},
         "sufficient": False, "answer": "", "planned_tool_calls": [],
         "tool_calls": [], "tool_results": [], "steps": 0, "tokens_used": 0,
         "suggested_actions": [],

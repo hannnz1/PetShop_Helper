@@ -18,3 +18,7 @@ Before implementing the budgeter on 2026-09-27, rechecked the already resolved L
 ## Task 1 implementation lookup
 
 On 2026-09-27, resolved SQLAlchemy again to `/websites/sqlalchemy_en_20` before adding migration and boundary APIs. [AsyncIO ORM](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html) confirms `AsyncConnection.execute(text(...), parameters)`, `async_sessionmaker.begin()` transactional sessions, and `AsyncSession.get(..., with_for_update=True)`. [SQL expression docs](https://docs.sqlalchemy.org/en/20/core/sqlelement.html) confirm named bound parameters in `text()`. These support schema inspection with bound database name and locking the conversation row before advancing an anchor.
+
+## Task 3 implementation lookup
+
+On 2026-09-27, resolved LangChain to `/websites/reference_langchain` and rechecked the official [`trim_messages`](https://reference.langchain.com/python/langchain-core/messages/utils/trim_messages) reference before implementing the pure context assembler. It confirms `strategy="last"`, a callable `token_counter`, `start_on="human"`, `end_on="ai"`, and `allow_partial=False`. The assembler uses the existing `trim_history` wrapper as its final whole-turn gate, so the checkpoint's original messages are untouched.
