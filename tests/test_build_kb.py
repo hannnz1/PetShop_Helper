@@ -8,16 +8,16 @@ from scripts import build_kb
 from scripts.build_kb import KB_DIR, DOCS, source_chunks
 
 
-def test_source_fixtures_have_shipping_and_explicit_key_clause():
+def test_source_fixtures_have_shipping_and_expanded_faq():
     chunks_by_file = {
         filename: source_chunks(filename, (KB_DIR / filename).read_text(encoding="utf-8"), kind)
         for filename, kind in DOCS.items()
     }
     all_chunks = [chunk for chunks in chunks_by_file.values() for chunk in chunks]
     faq_questions = {chunk.questions for chunk in chunks_by_file["product-faq.md"]}
-    assert len(faq_questions) == 6
+    assert len(faq_questions) == 15
     assert any(chunk.questions == "运费怎么算" and "包邮" in chunk.answer for chunk in all_chunks)
-    assert any(chunk.is_key_clause for chunk in all_chunks)
+    assert any(chunk.questions == "会员运费权益" for chunk in all_chunks)
     assert all("key-clause" not in chunk.answer for chunk in all_chunks)
     manual_table = [
         chunk for chunk in chunks_by_file["after-sales-manual.md"]

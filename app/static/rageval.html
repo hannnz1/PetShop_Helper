@@ -21,7 +21,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
   <div id="report" hidden>
     <div class="grid" id="kpis"></div>
     <section class="section"><h2>四策略检索质量</h2><p class="subtle" id="chartNote"></p><div class="tabs" id="metricTabs"></div><div class="metric-grid" id="chart"></div></section>
-    <section class="section"><h2>完整分桶数据</h2><div class="table-wrap"><table><thead><tr><th>策略</th><th>政策 MRR</th><th>型号 MRR</th><th>口语 MRR</th><th>平均 Recall@K</th><th>证据覆盖</th></tr></thead><tbody id="table"></tbody></table></div></section>
+    <section class="section"><h2>完整分桶数据</h2><div class="table-wrap"><table><thead><tr><th>策略</th><th>政策 MRR</th><th>型号 MRR</th><th>口语 MRR</th><th>跨文档 MRR</th><th>平均 Recall@5</th><th>证据覆盖</th></tr></thead><tbody id="table"></tbody></table></div></section>
     <section class="section"><h2>生成质量</h2><div id="generation"></div></section>
   </div>
   <section class="section"><h2>本轮作业日志</h2><p class="subtle">只显示本地白名单作业 <code>eval-rag</code> 的末尾日志。报告中的指标来自保存的 JSON。</p><pre id="log">尚无运行日志。</pre></section>
@@ -47,7 +47,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
         const track=node('div','track'),fill=node('div','fill');fill.style.width=`${Math.max(0,Math.min(100,(Number(value)||0)*100))}%`;track.append(fill);row.append(track,node('span','',percent(value)));group.append(row);
       }root.append(group);
     }
-    $('chartNote').textContent=metric==='mrr'?'MRR 越高，正确章节越靠前。':metric==='recall_at_k'?'Recall 表示前 K 条里是否找到了标注章节。':'证据覆盖检查答案要点是否出现在召回原文里。';
+    $('chartNote').textContent=metric==='mrr'?'MRR 越高，正确章节越靠前。跨文档题按各块证据名次平均。':metric==='recall_at_5'?'Recall@5 表示前 5 条里找齐了多少组标注章节。':'证据覆盖检查答案要点是否出现在召回原文里。';
   }
   function render(data){
     current=data;$('empty').hidden=data.present;$('report').hidden=!data.present;
@@ -59,12 +59,12 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
       card('最佳策略',best?(labels[best.strategy]||best.strategy):'—'),
       card('库外拒答率',percent(data.generation?.refusal_rate)));
     $('status').textContent=`上次评估：${data.meta?.evaluated_at?new Date(data.meta.evaluated_at).toLocaleString('zh-CN'):'时间未知'} · Top-${data.meta?.top_k??'—'}`;
-    const tabs=$('metricTabs');tabs.replaceChildren();for(const [key,label] of [['mrr','MRR'],['recall_at_k','Recall@K'],['evidence','证据覆盖度']]){
+    const tabs=$('metricTabs');tabs.replaceChildren();for(const [key,label] of [['mrr','MRR'],['recall_at_5','Recall@5'],['evidence','证据覆盖度']]){
       const button=node('button',metric===key?'active':'',label);button.type='button';button.onclick=()=>{metric=key;renderChart();for(const child of tabs.children)child.classList.toggle('active',child===button);};tabs.append(button);
     }renderChart();
     const table=$('table');table.replaceChildren();for(const strategy of strategies){const tr=node('tr',strategy===best?.strategy?'best':'');const byBucket=retrieval[strategy]||{};
-      tr.append(node('td','',labels[strategy]||strategy));for(const bucket of ['A_policy','B_model','C_colloquial'])tr.append(node('td','',percent(byBucket[bucket]?.mrr)));
-      tr.append(node('td','',percent(weighted(byBucket,'recall_at_k'))),node('td','',percent(average(Object.values(data.evidence_coverage[strategy]||{})))));table.append(tr);
+      tr.append(node('td','',labels[strategy]||strategy));for(const bucket of ['A_policy','B_model','C_colloquial','E_multi'])tr.append(node('td','',percent(byBucket[bucket]?.mrr)));
+      tr.append(node('td','',percent(weighted(byBucket,'recall_at_5'))),node('td','',percent(average(Object.values(data.evidence_coverage[strategy]||{})))));table.append(tr);
     }
     const gen=$('generation');gen.replaceChildren();if(!data.generation_done){gen.append(node('p','', '本轮仅有检索与证据指标；生成段尚未完成。可在上游可用时重跑。'));return;}
     gen.className='generation';const values=data.generation||{};

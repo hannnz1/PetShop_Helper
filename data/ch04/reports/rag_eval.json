@@ -1,8 +1,9 @@
 {
   "meta": {
-    "evaluated_at": "2026-09-26T01:59:52.596722+00:00",
-    "question_count": 80,
+    "evaluated_at": "2026-09-26T02:53:19.221532+00:00",
+    "question_count": 300,
     "top_k": 10,
+    "recall_k": 5,
     "embed_model": "BAAI/bge-m3",
     "rerank_model": "BAAI/bge-reranker-v2-m3",
     "judge_model": "glm-5.2"
@@ -10,70 +11,90 @@
   "retrieval": {
     "vector": {
       "A_policy": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.9
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.95
       },
       "B_model": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.9416666666666667
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9069444444444444
       },
       "C_colloquial": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.95
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.8972222222222223
+      },
+      "E_multi": {
+        "count": 60,
+        "recall_at_5": 0.9222222222222223,
+        "mrr": 0.6528075396825397
       }
     },
     "bm25": {
       "A_policy": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.9166666666666666
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9444444444444444
       },
       "B_model": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 1.0
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9916666666666667
       },
       "C_colloquial": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.9083333333333334
+        "count": 60,
+        "recall_at_5": 0.9666666666666667,
+        "mrr": 0.8384920634920635
+      },
+      "E_multi": {
+        "count": 60,
+        "recall_at_5": 0.8777777777777778,
+        "mrr": 0.6186838624338624
       }
     },
     "hybrid": {
       "A_policy": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.9166666666666666
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9666666666666667
       },
       "B_model": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.975
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9555555555555556
       },
       "C_colloquial": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.9416666666666667
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.8958333333333334
+      },
+      "E_multi": {
+        "count": 60,
+        "recall_at_5": 0.9222222222222223,
+        "mrr": 0.664699074074074
       }
     },
     "hybrid_rerank": {
       "A_policy": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.975
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9555555555555556
       },
       "B_model": {
-        "count": 20,
-        "recall_at_k": 1.0,
+        "count": 60,
+        "recall_at_5": 1.0,
         "mrr": 1.0
       },
       "C_colloquial": {
-        "count": 20,
-        "recall_at_k": 1.0,
-        "mrr": 0.95
+        "count": 60,
+        "recall_at_5": 1.0,
+        "mrr": 0.9555555555555556
+      },
+      "E_multi": {
+        "count": 60,
+        "recall_at_5": 0.9222222222222223,
+        "mrr": 0.6833068783068783
       }
     }
   },
@@ -81,22 +102,26 @@
     "vector": {
       "A_policy": 1.0,
       "B_model": 1.0,
-      "C_colloquial": 1.0
+      "C_colloquial": 1.0,
+      "E_multi": 0.986111111111111
     },
     "bm25": {
       "A_policy": 1.0,
       "B_model": 1.0,
-      "C_colloquial": 1.0
+      "C_colloquial": 1.0,
+      "E_multi": 0.9638888888888889
     },
     "hybrid": {
       "A_policy": 1.0,
       "B_model": 1.0,
-      "C_colloquial": 1.0
+      "C_colloquial": 1.0,
+      "E_multi": 0.986111111111111
     },
     "hybrid_rerank": {
       "A_policy": 1.0,
       "B_model": 1.0,
-      "C_colloquial": 1.0
+      "C_colloquial": 1.0,
+      "E_multi": 0.9833333333333333
     }
   },
   "generation": null

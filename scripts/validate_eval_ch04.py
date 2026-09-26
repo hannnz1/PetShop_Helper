@@ -25,24 +25,33 @@ def validate() -> dict[str, int]:
     ]
     counts = Counter()
     ids = set()
+    queries = set()
     for row in rows:
         assert row["id"] not in ids and row["query"].strip(), row
+        assert row["query"] not in queries, f"duplicate query: {row['id']}"
         ids.add(row["id"])
+        queries.add(row["query"])
         bucket = row["bucket"]
         counts[bucket] += 1
         if bucket == "D_absent":
             assert row["should_refuse"] and not row["expect_section"] and not row["expect_points"], row
             continue
         assert not row["should_refuse"] and row["expect_section"] and row["expect_points"], row
-        candidates = [
-            chunk for chunk in chunks
-            if any(section in chunk.section_path for section in row["expect_section"])
-        ]
-        assert candidates, f"{row['id']}: no annotated source section"
+        groups = row.get("expect_sections_all") or [row["expect_section"]]
+        candidates = []
+        for group in groups:
+            aliases = group if isinstance(group, list) else [group]
+            matched = [
+                chunk for chunk in chunks
+                if any(section in chunk.section_path for section in aliases)
+            ]
+            assert matched, f"{row['id']}: no annotated source section for {aliases}"
+            candidates.extend(matched)
         evidence = _norm("\n".join(chunk.answer for chunk in candidates))
         for point in row["expect_points"]:
             assert _norm(point) in evidence, f"{row['id']}: unsupported annotated point {point}"
-    assert counts == {"A_policy": 20, "B_model": 20, "C_colloquial": 20, "D_absent": 20}, counts
+    assert counts == {"A_policy": 60, "B_model": 60, "C_colloquial": 60,
+                      "D_absent": 60, "E_multi": 60}, counts
     return dict(counts)
 
 

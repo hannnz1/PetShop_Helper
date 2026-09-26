@@ -24,6 +24,7 @@ SAMPLES = ROOT / "tests/data/eval_ch04.jsonl"
 REPORT_DIR = ROOT / "data/ch04/reports"
 STRATEGIES = ("vector", "bm25", "hybrid", "hybrid_rerank")
 K = 10
+RECALL_K = 5
 CALL_TIMEOUT = 45.0
 
 
@@ -50,6 +51,16 @@ def _first_rank(sample: dict, hits: list[dict]) -> int | None:
     return None
 
 
+def _evidence_ranks(sample: dict, hits: list[dict]) -> list[int | None]:
+    """One first-hit rank per required evidence group; aliases share a group."""
+
+    groups = sample.get("expect_sections_all") or [sample.get("expect_section") or []]
+    return [
+        _first_rank({"expect_section": group if isinstance(group, list) else [group]}, hits)
+        for group in groups
+    ]
+
+
 def _coverage_mech(points: list[str], hits: list[dict]) -> float | None:
     if not points:
         return None
@@ -71,15 +82,21 @@ def _deterministic_summary(
         retrieval_scores[strategy] = {}
         evidence_scores[strategy] = {}
         for bucket, rows in by_bucket.items():
-            ranks = [_first_rank(row, hits.get((strategy, row["id"]), [])[:k]) for row in rows]
+            ranks = [_evidence_ranks(row, hits.get((strategy, row["id"]), [])[:k]) for row in rows]
             coverages = [
                 _coverage_mech(row["expect_points"], hits.get((strategy, row["id"]), [])[:k])
                 for row in rows
             ]
             retrieval_scores[strategy][bucket] = {
                 "count": len(rows),
-                "recall_at_k": sum(rank is not None for rank in ranks) / len(rows),
-                "mrr": sum(1 / rank for rank in ranks if rank is not None) / len(rows),
+                "recall_at_5": sum(
+                    sum(rank is not None and rank <= RECALL_K for rank in row_ranks) / len(row_ranks)
+                    for row_ranks in ranks
+                ) / len(rows),
+                "mrr": sum(
+                    sum(1 / rank for rank in row_ranks if rank is not None) / len(row_ranks)
+                    for row_ranks in ranks
+                ) / len(rows),
             }
             evidence_scores[strategy][bucket] = sum(
                 score or 0 for score in coverages
@@ -279,7 +296,7 @@ async def main(skip_generation: bool = False, samples_path: Path = SAMPLES) -> d
     report = {
         "meta": {
             "evaluated_at": datetime.now(timezone.utc).isoformat(), "question_count": len(samples),
-            "top_k": K, "embed_model": settings.embed_model,
+            "top_k": K, "recall_k": RECALL_K, "embed_model": settings.embed_model,
             "rerank_model": settings.rerank_model, "judge_model": settings.chat_model,
         },
         **summary, "generation": generation,

@@ -35,9 +35,38 @@ def test_bucket_metrics_exclude_refusal_items():
         ("vector", "A2"): [], ("vector", "D1"): [],
     }
     metrics = eval_ch04._deterministic_summary(samples, hits, ["vector"], k=10)
-    assert metrics["retrieval"]["vector"]["A_policy"] == {"count": 2, "recall_at_k": 0.5, "mrr": 0.25}
+    assert metrics["retrieval"]["vector"]["A_policy"] == {"count": 2, "recall_at_5": 0.5, "mrr": 0.25}
     assert metrics["evidence_coverage"]["vector"]["A_policy"] == 0.5
     assert "D_absent" not in metrics["retrieval"]["vector"]
+
+
+def test_multi_section_recall_is_partial_and_mrr_averages_evidence_ranks():
+    sample = {"id": "E1", "bucket": "E_multi", "expect_section": ["运费", "会员"],
+              "expect_sections_all": [["运费"], ["会员权益", "金卡权益"]],
+              "expect_points": ["满99", "会员免运费"], "should_refuse": False}
+    hits = {("bm25", "E1"): [
+        {"section_path": "运费政策", "answer": "满99"},
+        {"section_path": "噪声", "answer": "其他"},
+        {"section_path": "金卡权益", "answer": "会员免运费"},
+    ]}
+    out = eval_ch04._deterministic_summary([sample], hits, ["bm25"])
+    assert out["retrieval"]["bm25"]["E_multi"] == {
+        "count": 1, "recall_at_5": 1.0, "mrr": (1 + 1/3)/2,
+    }
+    missing = {("bm25", "E1"): hits[("bm25", "E1")][:1]}
+    out = eval_ch04._deterministic_summary([sample], missing, ["bm25"])
+    assert out["retrieval"]["bm25"]["E_multi"]["recall_at_5"] == 0.5
+    assert out["retrieval"]["bm25"]["E_multi"]["mrr"] == 0.5
+
+
+def test_recall_at_five_does_not_count_rank_six_but_mrr_does():
+    sample = {"id": "A1", "bucket": "A_policy", "expect_section": ["目标"],
+              "expect_points": ["事实"], "should_refuse": False}
+    hits = {("vector", "A1"): [{"section_path": "噪声"}] * 5 +
+            [{"section_path": "目标", "answer": "事实"}]}
+    out = eval_ch04._deterministic_summary([sample], hits, ["vector"])
+    assert out["retrieval"]["vector"]["A_policy"]["recall_at_5"] == 0
+    assert out["retrieval"]["vector"]["A_policy"]["mrr"] == 1/6
 
 
 @pytest.mark.asyncio
