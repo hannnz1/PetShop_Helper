@@ -83,11 +83,11 @@
 
 **Interfaces:** `fetch_order(state: ConversationState) -> dict`; emits `interrupt({"type":"select_order","orders": ...})`; success returns `order_id`, `order_data`; `退款退货/售后` route to `refund`.
 
-- [ ] 写编译图失败测试：`订单1001` 可抽号；缺号中断；他人号与他人 resume 值再次中断；零订单兜底；续跑后只有本人订单快照。
-- [ ] 跑 `pytest -q tests/graph/test_ch06_fetch_order.py` 确认红。
-- [ ] 实现数字 lookaround 抽号、持久归属查询、只读前置 `interrupt`；不直接调用节点去测试 interrupt。
-- [ ] 跑测试与第 5 章路由测试；旧 `售后` 出口断言按批准设计更新。
-- [ ] 提交并追记。
+- [x] 写编译图失败测试：`订单1001` 可抽号；缺号中断；他人号与他人 resume 值再次中断；零订单兜底；续跑后只有本人订单快照。
+- [x] 跑 `pytest -q tests/graph/test_ch06_fetch_order.py` 确认红。
+- [x] 实现数字 lookaround 抽号、持久归属查询、只读前置 `interrupt`；不直接调用节点去测试 interrupt。
+- [x] 跑测试与第 5 章路由测试；旧 `售后` 出口断言按批准设计更新。
+- [x] 提交并追记。
 
 ### Task 5: 退款政策检索与证据闸
 

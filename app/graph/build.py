@@ -20,7 +20,7 @@ class GraphContext(TypedDict, total=False):
 def build_graph(checkpointer=None):
     builder = StateGraph(ConversationState, context_schema=GraphContext)
     for name in (
-        "coref", "classify_intent_node", "forced_rag", "agent_llm",
+        "coref", "classify_intent_node", "fetch_order", "forced_rag", "agent_llm",
         "agent_tools", "final_answer", "chitchat_reply", "complaint_reply",
         "fallback_reply", "log_turn",
     ):
@@ -30,9 +30,13 @@ def build_graph(checkpointer=None):
     builder.add_conditional_edges(
         "classify_intent_node",
         lambda state: route_by_intent(state["intent"]),
-        {"business": "agent_llm", "knowledge": "forced_rag",
+        {"business": "agent_llm", "knowledge": "forced_rag", "refund": "fetch_order",
          "complaint": "complaint_reply", "chitchat": "chitchat_reply",
          "fallback": "fallback_reply"},
+    )
+    builder.add_conditional_edges(
+        "fetch_order", lambda state: "empty" if state.get("no_orders") else "found",
+        {"empty": "fallback_reply", "found": "forced_rag"},
     )
     builder.add_conditional_edges(
         "forced_rag", nodes.confidence_gate,

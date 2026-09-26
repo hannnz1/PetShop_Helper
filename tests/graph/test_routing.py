@@ -10,8 +10,8 @@ from app.config import Settings
 @pytest.mark.parametrize(
     ("intent", "route"),
     [
-        ("物流", "business"), ("订单", "business"), ("售后", "business"),
-        ("商品咨询", "knowledge"), ("退款退货", "knowledge"),
+        ("物流", "business"), ("订单", "business"), ("售后", "refund"),
+        ("商品咨询", "knowledge"), ("退款退货", "refund"),
         ("投诉", "complaint"), ("闲聊", "chitchat"),
         ("不存在", "fallback"), ("", "fallback"),
     ],

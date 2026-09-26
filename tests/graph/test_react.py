@@ -121,14 +121,14 @@ async def test_knowledge_route_binds_only_order_tool_after_valid_evidence(monkey
     monkeypatch.setattr(nodes.repository, "append_turn_messages", _no_log)
 
     async def rag(state):
-        return {"sufficient": True, "evidence": "[1] 退货政策", "citations": [
-            {"n": 1, "id": 1, "section_path": "退货", "answer": "退货政策"}]}
+        return {"sufficient": True, "evidence": "[1] 商品参数", "citations": [
+            {"n": 1, "id": 1, "section_path": "商品", "answer": "商品参数"}]}
 
     monkeypatch.setattr(nodes, "forced_rag", rag)
     model = Model([AIMessage(content="无需工具")])
     result = await build_graph().ainvoke(
-        new_turn("u", 1, "退货政策"),
-        context={"model": model, "classifier": Classifier("退款退货")},
+        new_turn("u", 1, "商品参数"),
+        context={"model": model, "classifier": Classifier("商品咨询")},
     )
     assert model.bound_names == [{"query_order"}]
     assert result["citations"][0]["n"] == 1

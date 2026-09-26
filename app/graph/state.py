@@ -12,6 +12,9 @@ class ConversationState(TypedDict, total=False):
     conversation_id: int
     query: str
     resolved_query: str
+    order_id: str
+    order_data: dict
+    no_orders: bool
     intent: str
     route: str
     evidence: str
@@ -35,6 +38,7 @@ def new_turn(user_id: str, conversation_id: int, message: str) -> ConversationSt
         "messages": [HumanMessage(content=message)],
         "user_id": user_id, "conversation_id": conversation_id, "query": message,
         "resolved_query": "",
+        "order_id": "", "order_data": {}, "no_orders": False,
         "intent": "", "route": "", "evidence": "", "citations": [],
         "sufficient": False, "answer": "", "planned_tool_calls": [],
         "tool_calls": [], "tool_results": [], "steps": 0, "tokens_used": 0,

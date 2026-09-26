@@ -1,7 +1,10 @@
 """Chapter 5 workflow nodes, beginning with the mandatory knowledge gate."""
 
+import re
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.runtime import Runtime
+from langgraph.types import interrupt
 
 from app.config import get_settings
 from app.core.agent import ContextBudgetExceeded, FAQ_REFUSAL
@@ -14,6 +17,32 @@ from app.graph.routing import route_by_intent
 from app.tools.business import query_faq
 from app.tools.infra import execute_tool_call
 from app.tools.registry import get_chat_tools
+
+
+_ORDER_RE = re.compile(r"(?<!\d)(\d{4,})(?!\d)")
+
+
+def _extract_order_id(query: str) -> str:
+    match = _ORDER_RE.search(query)
+    return match.group(1) if match else ""
+
+
+async def fetch_order(state: dict) -> dict:
+    """Read an owned sample order or pause for a safe user selection."""
+    user_id = state["user_id"]
+    order_id = state.get("order_id") or _extract_order_id(
+        state.get("resolved_query") or state["query"],
+    )
+    order = await repository.get_owned_sample_order(user_id, str(order_id)) if order_id else None
+    while order is None:
+        orders = await repository.list_sample_orders(user_id)
+        if not orders:
+            return {"order_id": "", "order_data": {}, "no_orders": True,
+                    "reason": "当前没有可供选择的演示订单"}
+        # LangGraph resumes this node from its beginning; only reads precede it.
+        order_id = interrupt({"type": "select_order", "orders": orders})
+        order = await repository.get_owned_sample_order(user_id, str(order_id))
+    return {"order_id": str(order_id), "order_data": order, "no_orders": False}
 
 
 def _history_text(messages: list, max_turns: int = 6, max_tokens: int | None = None) -> str:
@@ -142,7 +171,9 @@ async def complaint_reply(state: dict) -> dict:
 
 
 async def fallback_reply(state: dict) -> dict:
-    answer = (FAQ_REFUSAL if state.get("route") == "knowledge" else
+    answer = ("当前没有可供选择的演示订单，请先在演示用户下导入订单。"
+              if state.get("no_orders") else
+              FAQ_REFUSAL if state.get("route") in {"knowledge", "refund"} else
               "暂时无法确定您的需求，请换个说法或联系官方客服。")
     return {"answer": answer, "messages": [AIMessage(content=answer)]}
 
