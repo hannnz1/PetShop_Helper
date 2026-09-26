@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 import app.db.base as db
 from app.db.models import (
     Conversation, ConversationSummary, FaithCase, Faq, KnowledgeChunk, LowConfidenceQuestion,
-    Message, QaExtractionStaging, RefundRequest, SampleOrder, Ticket,
+    Message, QaExtractionStaging, RefundRequest, SampleOrder, Ticket, ToolAuditLog,
 )
 
 
@@ -1095,3 +1095,27 @@ async def faith_case_status_map(eval_ids: list[str]) -> dict[str, str]:
             select(FaithCase.eval_id, FaithCase.status).where(FaithCase.eval_id.in_(eval_ids))
         )).all()
     return dict(rows)
+
+
+async def insert_tool_audit(
+    conversation_id: int | None,
+    tool_call_id: str | None,
+    tool_name: str,
+    tool_source: str,
+    mcp_server: str | None,
+    arguments: dict | None,
+    result_summary: str | None,
+    status: str,
+    error_message: str | None,
+    retry_count: int,
+    duration_ms: int | None,
+) -> None:
+    """Persist one audit row; the caller decides how to handle DB failure."""
+
+    async with db.async_session.begin() as session:
+        session.add(ToolAuditLog(
+            conversation_id=conversation_id, tool_call_id=tool_call_id,
+            tool_name=tool_name, tool_source=tool_source, mcp_server=mcp_server,
+            arguments=arguments, result_summary=result_summary, status=status,
+            error_message=error_message, retry_count=retry_count, duration_ms=duration_ms,
+        ))

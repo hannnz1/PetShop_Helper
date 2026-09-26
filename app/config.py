@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     recall_top_k: int = Field(default=50, gt=0)
     rerank_top_k: int = Field(default=10, gt=0)
     rerank_min_score: float = Field(default=0.3, ge=0, le=1)
+    mcp_logistics_url: str = "http://127.0.0.1:8101/mcp"
+    mcp_aftersales_url: str = "http://127.0.0.1:8102/mcp"
+    tool_default_timeout: float = Field(default=5.0, gt=0)
+    mcp_tool_timeout: float = Field(default=10.0, gt=0)
+    tool_max_retries: int = Field(default=2, ge=0, le=5)
+    demo_ticket_delay_seconds: float = Field(default=0.0, ge=0)
 
     @field_validator("chat_model", "chat_base_url", "chat_api_key", mode="before")
     @classmethod
