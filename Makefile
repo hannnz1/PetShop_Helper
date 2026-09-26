@@ -1,4 +1,4 @@
-.PHONY: dev test eval eval-agent seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down
+.PHONY: dev test eval eval-agent eval-rag seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down
 
 ifeq ($(OS),Windows_NT)
 milvus-up:
@@ -74,6 +74,14 @@ eval:
 
 eval-agent:
 	uv run --locked python scripts/eval_agent.py
+
+ifeq ($(OS),Windows_NT)
+eval-rag:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_ch04
+else
+eval-rag:
+	uv run --locked python -m scripts.eval_ch04
+endif
 
 ifeq ($(OS),Windows_NT)
 seed:
