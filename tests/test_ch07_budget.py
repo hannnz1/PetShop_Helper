@@ -21,7 +21,7 @@ def settings(**overrides):
 
 
 def fixed_costs():
-    return FixedCosts(system_tools=1000, retrieval_evidence=2500, summary=750, safety=500)
+    return FixedCosts(system_tools=650, retrieval_evidence=800, summary=250, safety=250)
 
 
 def test_demo_window_derives_roughly_5650_history_with_70_30_layers():
@@ -30,9 +30,20 @@ def test_demo_window_derives_roughly_5650_history_with_70_30_layers():
         max_user_input_tokens=2000, max_agent_steps=3,
         tool_result_max_tokens=1200, rerank_top_k=5,
     ), fixed_costs())
-    assert budget.current_peak == 5600
+    assert budget.current_peak == 8400
     assert budget.history_total == 5650
     assert (budget.layer1, budget.layer2) == (3955, 1695)
+
+
+def test_react_peak_reserves_all_prior_assistant_tool_calls_and_results():
+    config = settings(max_user_input_tokens=300, max_output_tokens=400,
+                      max_agent_steps=4, tool_result_max_tokens=500,
+                      model_context_window=12000)
+    budget = derive_budget(config, fixed_costs())
+    # Four model steps can have three completed tool exchanges before the
+    # fourth call. Each assistant response includes its tool-call payload.
+    assert budget.current_peak == 300 + 3 * (400 + 500)
+    assert budget.history_total <= 12000 - fixed_costs().total - 400 - budget.current_peak
 
 
 def test_default_target_keeps_twenty_short_turns_in_first_layer():
@@ -50,7 +61,7 @@ def test_window_shrink_fails_one_turn_self_check():
 
 
 def test_all_fixed_and_react_peak_costs_reduce_history():
-    config = settings(model_context_window=17000, max_agent_steps=2)
+    config = settings(model_context_window=15000, max_agent_steps=2)
     base = derive_budget(config, fixed_costs())
     for field in ("system_tools", "retrieval_evidence", "summary", "safety"):
         raised = FixedCosts(**{**vars(fixed_costs()), field: getattr(fixed_costs(), field) + 100})

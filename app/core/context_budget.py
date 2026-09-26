@@ -61,7 +61,13 @@ def derive_budget(settings: Settings, fixed: FixedCosts) -> ContextBudget:
     """Allocate at most the measured available space and steady-turn target."""
     if min(vars(fixed).values()) < 0:
         raise ValueError("fixed costs must be nonnegative")
-    current_peak = settings.max_user_input_tokens + settings.max_agent_steps * settings.tool_result_max_tokens
+    # The last model call may see every earlier tool exchange in this turn.
+    # Each earlier assistant generation (including tool-call arguments) can
+    # reach max_output_tokens; tool_result_max_tokens is the per-step aggregate.
+    prior_exchanges = settings.max_agent_steps - 1
+    current_peak = settings.max_user_input_tokens + prior_exchanges * (
+        settings.max_output_tokens + settings.tool_result_max_tokens
+    )
     available = max(0, _effective_window(settings) - fixed.total - settings.max_output_tokens - current_peak)
     representative = [HumanMessage("问" * (settings.steady_turn_chars // 2)),
                       AIMessage("答" * (settings.steady_turn_chars - settings.steady_turn_chars // 2))]
