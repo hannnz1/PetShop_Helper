@@ -285,6 +285,9 @@ async def append_turn_messages(
         rows.append(final)
         session.add_all(rows)
         await session.flush()
+        await session.execute(update(Conversation).where(
+            Conversation.id == conversation_id,
+        ).values(updated_at=func.now()))
         return final.id
 
 

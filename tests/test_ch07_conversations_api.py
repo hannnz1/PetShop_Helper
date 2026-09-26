@@ -1,6 +1,7 @@
 """Owner-scoped, paged conversation and original-message reads."""
 
 import asyncio
+import time
 
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -85,6 +86,31 @@ def test_message_pages_return_visible_originals_and_protect_ownership(
     for conversation_id in (foreign, 999999999):
         response = client.get(f"/api/conversations/{conversation_id}/messages", params={"user_id": "alice"})
         assert response.status_code == 404
+
+
+def test_completed_turn_moves_older_conversation_to_top_without_losing_id_tiebreak(
+    db_session_factory, db_clean,
+):
+    async def seed():
+        older = await repository.create_conversation("alice")
+        newer = await repository.create_conversation("alice")
+        return older, newer
+
+    older, newer = asyncio.run(seed())
+    client = _client()
+    initial = client.get("/api/conversations", params={"user_id": "alice"}).json()["items"]
+    assert [row["id"] for row in initial] == [newer, older]
+    # The schema stores whole seconds. Cross a second boundary to distinguish
+    # the parent-row touch from the deterministic ID tie-break tested above.
+    time.sleep(1.1)
+    asyncio.run(repository.append_turn_messages(older, "late question", [], "late reply"))
+    response = client.get("/api/conversations", params={"user_id": "alice", "limit": 1})
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["items"]] == [older]
+    next_page = client.get("/api/conversations", params={
+        "user_id": "alice", "limit": 1, "before": response.json()["next_cursor"],
+    })
+    assert [row["id"] for row in next_page.json()["items"]] == [newer]
 
 
 def test_invalid_page_sizes_and_missing_user_are_rejected(db_session_factory, db_clean):
