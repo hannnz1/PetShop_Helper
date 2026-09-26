@@ -1,6 +1,6 @@
 # Ch07 设计：单会话三层上下文与会话切换
 
-状态：待书面评审。依据：`C:\Users\Administrator\Documents\PetShop_Helper开发文档\7\实战演练：动手实现上下文管理.md` 的章首需求，以及 2026-09-27 用户确认“按此设计，写第 7 章 spec”。
+状态：2026-09-27 书面 spec 已获用户批准。依据：`C:\Users\Administrator\Documents\PetShop_Helper开发文档\7\实战演练：动手实现上下文管理.md` 的章首需求，以及 2026-09-27 用户确认“按此设计，写第 7 章 spec”。
 
 ## 目标与边界
 
