@@ -288,6 +288,49 @@ async def test_model_context_estimate_uses_runtime_cjk_calibration(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_compiled_graph_uses_injected_step_limit_not_global(monkeypatch):
+    from app.config import Settings
+    from app.graph import build
+    from app.graph.state import new_turn
+
+    base = Settings(_env_file=None, chat_model="offline-test", chat_base_url="http://127.0.0.1:9/v1",
+                    chat_api_key="offline-test", token_budget=32768, max_agent_steps=6)
+    injected = base.model_copy(update={"max_agent_steps": 3})
+    monkeypatch.setattr(build, "get_settings", lambda: base)
+
+    async def no_log(*args, **kwargs):
+        return 1
+
+    monkeypatch.setattr(nodes.repository, "append_turn_messages", no_log)
+
+    class Classifier:
+        async def classify(self, query):
+            return "订单"
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+
+        def bind_tools(self, tools):
+            return self
+
+        async def ainvoke(self, messages):
+            self.calls += 1
+            return AIMessage(content="", tool_calls=[
+                {"name": "query_order", "args": {"order_id": "1001"}, "id": f"call-{self.calls}"}])
+
+    model = Model()
+    result = await build.build_graph().ainvoke(
+        new_turn("alice", 7, "一直查订单 1001"),
+        context={"model": model, "classifier": Classifier(),
+                 "snapshot": ContextSnapshot(7, 0, 0, (), ()), "settings": injected},
+    )
+    assert result["steps"] == model.calls == 3
+    assert len(result["tool_results"]) == 2
+    assert "暂时" in result["answer"]
+
+
+@pytest.mark.asyncio
 async def test_context_log_writes_local_file_without_propagating_raw_text(tmp_path, caplog):
     caplog.set_level(logging.INFO)
     path = tmp_path / "log" / "app.log"

@@ -4,6 +4,7 @@ from typing import TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
 
 from app.core.intent import IntentClassifier
 from app.config import get_settings
@@ -21,6 +22,11 @@ class GraphContext(TypedDict, total=False):
     snapshot: ContextSnapshot
     budget: ContextBudget
     settings: Settings
+
+
+def _route_agent(state: ConversationState, runtime: Runtime[GraphContext]) -> str:
+    settings = runtime.context.get("settings") if runtime.context else None
+    return should_continue(state, max_steps=(settings or get_settings()).max_agent_steps)
 
 
 def build_graph(checkpointer=None):
@@ -55,7 +61,7 @@ def build_graph(checkpointer=None):
     )
     builder.add_conditional_edges(
         "agent_llm",
-        lambda state: should_continue(state, max_steps=get_settings().max_agent_steps),
+        _route_agent,
         {"tools": "agent_tools", "final": "final_answer", "fallback": "fallback_reply"},
     )
     builder.add_edge("agent_tools", "agent_llm")
