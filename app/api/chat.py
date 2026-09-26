@@ -52,8 +52,8 @@ async def chat(req: ChatRequest, model: BaseChatModel = Depends(get_model)) -> S
         except agent.ContextBudgetExceeded:
             yield _error("消息超出上下文预算")
             return
-        except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):
-            logger.warning("Chat database service failure user_id=%s", req.user_id)
+        except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError) as exc:
+            logger.warning("Chat infrastructure failure type=%s user_id=%s", type(exc).__name__, req.user_id)
             yield _error("数据库暂时不可用，请稍后重试")
             return
         except Exception:

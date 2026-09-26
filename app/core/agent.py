@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.config import get_settings
 from app.core.llm import get_chat_model
@@ -49,6 +49,23 @@ def _faq_result(runs: list[ToolRun]) -> dict | None:
         if isinstance(payload, dict) and type(payload.get("sufficient")) is bool:
             return payload
     return None
+
+
+def _model_tool_message(run: ToolRun) -> ToolMessage:
+    """Keep FAQ citations in the SSE payload, but avoid duplicating evidence in the model context."""
+
+    if run.name == "query_faq" and run.ok:
+        try:
+            payload = json.loads(run.tool_message.content)
+        except (ValueError, TypeError):
+            payload = None
+        if isinstance(payload, dict) and payload.get("sufficient") is True and isinstance(payload.get("evidence"), str):
+            return ToolMessage(
+                content=json.dumps({"sufficient": True, "evidence": payload["evidence"]}, ensure_ascii=False),
+                tool_call_id=run.tool_call_id,
+                name=run.name,
+            )
+    return run.tool_message
 
 
 async def _record_faq_refusal(conversation_id: int, message: str, faq: dict) -> None:
@@ -165,7 +182,7 @@ def _convergence_messages(turn: _PreparedTurn, runs: list[ToolRun], max_tokens: 
     # _build_messages guarantees system, zero or more complete pairs, current.
     system = turn.messages[0]
     current = turn.messages[-1]
-    tool_messages = [run.tool_message for run in runs]
+    tool_messages = [_model_tool_message(run) for run in runs]
     required = [system, current, turn.planned, *tool_messages]
     if estimate_tokens(required) > max_tokens:
         raise ContextBudgetExceeded("current tool exchange exceeds context token budget")

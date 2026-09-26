@@ -201,3 +201,26 @@ async def test_database_tool_uses_default_retry_count(monkeypatch):
             {"name": "query_faq", "args": {"keyword": "退货"}, "id": "c1"}, 7
         )
     assert attempts == 3
+
+
+@pytest.mark.asyncio
+async def test_faq_gets_longer_default_timeout_for_rag_pipeline(monkeypatch):
+    seen = []
+    original_wait_for = infra.asyncio.wait_for
+
+    async def record_timeout(awaitable, timeout):
+        seen.append(timeout)
+        return await original_wait_for(awaitable, timeout=timeout)
+
+    class Fake:
+        async def ainvoke(self, args):
+            return {"sufficient": True}
+
+    monkeypatch.setattr(registry, "get_tool", lambda name: Fake())
+    monkeypatch.setattr(infra.asyncio, "wait_for", record_timeout)
+    for name in ("query_faq", "query_order"):
+        await infra.execute_tool_call(
+            {"name": name, "args": {"keyword": "MH-W40"}, "id": name}, 7,
+        )
+    assert seen[0] >= 30
+    assert seen[1] == 5

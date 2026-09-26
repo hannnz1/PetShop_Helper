@@ -80,3 +80,27 @@ async def test_selfcheck_failure_returns_reason_without_evidence(monkeypatch):
     monkeypatch.setattr(business.selfcheck, "check_sufficient", check)
     result = await business.query_faq.ainvoke({"keyword": "Pro 型号功能"})
     assert result == {"sufficient": False, "source": "self_check", "reason": "证据只有运费，没有型号功能", "citations": []}
+
+
+@pytest.mark.asyncio
+async def test_answer_context_keeps_only_three_best_hits(monkeypatch):
+    hits = [
+        {"id": i, "rerank_score": 1-i/100, "question": f"问题{i}",
+         "answer": "答案" * 150, "section_path": f"第{i}节", "content_type": "faq", "category": "商品"}
+        for i in range(1, 11)
+    ]
+
+    async def search(query, **kwargs):
+        return hits
+
+    async def check(query, evidence):
+        assert len(evidence) == 3
+        return {"useful": True, "reason": "够答"}
+
+    async def understand(query):
+        return {"standard": query, "expanded": []}
+    monkeypatch.setattr(business.query_understanding, "understand", understand)
+    monkeypatch.setattr(business.retrieval, "search_knowledge", search)
+    monkeypatch.setattr(business.selfcheck, "check_sufficient", check)
+    result = await business.query_faq.ainvoke({"keyword": "型号规格"})
+    assert {item["id"] for item in result["citations"]} == {1, 2, 3}

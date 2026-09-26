@@ -35,6 +35,17 @@ def test_faq_result_only_accepts_successful_rag_shape():
     assert agent._faq_result([_run({"sufficient": False}, name="query_order")]) is None
 
 
+def test_model_sees_single_evidence_copy_while_ui_keeps_full_citations():
+    citation = {"n": 1, "id": 5, "section_path": "商品规格 / MH-W40", "answer": "每 3 周更换" * 50}
+    run = _run({"sufficient": True, "evidence": "[1] MH-W40: 每 3 周更换", "citations": [citation]})
+    compact = agent._model_tool_message(run)
+    assert compact.tool_call_id == run.tool_call_id
+    assert "每 3 周更换" in compact.content
+    assert "citations" not in compact.content
+    assert "section_path" not in compact.content
+    assert json.loads(run.tool_message.content)["citations"] == [citation]
+
+
 @pytest.mark.asyncio
 async def test_run_agent_refuses_and_pools_original_question(db_session_factory, db_clean, monkeypatch):
     async def fake_execute(*args, **kwargs):

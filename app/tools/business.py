@@ -24,7 +24,7 @@ class LogisticsInput(BaseModel):
 
 
 class FaqInput(BaseModel):
-    keyword: str = Field(description="用于检索常见问题的关键词，例如退货政策、发货时效")
+    keyword: str = Field(description="完整的知识库检索问题；保留用户提到的商品型号（如 MH-W40）、规格与政策条件，不要只传宽泛关键词")
     category: str | None = Field(default=None, description="可选知识品类过滤")
 
 
@@ -88,7 +88,7 @@ async def query_logistics(order_id: str) -> dict:
 
 @tool(args_schema=FaqInput)
 async def query_faq(keyword: str, category: str | None = None) -> dict:
-    """按关键词查询 FAQ。用户询问政策、规则或操作流程等通用问题时使用。"""
+    """查询常见问题、政策及商品手册/型号规格知识库；型号问题须在 keyword 中保留完整型号。"""
 
     settings = get_settings()
     if not settings.milvus_uri.startswith(("http://", "https://")):
@@ -111,7 +111,10 @@ async def query_faq(keyword: str, category: str | None = None) -> dict:
             "reason": f"检索证据不足(top={top_score:.3f})", "citations": [],
         }
 
-    evidence_texts = [f"{hit['question']} {hit['answer']}" for hit in hits]
+    # Retrieval evaluates Top-10, but a 2k-token chat turn cannot carry ten
+    # full chunks (including duplicated citation metadata) to the answer model.
+    answer_hits = hits[:3]
+    evidence_texts = [f"{hit['question']} {hit['answer']}" for hit in answer_hits]
     check = await selfcheck.check_sufficient(standard, evidence_texts)
     if not check["useful"]:
         return {
@@ -119,7 +122,7 @@ async def query_faq(keyword: str, category: str | None = None) -> dict:
             "reason": check["reason"], "citations": [],
         }
 
-    arranged = retrieval.arrange_head_tail(hits)
+    arranged = retrieval.arrange_head_tail(answer_hits)
     citations = [
         {
             "n": index, "id": hit["id"], "section_path": hit["section_path"],

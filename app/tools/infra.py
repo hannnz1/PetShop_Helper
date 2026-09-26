@@ -42,7 +42,7 @@ def _error_run(tool_call_id: str, name: str, reason: str) -> ToolRun:
 async def execute_tool_call(
     tool_call: dict,
     conversation_id: int,
-    timeout: float = 5.0,
+    timeout: float | None = None,
     max_retries: int = 2,
 ) -> ToolRun:
     """Run one model call, preserving DB failures for the API error boundary."""
@@ -74,10 +74,14 @@ async def execute_tool_call(
         if not isinstance(keyword, str) or not keyword.strip():
             return _error_run(safe_id, name, "FAQ 关键词不能为空")
 
+    # The RAG FAQ path includes query understanding, embedding, reranking and
+    # a sufficiency check. Live runs take ~16 s, well beyond a simple mock tool.
+    effective_timeout = timeout if timeout is not None else (45.0 if name == "query_faq" else 5.0)
+
     retries = 0 if name in registry.NO_RETRY else max(0, max_retries)
     for attempt in range(retries + 1):
         try:
-            result = await asyncio.wait_for(tool.ainvoke(args), timeout=timeout)
+            result = await asyncio.wait_for(tool.ainvoke(args), timeout=effective_timeout)
             return ToolRun(
                 tool_call_id=safe_id,
                 name=name,
