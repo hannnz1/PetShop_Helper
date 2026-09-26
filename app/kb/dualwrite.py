@@ -33,7 +33,9 @@ def _rows(chunks: list[Chunk]) -> list[dict]:
     ]
 
 
-async def vectorize_pending(client, batch_size: int = 64) -> int:
+async def vectorize_pending(
+    client, batch_size: int = 64, collection: str = milvus_client.COLLECTION,
+) -> int:
     """Upsert complete batches before marking each corresponding MySQL row done.
 
     If embedding, upsert, or a status update fails, the unconfirmed rows remain
@@ -42,10 +44,10 @@ async def vectorize_pending(client, batch_size: int = 64) -> int:
     if batch_size <= 0:
         raise ValueError("batch_size must be positive")
     async with repository.knowledge_write_lock():
-        return await _vectorize_pending_locked(client, batch_size)
+        return await _vectorize_pending_locked(client, batch_size, collection)
 
 
-async def _vectorize_pending_locked(client, batch_size: int) -> int:
+async def _vectorize_pending_locked(client, batch_size: int, collection: str) -> int:
     pending = await repository.list_pending_chunks()
     done = 0
     for start in range(0, len(pending), batch_size):
@@ -56,14 +58,29 @@ async def _vectorize_pending_locked(client, batch_size: int) -> int:
             raise ValueError("embedding count differs from pending batch")
         if any(len(vector) != milvus_client.DIM for vector in vectors):
             raise ValueError("embedding dimension differs from Milvus collection")
-        rows = [
-            {
-                "id": row.id, "vector": vector,
-                "question": row.questions, "answer": row.answer,
-            }
-            for row, vector in zip(batch, vectors, strict=True)
-        ]
-        milvus_client.upsert_vectors(client, rows)
+        if collection == milvus_client.COLLECTION:
+            rows = [
+                {
+                    "id": row.id, "vector": vector,
+                    "question": row.questions, "answer": row.answer,
+                }
+                for row, vector in zip(batch, vectors, strict=True)
+            ]
+            milvus_client.upsert_vectors(client, rows)
+        else:
+            rows = [
+                {
+                    "id": row.id, "dense": vector, "text": text,
+                    "question": row.questions, "answer": row.answer,
+                    "section_path": row.section_path or "",
+                    "content_type": row.content_type or "",
+                    "category": row.category or "",
+                }
+                for row, vector, text in zip(batch, vectors, texts, strict=True)
+            ]
+            milvus_client.upsert_vectors(client, rows, collection=collection)
+            # A failed flush leaves MySQL rows pending for an idempotent retry.
+            milvus_client.flush(client, collection=collection)
         for row in batch:
             await repository.mark_chunk_vectorized(row.id, str(row.id))
             done += 1
