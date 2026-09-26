@@ -165,15 +165,21 @@ def test_search_rejects_invalid_top_k_before_embedding():
     assert response.status_code == 422
 
 
-def test_search_reports_unavailable_without_exposing_upstream_error(monkeypatch):
-    async def unavailable(_query, top_k=None, min_score=None):
+@pytest.mark.parametrize("hybrid", [False, True])
+def test_search_reports_unavailable_without_exposing_upstream_error(monkeypatch, hybrid):
+    calls = []
+
+    async def unavailable(_query, **kwargs):
+        calls.append(kwargs)
         raise ConnectionError("private upstream endpoint")
 
+    monkeypatch.setattr(kb.milvus_client, "hybrid_enabled", lambda: hybrid)
     monkeypatch.setattr(kb.retrieval, "search_knowledge", unavailable)
     with _client() as client:
         response = client.post("/api/kb/search", json={"query": "邮费是多少"})
     assert response.status_code == 503
     assert "private upstream endpoint" not in response.text
+    assert len(calls) == 1
 
 
 def test_vectorize_reuses_runtime_client_without_closing_it(monkeypatch):

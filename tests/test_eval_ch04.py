@@ -175,3 +175,40 @@ async def test_cache_retries_only_failed_retrieval_and_ignores_changed_question(
     assert len(searches) == 5
     await eval_ch04._retrieve_all([{"id": "A1", "query": "退货邮费"}], [], cache_path=cache)
     assert len(searches) == 9
+
+
+@pytest.mark.asyncio
+async def test_generation_cache_resumes_without_repeating_model_calls(tmp_path, monkeypatch):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    sample = {"id": "A1", "bucket": "A_policy", "query": "邮费是多少", "expect_points": ["满99元包邮"],
+              "should_refuse": False}
+    hits = {
+        (strategy, "A1"): [{"id": 7, "question": "运费", "answer": "满99元包邮", "section_path": "运费"}]
+        for strategy in eval_ch04.STRATEGIES
+    }
+    calls = {"answer": 0, "_CoverageJudge": 0, "_FaithJudge": 0}
+
+    class FakeModel(RunnableLambda):
+        def __init__(self):
+            async def answer(_prompt):
+                calls["answer"] += 1
+                return AIMessage(content="满99元包邮 [1]")
+            super().__init__(answer)
+
+        def with_structured_output(self, schema, method=None):
+            async def judge(_prompt):
+                calls[schema.__name__] += 1
+                if schema is eval_ch04._CoverageJudge:
+                    return schema(covered_count=1, reason="covered")
+                return schema(faithful=True, reason="supported")
+            return RunnableLambda(judge)
+
+    monkeypatch.setattr(eval_ch04, "get_chat_model", lambda **kwargs: FakeModel())
+    cache = tmp_path / "generation.jsonl"
+    first = await eval_ch04._generation([sample], hits, [], cache_path=cache)
+    second = await eval_ch04._generation([sample], hits, [], cache_path=cache)
+    assert first == second
+    assert calls == {"answer": 4, "_CoverageJudge": 4, "_FaithJudge": 1}
+    assert len(cache.read_text(encoding="utf-8").splitlines()) == 4

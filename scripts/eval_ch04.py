@@ -281,7 +281,9 @@ async def _save_unfaithful_case(
         errors.append(f"ledger {sample['id']}: {type(exc).__name__}")
 
 
-async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict | None:
+async def _generation(
+    samples: list[dict], hits: dict, lines: list[str], cache_path: Path | None = None,
+) -> dict | None:
     settings = get_settings()
     model = get_chat_model()
     answer_chain = RAG_ANSWER_PROMPT | model
@@ -299,15 +301,34 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
     gate = asyncio.Semaphore(3)
     errors: list[str] = []
     records: list[dict] = []
+    cached = _read_cache(cache_path)
+    completed = 0
+
+    def tick() -> None:
+        nonlocal completed
+        completed += 1
+        total = len(STRATEGIES) * len(samples)
+        if completed % 50 == 0 or completed == total:
+            print(f"generation: {completed}/{total}", flush=True)
 
     async def one(strategy: str, sample: dict):
+        found = hits.get((strategy, sample["id"]), [])
+        cache_key = "generation:" + hashlib.sha256(
+            json.dumps([strategy, sample, found], ensure_ascii=False, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        saved = cached.get(cache_key)
+        if isinstance(saved, dict) and saved.get("strategy") == strategy and saved.get("id") == sample["id"]:
+            records.append(saved)
+            tick()
+            return
         async with gate:
-            found = hits.get((strategy, sample["id"]), [])
             evidence = _evidence(found)
             record = {"id": sample["id"], "bucket": sample["bucket"], "strategy": strategy}
             if not found:
                 record.update(answer="暂时没有查到相关信息", covered=0, faithful=True)
                 records.append(record)
+                _append_cache(cache_path, cache_key, record)
+                tick()
                 return
             response = await _try_call(
                 answer_chain.ainvoke({"query": sample["query"], "evidence": evidence}),
@@ -316,6 +337,7 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
             if response is None:
                 record["error"] = "answer unavailable"
                 records.append(record)
+                tick()
                 return
             answer = str(response.content)
             record["answer"] = answer
@@ -346,6 +368,10 @@ async def _generation(samples: list[dict], hits: dict, lines: list[str]) -> dict
             else:
                 record["refused"] = "暂时没有查到" in answer or "无法" in answer or "不能" in answer
             records.append(record)
+            if (sample["should_refuse"] or record.get("covered") is not None) and record.get("faithful") is not False:
+                if strategy != "hybrid_rerank" or sample["should_refuse"] or record.get("faithful") is True:
+                    _append_cache(cache_path, cache_key, record)
+            tick()
 
     await asyncio.gather(*(one(strategy, sample) for strategy in STRATEGIES for sample in samples))
     records.sort(key=lambda record: (record["strategy"], record["id"]))
@@ -407,7 +433,13 @@ async def main(skip_generation: bool = False, samples_path: Path = SAMPLES,
     generation = None
     if not skip_generation:
         try:
-            generation = await _generation(samples, hits, lines)
+            generation_cache = (
+                cache_path.with_name(cache_path.name.replace("retrieval-", "generation-", 1))
+                if cache_path is not None else None
+            )
+            if generation_cache is not None:
+                print(f"generation cache: {generation_cache}", flush=True)
+            generation = await _generation(samples, hits, lines, cache_path=generation_cache)
         except Exception as exc:  # noqa: BLE001 - deterministic results still publish
             lines.append(f"GENERATION_UNAVAILABLE {type(exc).__name__}")
     lines.append("GENERATION " + json.dumps(
