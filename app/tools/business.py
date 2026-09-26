@@ -6,7 +6,8 @@ from typing import Annotated, Literal
 from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 
-from app.core import retrieval
+from app.config import get_settings
+from app.core import query_understanding, retrieval, selfcheck
 from app.db import repository
 
 
@@ -24,6 +25,7 @@ class LogisticsInput(BaseModel):
 
 class FaqInput(BaseModel):
     keyword: str = Field(description="用于检索常见问题的关键词，例如退货政策、发货时效")
+    category: str | None = Field(default=None, description="可选知识品类过滤")
 
 
 _LOGISTICS_PHASES = ("已揽件", "运输中", "派送中", "已签收")
@@ -85,13 +87,51 @@ async def query_logistics(order_id: str) -> dict:
 
 
 @tool(args_schema=FaqInput)
-async def query_faq(keyword: str) -> dict:
+async def query_faq(keyword: str, category: str | None = None) -> dict:
     """按关键词查询 FAQ。用户询问政策、规则或操作流程等通用问题时使用。"""
 
-    hits = await retrieval.search_knowledge(keyword)
-    if not hits:
-        return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
-    return {"hits": [{"question": hit["question"], "answer": hit["answer"]} for hit in hits]}
+    settings = get_settings()
+    if not settings.milvus_uri.startswith(("http://", "https://")):
+        hits = await retrieval.search_knowledge(keyword)
+        if not hits:
+            return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
+        return {"hits": [{"question": hit["question"], "answer": hit["answer"]} for hit in hits]}
+
+    understood = await query_understanding.understand(keyword)
+    standard = understood["standard"]
+    expanded = understood["expanded"]
+    search_query = standard + (" " + " ".join(expanded) if expanded else "")
+    hits = await retrieval.search_knowledge(
+        search_query, strategy="hybrid_rerank", category=category,
+    )
+    top_score = hits[0]["rerank_score"] if hits else 0.0
+    if not hits or top_score < settings.rerank_min_score:
+        return {
+            "sufficient": False, "source": "retrieval_low_conf",
+            "reason": f"检索证据不足(top={top_score:.3f})", "citations": [],
+        }
+
+    evidence_texts = [f"{hit['question']} {hit['answer']}" for hit in hits]
+    check = await selfcheck.check_sufficient(standard, evidence_texts)
+    if not check["useful"]:
+        return {
+            "sufficient": False, "source": "self_check",
+            "reason": check["reason"], "citations": [],
+        }
+
+    arranged = retrieval.arrange_head_tail(hits)
+    citations = [
+        {
+            "n": index, "id": hit["id"], "section_path": hit["section_path"],
+            "question": hit["question"], "answer": hit["answer"],
+            "content_type": hit["content_type"],
+        }
+        for index, hit in enumerate(arranged, 1)
+    ]
+    evidence = "\n".join(
+        f"[{item['n']}] {item['question']}: {item['answer']}" for item in citations
+    )
+    return {"sufficient": True, "evidence": evidence, "citations": citations}
 
 
 @tool
