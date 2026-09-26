@@ -127,10 +127,13 @@ class GraphRuntime:
         self._claim(resolved)
         try:
             await self._check_audit(resolved, expected_user_id=user_id)
+            snapshot = await repository.get_context_snapshot(resolved, user_id)
+            if snapshot is None:
+                raise ConversationNotFound()
             return await self.graph.ainvoke(
                 new_turn(user_id, resolved, message),
                 {"configurable": {"thread_id": str(resolved)}},
-                context={"model": model, "classifier": self.classifier},
+                context={"model": model, "classifier": self.classifier, "snapshot": snapshot},
             )
         finally:
             self._active.remove(resolved)
@@ -159,6 +162,9 @@ class GraphRuntime:
         self._claim(resolved)
         try:
             await self._check_audit(resolved, expected_user_id=user_id)
+            snapshot = await repository.get_context_snapshot(resolved, user_id)
+            if snapshot is None:
+                raise ConversationNotFound()
         except BaseException:
             self._active.remove(resolved)
             raise
@@ -168,7 +174,7 @@ class GraphRuntime:
                 async for event in self.graph.astream(
                     new_turn(user_id, resolved, message),
                     {"configurable": {"thread_id": str(resolved)}},
-                    context={"model": model, "classifier": self.classifier},
+                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot},
                     stream_mode=["messages", "updates"],
                 ):
                     yield event
@@ -188,6 +194,9 @@ class GraphRuntime:
         self._claim(resolved)
         try:
             await self._check_audit(resolved, resume=True, expected_user_id=user_id)
+            snapshot = await repository.get_context_snapshot(resolved, user_id)
+            if snapshot is None:
+                raise ConversationNotFound()
         except BaseException:
             self._active.remove(resolved)
             raise
@@ -197,7 +206,7 @@ class GraphRuntime:
                 async for event in self.graph.astream(
                     Command(resume=order_id),
                     {"configurable": {"thread_id": str(resolved)}},
-                    context={"model": model, "classifier": self.classifier},
+                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot},
                     stream_mode=["messages", "updates"],
                 ):
                     yield event

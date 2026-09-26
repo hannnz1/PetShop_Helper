@@ -51,6 +51,7 @@ async def check_socket_stream() -> None:
         chat_model="offline-fake",
         chat_base_url="http://127.0.0.1/unused",
         chat_api_key="offline-only",
+        token_budget=32768,
     )
     app = create_app(settings=settings, model=object())
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

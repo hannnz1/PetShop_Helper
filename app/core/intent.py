@@ -29,6 +29,13 @@ class ModelIntentClassifier:
         parsed = IntentResult.model_validate(await chain.ainvoke({"query": query}))
         return parsed.intent
 
+    async def classify_with_history(self, query: str, history: str) -> str:
+        """Use the same bounded history view as coreference for short queries."""
+        if not history:
+            return await self.classify(query)
+        payload = f"参考历史（只用于理解指代）：\n{history}\n当前用户消息：{query}"
+        return await self.classify(payload)
+
 
 async def safe_classify(classifier: IntentClassifier, query: str) -> str:
     """Malformed or unavailable classification never enters tool execution."""

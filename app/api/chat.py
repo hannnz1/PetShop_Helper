@@ -10,6 +10,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core import agent
+from app.core.context_budget import ContextBudgetExceeded
 from app.graph.runtime import (
     ConversationBusy, ConversationNotFound, ConversationPending,
     GraphDivergence, ResumeNotPending,
@@ -36,6 +37,7 @@ def _error(message: str) -> str:
 async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     """Translate one prepared graph stream for chat and resume endpoints."""
     completed = False
+    completed_conversation_id = None
     interrupted = False
     interrupt_event = None
     seen_tools: set[str] = set()
@@ -82,7 +84,7 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
                         yield _sse({"event": "actions", "items": update["suggested_actions"]})
                 elif node == "log_turn":
                     completed = True
-                    yield _sse({"event": "done", "conversation_id": update["conversation_id"]})
+                    completed_conversation_id = update["conversation_id"]
     except ConversationNotFound:
         yield _error("会话不存在")
         return
@@ -91,6 +93,9 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
         return
     except GraphDivergence:
         yield _error("会话状态需恢复，请开启新对话")
+        return
+    except ContextBudgetExceeded:
+        yield _error("上下文预算不足")
         return
     except agent.ContextBudgetExceeded:
         yield _error("消息超出上下文预算")
@@ -109,6 +114,7 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
         yield _sse(interrupt_event)
         return
     if completed:
+        yield _sse({"event": "done", "conversation_id": completed_conversation_id})
         yield "data: [DONE]\n\n"
     else:
         yield _error("上游模型暂时不可用，请稍后重试")

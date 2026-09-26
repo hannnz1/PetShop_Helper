@@ -108,10 +108,17 @@ def test_extract_binding_failure_is_sanitized_502(caplog):
 def test_extract_empty_and_over_budget_rejected_before_model_call():
     calls = []
     model = StubModel(RunnableLambda(lambda _: calls.append(1)))
-    app = create_app(settings=config(token_budget=500), model=model)
-    with TestClient(app) as client:
+    settings = config(token_budget=500)
+    app = create_app(settings=settings, model=model)
+    # Exercise this endpoint without Graph lifespan: Ch07 rejects a 500-token
+    # graph window at startup, while this legacy test checks extract's own cap.
+    app.state.settings, app.state.model = settings, model
+    client = TestClient(app)
+    try:
         assert client.post("/api/extract", json={"text": " "}).status_code == 422
         response = client.post("/api/extract", json={"text": "长" * 600})
+    finally:
+        client.close()
     assert response.status_code == 422
     assert calls == []
 
@@ -121,9 +128,14 @@ def test_extract_budget_counts_rendered_system_and_user_text():
     full_prompt_tokens = estimate_tokens(EXTRACT_PROMPT.format_messages(text=text))
     calls = []
     model = StubModel(RunnableLambda(lambda _: calls.append(1)))
-    app = create_app(settings=config(token_budget=full_prompt_tokens - 1), model=model)
-    with TestClient(app) as client:
+    settings = config(token_budget=full_prompt_tokens - 1)
+    app = create_app(settings=settings, model=model)
+    app.state.settings, app.state.model = settings, model
+    client = TestClient(app)
+    try:
         response = client.post("/api/extract", json={"text": text})
+    finally:
+        client.close()
     assert response.status_code == 422
     assert calls == []
 

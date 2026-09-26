@@ -7,6 +7,8 @@ from langgraph.graph import END, START, StateGraph
 
 from app.core.intent import IntentClassifier
 from app.config import get_settings
+from app.db.repository import ContextSnapshot
+from app.core.context_budget import ContextBudget
 from app.graph import nodes
 from app.graph.routing import route_by_intent, should_continue
 from app.graph.state import ConversationState
@@ -15,6 +17,8 @@ from app.graph.state import ConversationState
 class GraphContext(TypedDict, total=False):
     model: BaseChatModel
     classifier: IntentClassifier
+    snapshot: ContextSnapshot
+    budget: ContextBudget
 
 
 def build_graph(checkpointer=None):

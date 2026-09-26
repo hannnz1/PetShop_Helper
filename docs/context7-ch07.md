@@ -22,3 +22,7 @@ On 2026-09-27, resolved SQLAlchemy again to `/websites/sqlalchemy_en_20` before 
 ## Task 3 implementation lookup
 
 On 2026-09-27, resolved LangChain to `/websites/reference_langchain` and rechecked the official [`trim_messages`](https://reference.langchain.com/python/langchain-core/messages/utils/trim_messages) reference before implementing the pure context assembler. It confirms `strategy="last"`, a callable `token_counter`, `start_on="human"`, `end_on="ai"`, and `allow_partial=False`. The assembler uses the existing `trim_history` wrapper as its final whole-turn gate, so the checkpoint's original messages are untouched.
+
+## Task 4 implementation lookup
+
+On 2026-09-27, queried the resolved LangChain reference `/websites/reference_langchain` for model-bound tool schema measurement. The [BaseTool reference](https://reference.langchain.com/python/langchain-core/tools/base/BaseTool) identifies argument schemas and descriptions as tool metadata; the [Pydantic schema utility reference](https://reference.langchain.com/python/langchain-core/utils/pydantic/model_json_schema) confirms JSON schema generation. Task 4 measures the route's actual bound tools using `tool_call_schema.model_json_schema()` (already exercised by this repository's tool tests), including names and descriptions, before deriving the model budget. It still keeps a safety reserve for provider-specific serialization overhead.

@@ -1,5 +1,7 @@
 """Chapter 5 workflow nodes, beginning with the mandatory knowledge gate."""
 
+import json
+import logging
 import re
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -7,12 +9,15 @@ from langgraph.runtime import Runtime
 from langgraph.types import interrupt
 
 from app.config import get_settings
-from app.core.agent import ContextBudgetExceeded, FAQ_REFUSAL
+from app.core.agent import FAQ_REFUSAL
+from app.core.context_budget import ContextBudgetExceeded, FixedCosts, derive_budget, validate_context_budget
+from app.core.context_layers import build_history_context, build_model_context
 from app.core import coref as coref_service, query_understanding, retrieval, selfcheck
 from app.core.intent import safe_classify
 from app.core.memory import estimate_tokens
 from app.core.prompts import GRAPH_AGENT_SYSTEM, GRAPH_FINAL_SYSTEM
 from app.db import repository
+from app.db.repository import ContextSnapshot
 from app.graph.routing import route_by_intent
 from app.tools.business import query_faq
 from app.tools.infra import execute_tool_call
@@ -20,6 +25,111 @@ from app.tools.registry import get_chat_tools
 
 
 _ORDER_RE = re.compile(r"(?<!\d)(\d{4,})(?!\d)")
+logger = logging.getLogger(__name__)
+
+
+def open_context_log(path) -> logging.FileHandler:
+    """Keep raw context diagnostics in a local, ignored log file."""
+    from pathlib import Path
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.touch(mode=0o600, exist_ok=True)
+    handler = logging.FileHandler(target, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    handler._previous_propagate = logger.propagate
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    return handler
+
+
+def close_context_log(handler: logging.FileHandler) -> None:
+    logger.removeHandler(handler)
+    handler.close()
+    if not any(isinstance(item, logging.FileHandler) for item in logger.handlers):
+        logger.propagate = handler._previous_propagate
+
+
+def _system_text(state: dict, final: bool = False) -> str:
+    return GRAPH_FINAL_SYSTEM if final else GRAPH_AGENT_SYSTEM
+
+
+def _verified_order(state: dict) -> str:
+    if state.get("route") == "refund" and state.get("order_data"):
+        order = state["order_data"]
+        return (f"本轮已核验本人演示订单：订单号 {order.get('order_id', '')}，"
+                f"状态 {order.get('status', '')}，商品 {order.get('product', '')}。"
+                "只能说可填写待人工审核申请，不能声称已退款或审核通过。")
+    return ""
+
+
+def _tool_schema_text(route: str) -> str:
+    schemas = [{"name": tool.name, "description": tool.description,
+                "schema": tool.tool_call_schema.model_json_schema()}
+               for tool in get_chat_tools(route)]
+    return json.dumps(schemas, ensure_ascii=False, sort_keys=True)
+
+
+def _budget(state: dict, snapshot, *, final: bool = False):
+    settings = get_settings()
+    summary = "\n".join(item.content for item in snapshot.summaries if item.content.strip())
+    evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
+    fixed = FixedCosts.measure(
+        settings,
+        system_tools=[SystemMessage(content=_system_text(state, final)),
+                      SystemMessage(content=_tool_schema_text(state.get("route", "")) if not final else "")],
+        retrieval_evidence=[HumanMessage(content=evidence)] if evidence else [],
+        summary=[HumanMessage(content=summary)] if summary else [],
+        safety=250,
+    )
+    validate_context_budget(settings, fixed)
+    return derive_budget(settings, fixed)
+
+
+def validate_startup_budget(settings) -> None:
+    """Check the rendered prompts and tool schemas on every model route."""
+    for route in ("business", "knowledge", "refund"):
+        for final in (False, True):
+            state = {"route": route}
+            fixed = FixedCosts.measure(
+                settings,
+                system_tools=[SystemMessage(content=_system_text(state, final)),
+                              SystemMessage(content=_tool_schema_text(route) if not final else "")],
+                retrieval_evidence=[], summary=[], safety=250,
+            )
+            validate_context_budget(settings, fixed)
+
+
+def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
+    # GraphRuntime always supplies the authoritative snapshot. An ad-hoc
+    # unpersisted graph invocation has no committed visible history yet.
+    snapshot = runtime.context.get("snapshot") or ContextSnapshot(
+        state.get("conversation_id", 0), 0, 0, (), ())
+    budget = runtime.context.get("budget") or _budget(state, snapshot, final=final)
+    evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
+    view = build_model_context(snapshot, state["messages"], state["query"],
+                               evidence, _system_text(state, final), budget)
+    settings = get_settings()
+    window = min(settings.model_context_window,
+                 settings.token_budget if "token_budget" in settings.model_fields_set else settings.model_context_window)
+    schema_tokens = (estimate_tokens([SystemMessage(content=_tool_schema_text(state["route"]))])
+                     if not final else 0)
+    if (view.token_count + schema_tokens
+            + max(settings.max_output_tokens, settings.chat_max_tokens) + 250 > window):
+        raise ContextBudgetExceeded("model context exceeds configured window")
+    record = {"conversation_id": state.get("conversation_id"),
+              "step": state.get("steps", 0), "phase": "final_answer" if final else "agent_llm",
+              "injected_summary": view.injected_summary,
+              "message_count": len(view.messages), "token_estimate": view.token_count,
+              "bound_tool_schema_tokens": schema_tokens,
+              "window_rows": [vars(row) for row in view.window_rows],
+              "messages": [{"role": message.type, "content": message.content,
+                            "name": message.name,
+                            "tool_calls": getattr(message, "tool_calls", None)}
+                           for message in view.messages]}
+    logger.info("model_ctx %s", json.dumps(record, ensure_ascii=False, default=str))
+    return view.messages, record
 
 
 def _extract_order_id(query: str) -> str:
@@ -70,16 +180,29 @@ def _history_text(messages: list, max_turns: int = 6, max_tokens: int | None = N
 async def coref(state: dict, runtime: Runtime[dict]) -> dict:
     """Resolve for downstream understanding while preserving the raw query."""
     model = runtime.context.get("model") if runtime.context else None
+    snapshot = runtime.context.get("snapshot") if runtime.context else None
+    if snapshot is not None:
+        budget = runtime.context.get("budget") or _budget(state, snapshot)
+        history = build_history_context(snapshot, budget)
+    else:
+        history = _history_text(state.get("messages", []))
+    logger.info("history_ctx %s", json.dumps({"conversation_id": state.get("conversation_id"),
+                                               "content": history}, ensure_ascii=False))
     if model is None:
-        return {"resolved_query": state["query"]}
-    history = _history_text(state.get("messages", []))
+        return {"resolved_query": state["query"], "history_ctx": history}
     resolved = await coref_service.resolve(state["query"], history, model)
-    return {"resolved_query": resolved}
+    return {"resolved_query": resolved, "history_ctx": history}
 
 
 async def classify_intent_node(state: dict, runtime: Runtime[dict]) -> dict:
     classifier = runtime.context.get("classifier") if runtime.context else None
-    intent = await safe_classify(classifier, state.get("resolved_query") or state["query"]) if classifier else "unknown"
+    if classifier and hasattr(classifier, "classify_with_history"):
+        class _HistoryClassifier:
+            async def classify(self, query):
+                return await classifier.classify_with_history(query, state.get("history_ctx", ""))
+        intent = await safe_classify(_HistoryClassifier(), state.get("resolved_query") or state["query"])
+    else:
+        intent = await safe_classify(classifier, state.get("resolved_query") or state["query"]) if classifier else "unknown"
     return {"intent": intent, "route": route_by_intent(intent)}
 
 
@@ -126,12 +249,13 @@ def _fit_messages(state: dict, system_text: str) -> list:
 async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
     tools = get_chat_tools(state["route"])
     model = runtime.context["model"]
-    planned = await model.bind_tools(tools).ainvoke(_fit_messages(state, GRAPH_AGENT_SYSTEM))
+    messages, record = _model_input(state, runtime)
+    planned = await model.bind_tools(tools).ainvoke(messages)
     calls = list(planned.tool_calls or [])
     usage = planned.usage_metadata or {}
     tokens = int(usage.get("total_tokens") or 0)
     return {
-        "messages": [planned], "planned_tool_calls": calls,
+        "messages": [planned], "planned_tool_calls": calls, "model_ctx": record,
         "tool_calls": [*state.get("tool_calls", []), *calls],
         "steps": state.get("steps", 0) + 1,
         "tokens_used": state.get("tokens_used", 0) + tokens,
@@ -179,19 +303,20 @@ async def agent_tools(state: dict) -> dict:
         tool_messages.append(run.tool_message)
         results.append({"tool_call_id": run.tool_call_id, "name": run.name,
                         "ok": run.ok, "content": str(run.tool_message.content)})
+    if estimate_tokens(tool_messages) > get_settings().tool_result_max_tokens:
+        raise ContextBudgetExceeded("tool result batch exceeds per-step token budget")
     return {"messages": tool_messages, "tool_results": results,
             "suggested_actions": actions}
 
 
 async def final_answer(state: dict, runtime: Runtime[dict]) -> dict:
     parts = []
-    async for chunk in runtime.context["model"].astream(
-        _fit_messages(state, GRAPH_FINAL_SYSTEM)
-    ):
+    messages, record = _model_input(state, runtime, final=True)
+    async for chunk in runtime.context["model"].astream(messages):
         if isinstance(chunk.content, str):
             parts.append(chunk.content)
     answer = "".join(parts).strip() or "暂时无法给出可靠答复，请稍后再试。"
-    return {"answer": answer, "messages": [AIMessage(content=answer)]}
+    return {"answer": answer, "messages": [AIMessage(content=answer)], "model_ctx": record}
 
 
 async def chitchat_reply(state: dict) -> dict:
