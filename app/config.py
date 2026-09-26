@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     token_budget: int = Field(default=2000, gt=0)
     chat_max_tokens: int = Field(default=1024, gt=0)
     chat_timeout: float = Field(default=60, gt=0)
+    max_agent_steps: int = Field(default=6, ge=1, le=12)
     structured_output_method: Literal["json_mode", "json_schema"] = "json_mode"
     database_url: str = "mysql+asyncmy://root:root@127.0.0.1:3306/mewhelp?charset=utf8mb4"
     test_database_url: str = "mysql+asyncmy://root:root@127.0.0.1:3306/mewhelp_test?charset=utf8mb4"
