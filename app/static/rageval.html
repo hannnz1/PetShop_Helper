@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG 评估 · PetShop Helper</title>
+<style>
+:root{--bg:#f4f7f1;--ink:#203c33;--muted:#60766a;--green:#176c4b;--line:#dae6dd;--warn:#9b6631}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif}button{font:inherit;cursor:pointer}button:disabled{opacity:.55;cursor:default}
+main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px;font-weight:800;color:var(--green);letter-spacing:.15em}h1{font-size:clamp(28px,4vw,42px);margin:7px 0 3px}h2{font-size:20px;margin:0 0 15px}p{color:var(--muted)}.intro{max-width:760px;margin:0 0 23px}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:20px 0}.primary{background:var(--green);border:0;color:white;border-radius:9px;padding:9px 16px}.secondary{background:white;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 15px}.status{font-size:13px;color:var(--muted)}.status.warn{color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card,.section{background:white;border:1px solid var(--line);border-radius:17px;box-shadow:0 8px 24px #26463608}.card{padding:19px}.card small{display:block;color:var(--muted);font-size:12px}.card strong{display:block;font-size:27px;margin-top:5px}.section{padding:24px;margin-top:18px}.section[hidden],.empty[hidden]{display:none}.empty{border:1px dashed #abc8af;border-radius:15px;padding:28px;background:#fff}.subtle{font-size:12px;color:var(--muted)}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 18px}.tabs button{border:1px solid var(--line);background:#f7faf7;border-radius:8px;padding:6px 12px}.tabs button.active{background:#dff1e5;color:var(--green);font-weight:700}
+.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.metric-group{min-width:0}.metric-group h3{font-size:14px;margin:0 0 9px}.bar-row{display:grid;grid-template-columns:115px 1fr 50px;align-items:center;gap:8px;margin:9px 0;font-size:12px}.bar-row .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.track{height:12px;border-radius:99px;background:#edf3ed;overflow:hidden}.fill{height:100%;background:#81bba0;border-radius:99px}.bar-row.best .fill{background:var(--green)}.bar-row.best .name{font-weight:750}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:610px}th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted)}td{font-variant-numeric:tabular-nums}tr.best{background:#edf7ee;font-weight:700}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#122a24;color:#d5e9dc;border-radius:11px;padding:16px;max-height:350px;overflow:auto;font:12px/1.55 Consolas,monospace}.generation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gen-card{padding:16px;border-radius:12px;background:#f5f9f5}.gen-card strong{font-size:22px;display:block}footer{margin-top:25px;color:var(--muted);font-size:12px}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-grid,.generation{grid-template-columns:1fr}.bar-row{grid-template-columns:100px 1fr 50px}}@media(max-width:460px){.grid{grid-template-columns:1fr 1fr}.card strong{font-size:22px}.section{padding:17px}}
+</style>
+</head>
+<body><div id="adminNav"></div><main>
+  <span class="eyebrow">RETRIEVAL / EVIDENCE / ANSWER</span><h1>RAG 评估</h1>
+  <p class="intro">同一份标注集对比 dense、BM25、混合召回与重排。页面直接读取评估脚本保存的报告，重跑会使用已配置的模型与检索服务。</p>
+  <div class="toolbar"><button class="primary" id="rerun" type="button">重跑 RAG 评估</button><button class="secondary" id="refresh" type="button">刷新报告</button><span class="status" id="status" role="status">读取报告中…</span></div>
+  <div class="empty" id="empty" hidden><h2>还没有可读的评估报告</h2><p>请先确认知识库已建好，再点击“重跑 RAG 评估”。生成段需要多次上游模型调用，运行可能持续较久。</p></div>
+  <div id="report" hidden>
+    <div class="grid" id="kpis"></div>
+    <section class="section"><h2>四策略检索质量</h2><p class="subtle" id="chartNote"></p><div class="tabs" id="metricTabs"></div><div class="metric-grid" id="chart"></div></section>
+    <section class="section"><h2>完整分桶数据</h2><div class="table-wrap"><table><thead><tr><th>策略</th><th>政策 MRR</th><th>型号 MRR</th><th>口语 MRR</th><th>平均 Recall@K</th><th>证据覆盖</th></tr></thead><tbody id="table"></tbody></table></div></section>
+    <section class="section"><h2>生成质量</h2><div id="generation"></div></section>
+  </div>
+  <section class="section"><h2>本轮作业日志</h2><p class="subtle">只显示本地白名单作业 <code>eval-rag</code> 的末尾日志。报告中的指标来自保存的 JSON。</p><pre id="log">尚无运行日志。</pre></section>
+  <footer>商品型号资料来自本地知识库；业务规则和演示参数请以正式商品页及平台规则为准。</footer>
+</main><script src="/static/admin.js"></script><script>
+(() => {
+  mountAdminNav('rag-eval');
+  const $ = id => document.getElementById(id);
+  const labels = {vector:'Dense',bm25:'BM25',hybrid:'Hybrid',hybrid_rerank:'Hybrid + Rerank'};
+  const buckets = {A_policy:'政策',B_model:'型号',C_colloquial:'口语',E_multi:'跨文档'};
+  let current = null, metric = 'mrr', timer = null;
+  const percent = value => value == null ? '—' : `${(value*100).toFixed(1)}%`;
+  const node = (tag, className, text) => {const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=String(text);return el;};
+  function weighted(bucketsData, key){let total=0,sum=0;for(const data of Object.values(bucketsData||{})){const count=Number(data.count)||0;total+=count;sum+=(Number(data[key])||0)*count;}return total?sum/total:null;}
+  function average(values){const nums=values.filter(value=>value!=null);return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:null;}
+  function card(label, value){const el=node('article','card');el.append(node('small','',label),node('strong','',value));return el;}
+  function renderChart(){
+    if(!current)return; const root=$('chart');root.replaceChildren();
+    const strategies=Object.keys(current.retrieval||{}), grouped=Object.keys((current.retrieval[strategies[0]]||{}));
+    for(const bucket of grouped){const group=node('div','metric-group');group.append(node('h3','',buckets[bucket]||bucket));
+      for(const strategy of strategies){const value=metric==='evidence'?(current.evidence_coverage[strategy]||{})[bucket]:(current.retrieval[strategy]||{})[bucket]?.[metric];
+        const row=node('div','bar-row'+(strategy===current.best?.strategy?' best':''));row.append(node('span','name',labels[strategy]||strategy));
+        const track=node('div','track'),fill=node('div','fill');fill.style.width=`${Math.max(0,Math.min(100,(Number(value)||0)*100))}%`;track.append(fill);row.append(track,node('span','',percent(value)));group.append(row);
+      }root.append(group);
+    }
+    $('chartNote').textContent=metric==='mrr'?'MRR 越高，正确章节越靠前。':metric==='recall_at_k'?'Recall 表示前 K 条里是否找到了标注章节。':'证据覆盖检查答案要点是否出现在召回原文里。';
+  }
+  function render(data){
+    current=data;$('empty').hidden=data.present;$('report').hidden=!data.present;
+    $('log').textContent=data.job?.log_tail||'尚无运行日志。';
+    if(!data.present){$('status').textContent='尚无报告';return;}
+    const retrieval=data.retrieval||{}, strategies=Object.keys(retrieval), kpis=$('kpis');kpis.replaceChildren();
+    const count=data.meta?.question_count??'—', best=data.best;
+    kpis.append(card('评估题数',count),card('最佳整体 MRR',best?percent(best.mrr):'—'),
+      card('最佳策略',best?(labels[best.strategy]||best.strategy):'—'),
+      card('库外拒答率',percent(data.generation?.refusal_rate)));
+    $('status').textContent=`上次评估：${data.meta?.evaluated_at?new Date(data.meta.evaluated_at).toLocaleString('zh-CN'):'时间未知'} · Top-${data.meta?.top_k??'—'}`;
+    const tabs=$('metricTabs');tabs.replaceChildren();for(const [key,label] of [['mrr','MRR'],['recall_at_k','Recall@K'],['evidence','证据覆盖度']]){
+      const button=node('button',metric===key?'active':'',label);button.type='button';button.onclick=()=>{metric=key;renderChart();for(const child of tabs.children)child.classList.toggle('active',child===button);};tabs.append(button);
+    }renderChart();
+    const table=$('table');table.replaceChildren();for(const strategy of strategies){const tr=node('tr',strategy===best?.strategy?'best':'');const byBucket=retrieval[strategy]||{};
+      tr.append(node('td','',labels[strategy]||strategy));for(const bucket of ['A_policy','B_model','C_colloquial'])tr.append(node('td','',percent(byBucket[bucket]?.mrr)));
+      tr.append(node('td','',percent(weighted(byBucket,'recall_at_k'))),node('td','',percent(average(Object.values(data.evidence_coverage[strategy]||{})))));table.append(tr);
+    }
+    const gen=$('generation');gen.replaceChildren();if(!data.generation_done){gen.append(node('p','', '本轮仅有检索与证据指标；生成段尚未完成。可在上游可用时重跑。'));return;}
+    gen.className='generation';const values=data.generation||{};
+    gen.append(card('忠实度',percent(values.faithfulness)),card('库外拒答率',percent(values.refusal_rate)));
+    for(const strategy of strategies){const score=average(Object.values(values.answer_coverage?.[strategy]||{}));gen.append(card((labels[strategy]||strategy)+' 答案覆盖',percent(score)));}
+  }
+  async function load(){try{const r=await fetch('/api/rag-eval/overview');if(!r.ok)throw Error('HTTP '+r.status);render(await r.json());}catch(e){$('status').textContent='读取失败：'+e.message;$('status').classList.add('warn');}}
+  async function poll(){await load();if(current?.job?.state!=='running'){clearInterval(timer);timer=null;$('rerun').disabled=false;}}
+  $('refresh').onclick=load;
+  $('rerun').onclick=async()=>{
+    if(!window.confirm('这轮会对评估题逐条调用已配置的检索与模型服务，可能持续较久并消耗 API 额度。确认重跑吗？'))return;
+    $('rerun').disabled=true;$('status').textContent='正在启动评估…';
+    try{const r=await fetch('/api/jobs/eval-rag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})});if(!r.ok)throw Error('启动失败（'+r.status+'）');await load();if(!timer)timer=setInterval(poll,2500);}
+    catch(e){$('status').textContent=e.message;$('status').classList.add('warn');$('rerun').disabled=false;}
+  };
+  load();
+})();
+</script></body></html>

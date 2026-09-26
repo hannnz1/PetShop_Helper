@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request
 
-from app.api import kb
+from app.api import kb, rageval
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -26,6 +26,15 @@ async def overview(request: Request) -> dict:
         status, summary = "empty", "还没有知识块"
     else:
         status, summary = "normal", "知识库已同步"
+    report = rageval._report()
+    best = rageval._best(report["retrieval"]) if report else None
+    rag_metrics = {"题数": report["meta"].get("question_count", 0)} if report else {}
+    if best:
+        rag_metrics["最佳 MRR"] = round(best["mrr"], 3)
+    if report and report.get("generation"):
+        refusal = report["generation"].get("refusal_rate")
+        if refusal is not None:
+            rag_metrics["库外拒答率"] = f"{refusal:.0%}"
     return {"modules": [
         {"id": "chat", "name": "纯对话客服", "href": "/", "status": "unknown",
          "summary": "入口可用；上游模型状态未在此页检测"},
@@ -33,4 +42,8 @@ async def overview(request: Request) -> dict:
          "summary": "入口可用；业务工具状态未在此页检测"},
         {"id": "kb", "name": "知识库", "href": "/kb", "status": status,
          "summary": summary, "mysql": stats, "milvus_count": milvus["count"]},
+        {"id": "rag-eval", "name": "RAG 评估", "href": "/rag-eval",
+         "status": "normal" if report else "empty",
+         "summary": "四策略报告可查看" if report else "尚未生成评估报告",
+         "metrics": rag_metrics},
     ]}

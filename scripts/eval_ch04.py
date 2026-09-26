@@ -103,11 +103,12 @@ def _load_samples(path: Path = SAMPLES) -> list[dict]:
 
 async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str, str], list[dict]]:
     gate = asyncio.Semaphore(8)
+    rewrite_gate = asyncio.Semaphore(3)
     results = {}
     rewritten: dict[str, tuple[str, str]] = {}
 
     async def rewrite(sample: dict):
-        async with gate:
+        async with rewrite_gate:
             try:
                 understood = await asyncio.wait_for(
                     query_understanding.understand(sample["query"]), timeout=CALL_TIMEOUT,

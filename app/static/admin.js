@@ -6,6 +6,7 @@
     { label: '问题池', href: '/topics', key: 'topics' },
     { label: '审核队列', href: '/review', key: 'review' },
     { label: '验收看板', href: '/acceptance', key: 'acceptance' },
+    { label: 'RAG 评估', href: '/rag-eval', key: 'rag-eval' },
   ];
   const subpages = {
     kb: [

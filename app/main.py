@@ -14,6 +14,7 @@ from app.api.extract import router as extract_router
 from app.api.jobs import router as jobs_router
 from app.api.kb import router as kb_router
 from app.api.admin import router as admin_router
+from app.api.rageval import router as rageval_router
 from app.config import Settings, get_settings
 from app.core.jobs import JobRunner
 from app.core.llm import get_chat_model
@@ -73,6 +74,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
     application.include_router(kb_router)
     application.include_router(jobs_router)
     application.include_router(admin_router)
+    application.include_router(rageval_router)
     application.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
     @application.get("/", include_in_schema=False)
@@ -86,6 +88,10 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
     @application.get("/admin", include_in_schema=False)
     def admin_page() -> FileResponse:
         return FileResponse(_STATIC / "admin.html")
+
+    @application.get("/rag-eval", include_in_schema=False)
+    def rag_eval_page() -> FileResponse:
+        return FileResponse(_STATIC / "rageval.html")
 
     @application.get("/health")
     def health() -> dict[str, str]:

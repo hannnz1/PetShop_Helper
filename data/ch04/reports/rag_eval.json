@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "evaluated_at": "2026-09-26T01:59:52.596722+00:00",
+    "question_count": 80,
+    "top_k": 10,
+    "embed_model": "BAAI/bge-m3",
+    "rerank_model": "BAAI/bge-reranker-v2-m3",
+    "judge_model": "glm-5.2"
+  },
+  "retrieval": {
+    "vector": {
+      "A_policy": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.9
+      },
+      "B_model": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.9416666666666667
+      },
+      "C_colloquial": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.95
+      }
+    },
+    "bm25": {
+      "A_policy": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.9166666666666666
+      },
+      "B_model": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 1.0
+      },
+      "C_colloquial": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.9083333333333334
+      }
+    },
+    "hybrid": {
+      "A_policy": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.9166666666666666
+      },
+      "B_model": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.975
+      },
+      "C_colloquial": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.9416666666666667
+      }
+    },
+    "hybrid_rerank": {
+      "A_policy": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.975
+      },
+      "B_model": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 1.0
+      },
+      "C_colloquial": {
+        "count": 20,
+        "recall_at_k": 1.0,
+        "mrr": 0.95
+      }
+    }
+  },
+  "evidence_coverage": {
+    "vector": {
+      "A_policy": 1.0,
+      "B_model": 1.0,
+      "C_colloquial": 1.0
+    },
+    "bm25": {
+      "A_policy": 1.0,
+      "B_model": 1.0,
+      "C_colloquial": 1.0
+    },
+    "hybrid": {
+      "A_policy": 1.0,
+      "B_model": 1.0,
+      "C_colloquial": 1.0
+    },
+    "hybrid_rerank": {
+      "A_policy": 1.0,
+      "B_model": 1.0,
+      "C_colloquial": 1.0
+    }
+  },
+  "generation": null
+}

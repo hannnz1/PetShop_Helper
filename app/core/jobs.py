@@ -28,6 +28,7 @@ JOB_SPECS = {
         JobSpec("seed-conv", "seed-conv"),
         JobSpec("kb-mine", "kb-mine", heavy=True),
         JobSpec("eval-mining", "eval-mining"),
+        JobSpec("eval-rag", "eval-rag", heavy=True),
     )
 }
 
