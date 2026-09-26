@@ -131,11 +131,11 @@
 
 **Interfaces:** `POST /api/actions/create-refund` 请求 `user_id/conversation_id/order_id/reason/request_id`，返回 `refund_no/status`；固定五种原因。
 
-- [ ] 写失败测试：合法确认一条待审核申请；他人会话/订单 404；空/非法原因 422；重复同 payload 同申请号；相同 ID 不同订单/原因 409；不改变订单和工单状态。
-- [ ] 跑 `pytest -q tests/test_ch06_refund_api.py` 确认红。
-- [ ] 在 FastAPI 请求模型校验原因并调用 Task 2 仓储；数据库再校验用户与订单归属，不能只靠页面/模型。
-- [ ] 跑定向和 Ch05 建工单 API 回归。
-- [ ] 提交并追记。
+- [x] 写失败测试：合法确认一条待审核申请；他人会话/订单 404；空/非法原因 422；重复同 payload 同申请号；相同 ID 不同订单/原因 409；不改变订单和工单状态。
+- [x] 跑 `pytest -q tests/test_ch06_refund_api.py` 确认红。
+- [x] 在 FastAPI 请求模型校验原因并调用 Task 2 仓储；数据库再校验用户与订单归属，不能只靠页面/模型。
+- [x] 跑定向和 Ch05 建工单 API 回归。
+- [x] 提交并追记。
 
 ### Task 9: 聊天页面交互（Vibe Coding 例外）
 

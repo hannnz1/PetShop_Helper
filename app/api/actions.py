@@ -1,9 +1,11 @@
 """Explicit, user-confirmed write actions."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.chat import get_model, graph_event_stream
@@ -15,6 +17,46 @@ from app.graph.runtime import (
 from app.tools.infra import ToolInfrastructureError
 
 router = APIRouter()
+
+
+RefundReason = Literal["七天无理由", "质量问题", "发错货", "不想要了", "其他"]
+
+
+class CreateRefundRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    user_id: str = Field(min_length=1, max_length=64)
+    conversation_id: int = Field(gt=0)
+    order_id: str = Field(min_length=1, max_length=64)
+    reason: RefundReason
+    request_id: str = Field(min_length=1, max_length=64)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def exact_reason(cls, value):
+        if isinstance(value, str) and value != value.strip():
+            raise ValueError("reason must match one fixed option exactly")
+        return value
+
+
+class CreateRefundResponse(BaseModel):
+    refund_no: str
+    status: str
+
+
+@router.post("/api/actions/create-refund", response_model=CreateRefundResponse)
+async def create_refund(req: CreateRefundRequest) -> CreateRefundResponse:
+    try:
+        refund_no = await repository.create_refund_request(
+            req.conversation_id, req.user_id, req.order_id, req.reason, req.request_id,
+        )
+    except repository.OrderNotOwned:
+        raise HTTPException(status_code=404, detail="会话或订单不存在") from None
+    except repository.RefundRequestConflict:
+        raise HTTPException(status_code=409, detail="请求标识已用于其他退款申请") from None
+    except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):
+        raise HTTPException(status_code=503, detail="数据库暂时不可用，请稍后重试") from None
+    return CreateRefundResponse(refund_no=refund_no, status="待人工审核")
 
 
 class ResumeOrderRequest(BaseModel):
