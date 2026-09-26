@@ -104,7 +104,7 @@ def _load_samples(path: Path = SAMPLES) -> list[dict]:
 async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str, str], list[dict]]:
     gate = asyncio.Semaphore(8)
     results = {}
-    rewritten: dict[str, str] = {}
+    rewritten: dict[str, tuple[str, str]] = {}
 
     async def rewrite(sample: dict):
         async with gate:
@@ -114,10 +114,11 @@ async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str
                 )
                 standard = understood["standard"]
                 expanded = understood["expanded"]
-                rewritten[sample["id"]] = standard + (" " + " ".join(expanded) if expanded else "")
+                lexical = standard + (" " + " ".join(expanded) if expanded else "")
+                rewritten[sample["id"]] = (standard, lexical)
             except Exception as exc:  # noqa: BLE001 - keep retrieval measurable on raw query
                 lines.append(f"REWRITE_ERROR {sample['id']}: {type(exc).__name__}")
-                rewritten[sample["id"]] = sample["query"]
+                rewritten[sample["id"]] = (sample["query"], sample["query"])
 
     await asyncio.gather(*(rewrite(sample) for sample in samples))
 
@@ -125,7 +126,10 @@ async def _retrieve_all(samples: list[dict], lines: list[str]) -> dict[tuple[str
         async with gate:
             try:
                 value = await asyncio.wait_for(
-                    retrieval.search_knowledge(rewritten[sample["id"]], top_k=K, strategy=strategy),
+                    retrieval.search_knowledge(
+                        rewritten[sample["id"]][0], top_k=K, strategy=strategy,
+                        bm25_query=rewritten[sample["id"]][1],
+                    ),
                     timeout=90,
                 )
                 results[(strategy, sample["id"])] = value

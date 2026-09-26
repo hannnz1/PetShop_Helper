@@ -102,7 +102,7 @@ async def query_faq(keyword: str, category: str | None = None) -> dict:
     expanded = understood["expanded"]
     search_query = standard + (" " + " ".join(expanded) if expanded else "")
     hits = await retrieval.search_knowledge(
-        search_query, strategy="hybrid_rerank", category=category,
+        standard, strategy="hybrid_rerank", category=category, bm25_query=search_query,
     )
     top_score = hits[0]["rerank_score"] if hits else 0.0
     if not hits or top_score < settings.rerank_min_score:

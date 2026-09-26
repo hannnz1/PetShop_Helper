@@ -20,8 +20,8 @@ async def test_sufficient_evidence_has_aligned_numbered_citations(monkeypatch):
         return {"standard": "邮费多少", "expanded": ["运费"]}
 
     async def search(query, **kwargs):
-        assert query == "邮费多少 运费"
-        assert kwargs == {"strategy": "hybrid_rerank", "category": "运费"}
+        assert query == "邮费多少"
+        assert kwargs == {"strategy": "hybrid_rerank", "category": "运费", "bm25_query": "邮费多少 运费"}
         return [
             {"id": 1, "rerank_score": 0.9, "question": "运费", "answer": "满99元包邮", "section_path": "运费政策", "content_type": "faq", "category": "运费"},
             {"id": 2, "rerank_score": 0.6, "question": "不足99元", "answer": "收10元运费", "section_path": "运费政策", "content_type": "policy", "category": "运费"},

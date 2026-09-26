@@ -69,6 +69,29 @@ async def test_hybrid_strategy_uses_recall_budget_then_final_limit(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_hybrid_expansion_only_reaches_bm25(monkeypatch):
+    async def embed(query):
+        assert query == "邮费多少"
+        return [0.1] * 1024
+
+    async def rerank(query, docs, top_n):
+        assert query == "邮费多少"
+        return [(0, 0.9)]
+
+    def hybrid(client, vector, text, **kwargs):
+        assert text == "邮费多少 运费"
+        return [{"id": 1, "question": "运费", "answer": "满99包邮"}]
+
+    monkeypatch.setattr(retrieval.embeddings, "embed_query", embed)
+    monkeypatch.setattr(retrieval.milvus_client, "hybrid_search", hybrid)
+    monkeypatch.setattr(retrieval.rerank, "rerank", rerank)
+    hits = await retrieval.search_knowledge(
+        "邮费多少", bm25_query="邮费多少 运费", strategy="hybrid_rerank", client=object(),
+    )
+    assert hits[0]["id"] == 1
+
+
+@pytest.mark.asyncio
 async def test_hybrid_rerank_preserves_original_hit_and_attaches_score(monkeypatch):
     async def embed(query):
         return [0.1] * 1024

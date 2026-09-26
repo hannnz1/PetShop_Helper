@@ -16,6 +16,7 @@ async def search_knowledge(
     query: str, top_k: int | None = None,
     min_score: float | None = None, client=None,
     *, strategy: str | None = None, category: str | None = None,
+    bm25_query: str | None = None,
     collection: str = milvus_client.COLLECTION,
 ) -> list[dict]:
     """Use the old Lite path by default; opt into Chapter 4 routes explicitly."""
@@ -30,6 +31,7 @@ async def search_knowledge(
         raise ValueError("top_k must be positive")
     if strategy is not None and min_score is not None:
         raise ValueError("min_score applies only to legacy retrieval")
+    lexical_query = bm25_query if bm25_query is not None else query
 
     if strategy is None:
         threshold = settings.retrieval_min_score if min_score is None else min_score
@@ -45,7 +47,7 @@ async def search_knowledge(
     milvus_client.ensure_collection(client, collection=collection)
     if strategy == "bm25":
         return milvus_client.bm25_search(
-            client, query, top_k=limit, category=category, collection=collection,
+            client, lexical_query, top_k=limit, category=category, collection=collection,
         )
 
     vector = await embeddings.embed_query(query)
@@ -55,7 +57,7 @@ async def search_knowledge(
         )
 
     hits = milvus_client.hybrid_search(
-        client, vector, query, top_k=settings.recall_top_k,
+        client, vector, lexical_query, top_k=settings.recall_top_k,
         recall=settings.recall_top_k, category=category, collection=collection,
     )
     if strategy == "hybrid":
