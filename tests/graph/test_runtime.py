@@ -33,13 +33,13 @@ async def test_runtime_allocates_mysql_conversation_and_restores_sqlite_history(
 
     path = tmp_path / "checkpoint.sqlite"
     model = FakeListChatModel(responses=["unused"])
-    async with GraphRuntime(path, _build_graph) as runtime:
+    async with GraphRuntime(path, _build_graph, enforce_audit=False) as runtime:
         first = await runtime.ainvoke_turn("owner", "第一轮", None, model=model)
         conversation_id = first["conversation_id"]
         assert first["answer"] == "1"
         assert (await repository.get_conversation(conversation_id)).user_id == "owner"
 
-    async with GraphRuntime(path, _build_graph) as runtime:
+    async with GraphRuntime(path, _build_graph, enforce_audit=False) as runtime:
         second = await runtime.ainvoke_turn("owner", "第二轮", conversation_id, model=model)
     assert second["answer"] == "3"
     assert len(second["messages"]) == 4
@@ -53,7 +53,7 @@ async def test_runtime_rejects_other_user_before_checkpoint_read(
 
     conversation_id = await repository.create_conversation("owner")
     model = FakeListChatModel(responses=["unused"])
-    async with GraphRuntime(tmp_path / "checkpoint.sqlite", _build_graph) as runtime:
+    async with GraphRuntime(tmp_path / "checkpoint.sqlite", _build_graph, enforce_audit=False) as runtime:
         with pytest.raises(ConversationNotFound):
             await runtime.ainvoke_turn("intruder", "偷看", conversation_id, model=model)
         assert runtime.graph.get_state is not None
@@ -72,7 +72,7 @@ async def test_same_conversation_returns_busy_instead_of_interleaving(
     def factory(saver):
         return _build_graph(saver, entered=entered, release=release)
 
-    async with GraphRuntime(tmp_path / "checkpoint.sqlite", factory) as runtime:
+    async with GraphRuntime(tmp_path / "checkpoint.sqlite", factory, enforce_audit=False) as runtime:
         first = asyncio.create_task(runtime.ainvoke_turn("owner", "先来", conversation_id, model=model))
         await asyncio.wait_for(entered.wait(), timeout=2)
         with pytest.raises(ConversationBusy):

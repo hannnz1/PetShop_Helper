@@ -1,4 +1,4 @@
-"""The five chapter-two tools exposed to the model and execution layer."""
+"""Read tools exposed to models; the legacy ticket tool is not model-bound."""
 
 from langchain_core.tools import BaseTool
 
@@ -15,9 +15,8 @@ _ALL: tuple[BaseTool, ...] = (
     query_product,
     query_logistics,
     query_faq,
-    create_ticket,
 )
-_BY_NAME: dict[str, BaseTool] = {tool.name: tool for tool in _ALL}
+_BY_NAME: dict[str, BaseTool] = {tool.name: tool for tool in (*_ALL, create_ticket)}
 
 NO_RETRY: set[str] = {"create_ticket"}
 INJECT_CONVERSATION: set[str] = {"create_ticket"}

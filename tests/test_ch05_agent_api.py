@@ -3,7 +3,7 @@
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.graph.runtime import ConversationBusy, ConversationNotFound
+from app.graph.runtime import ConversationBusy, ConversationNotFound, GraphDivergence
 from app.main import create_app
 
 
@@ -41,3 +41,9 @@ def test_agent_maps_graph_ownership_and_busy(tmp_path):
 
         client.app.state.graph.ainvoke_turn = busy
         assert client.post("/api/agent", json=payload).status_code == 409
+
+        async def divergent(*args, **kwargs):
+            raise GraphDivergence()
+
+        client.app.state.graph.ainvoke_turn = divergent
+        assert client.post("/api/agent", json=payload).status_code == 503

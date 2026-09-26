@@ -123,16 +123,13 @@ async def fallback_reply(state: dict) -> dict:
 async def log_turn(state: dict) -> dict:
     """MySQL remains the business audit log independent of SQLite checkpoints."""
     conversation_id = state["conversation_id"]
-    await repository.append_message(conversation_id, "user", content=state["query"])
-    for run in state.get("tool_results", []):
-        await repository.append_message(
-            conversation_id, "tool", content=run["content"],
-            tool_call_id=run["tool_call_id"],
-        )
-    await repository.append_message(conversation_id, "assistant", content=state["answer"])
+    marker = await repository.append_turn_messages(
+        conversation_id, state["query"], state.get("tool_results", []), state["answer"],
+    )
     return {"conversation_id": conversation_id,
             "trace": {"intent": state.get("intent"), "route": state.get("route"),
-                      "steps": state.get("steps", 0), "tokens_used": state.get("tokens_used", 0)}}
+                      "steps": state.get("steps", 0), "tokens_used": state.get("tokens_used", 0),
+                      "audit_message_id": marker}}
 
 
 def _strong_evidence(payload: object) -> bool:

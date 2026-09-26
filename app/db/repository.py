@@ -66,6 +66,31 @@ async def list_messages(conversation_id: int) -> list[Message]:
         return list(result.scalars())
 
 
+async def last_message_id(conversation_id: int) -> int | None:
+    """Return the last committed MySQL audit row for a conversation."""
+    async with db.async_session() as session:
+        return await session.scalar(select(func.max(Message.id)).where(
+            Message.conversation_id == conversation_id,
+        ))
+
+
+async def append_turn_messages(
+    conversation_id: int, query: str, tool_results: list[dict], answer: str,
+) -> int:
+    """Commit a complete graph turn atomically; return its audit marker."""
+    async with db.async_session.begin() as session:
+        rows = [Message(conversation_id=conversation_id, role="user", content=query)]
+        rows.extend(Message(
+            conversation_id=conversation_id, role="tool",
+            content=run["content"], tool_call_id=run["tool_call_id"],
+        ) for run in tool_results)
+        final = Message(conversation_id=conversation_id, role="assistant", content=answer)
+        rows.append(final)
+        session.add_all(rows)
+        await session.flush()
+        return final.id
+
+
 async def search_faq(keyword: str) -> list[Faq]:
     """Match text literally and return at most ten FAQ rows in stable order."""
 

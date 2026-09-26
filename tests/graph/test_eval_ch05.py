@@ -28,7 +28,7 @@ async def test_fixed_graph_paths_do_not_call_model_or_create_ticket(monkeypatch,
     async def forbidden(*args, **kwargs):
         raise AssertionError("fixed exit must not write ticket")
 
-    monkeypatch.setattr(nodes.repository, "append_message", no_log)
+    monkeypatch.setattr(nodes.repository, "append_turn_messages", no_log)
     monkeypatch.setattr(nodes.repository, "create_ticket_only", forbidden)
     result = await build_graph().ainvoke(new_turn("owner", 1, "我要投诉"),
                                         context={"classifier": Classifier(intent), "model": object()})

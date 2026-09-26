@@ -42,8 +42,10 @@ async def _next_frame(lines) -> str:
 
 async def check_socket_stream() -> None:
     fake = GatedFakeProducer()
-    original_stream = GraphRuntime.astream_turn
-    GraphRuntime.astream_turn = fake.stream
+    original_stream = GraphRuntime.prepare_stream_turn
+    async def prepare(self, user_id, message, conversation_id, *, model):
+        return fake.stream(user_id, message, conversation_id, model=model)
+    GraphRuntime.prepare_stream_turn = prepare
     settings = Settings(
         _env_file=None,
         chat_model="offline-fake",
@@ -99,7 +101,7 @@ async def check_socket_stream() -> None:
             await asyncio.wait_for(server_task, 5)
         finally:
             sock.close()
-            GraphRuntime.astream_turn = original_stream
+            GraphRuntime.prepare_stream_turn = original_stream
 
 
 if __name__ == "__main__":

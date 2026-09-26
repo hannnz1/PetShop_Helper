@@ -96,6 +96,8 @@ Windows PowerShell 对应命令：
 
 最后一个命令只在 `127.0.0.1:8767` 提供假 SSE 与内存工单，用于浏览器查看按钮交互，绝不代表真实建单。真实服务的流式命令仍用前文 `curl -sN /api/chat`；投诉时 SSE 会额外发送 `actions` 帧。第 5 章 [离线报告](data/ch05/reports/offline_eval.json) 的五路径均为 `passed_offline`，真实 glm-5.2 分类准确率、聊天 SSE 和 JSON 验收仍为 `pending_upstream`，因为账户上游已返回余额不足；未自动重试收费调用。开发过程见 [第 5 章记录](dev-notes/ch05.md)。
 
+服务以 MySQL 消息审计为准。若 SQLite checkpoint 缺失、过期或上轮执行未完成，续聊会返回 503 并在服务日志记录会话号和审计标记；请保留两份数据供排查，用户可开始新对话。当前没有自动恢复旧会话历史的功能。第 2 章的 `eval-agent`、`eval-prompts` 和旧演示脚本使用单轮工具合同，属于历史验收，不适用于第 5 章的新图接口；使用 `eval-ch05` 查看当前离线结论。
+
 ## 第 3 章当前可用的演示入口
 
 `.env` 还需本机配置 `SILICONFLOW_API_KEY`。真实 SiliconFlow `BAAI/bge-m3` 已返回两条 1024 维向量；`/kb`、`/admin` 页面和相关 API 已接入。Windows 可在项目根目录运行：

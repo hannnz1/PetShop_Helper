@@ -45,7 +45,7 @@ async def test_second_tool_decision_sees_first_result_and_final_answer_is_separa
     from app.graph.build import build_graph
     from app.graph import nodes
 
-    monkeypatch.setattr(nodes.repository, "append_message", _no_log)
+    monkeypatch.setattr(nodes.repository, "append_turn_messages", _no_log)
     model = Model([
         AIMessage(content="先查订单", tool_calls=[
             {"name": "query_order", "args": {"order_id": "1001"}, "id": "order-1"}]),
@@ -73,7 +73,7 @@ async def test_model_forged_ticket_call_is_rejected_without_write(monkeypatch):
     from app.graph.build import build_graph
     from app.graph import nodes
 
-    monkeypatch.setattr(nodes.repository, "append_message", _no_log)
+    monkeypatch.setattr(nodes.repository, "append_turn_messages", _no_log)
 
     async def forbidden(*args):
         raise AssertionError("model must never create a ticket")
@@ -98,7 +98,7 @@ async def test_sixth_planning_step_stops_without_executing_sixth_tool(monkeypatc
     from app.graph.build import build_graph
     from app.graph import nodes
 
-    monkeypatch.setattr(nodes.repository, "append_message", _no_log)
+    monkeypatch.setattr(nodes.repository, "append_turn_messages", _no_log)
     replies = [AIMessage(content="", tool_calls=[
         {"name": "query_order", "args": {"order_id": "1001"}, "id": f"call-{index}"}
     ]) for index in range(6)]
@@ -118,7 +118,7 @@ async def test_knowledge_route_binds_only_order_tool_after_valid_evidence(monkey
     from app.graph.build import build_graph
     from app.graph import nodes
 
-    monkeypatch.setattr(nodes.repository, "append_message", _no_log)
+    monkeypatch.setattr(nodes.repository, "append_turn_messages", _no_log)
 
     async def rag(state):
         return {"sufficient": True, "evidence": "[1] 退货政策", "citations": [

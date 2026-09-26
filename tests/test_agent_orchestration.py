@@ -249,7 +249,7 @@ async def test_fast_db_failure_prevents_later_write_and_orphan_ticket(db_session
 
 
 @pytest.mark.asyncio
-async def test_successful_write_is_audited_before_later_failure(db_session_factory, db_clean, monkeypatch):
+async def test_forged_write_is_rejected_before_later_failure(db_session_factory, db_clean, monkeypatch):
     planned = AIMessage(content="审计", tool_calls=[
         {"name": "create_ticket", "args": {"description": "投诉", "ticket_type": "投诉"}, "id": "write"},
         {"name": "query_faq", "args": {"keyword": "退款"}, "id": "read"},
@@ -267,7 +267,4 @@ async def test_successful_write_is_audited_before_later_failure(db_session_facto
         await agent.run_agent_turn("u1", "投诉", None, model=model)
     async with db_session_factory() as session:
         tickets = (await session.execute(select(Ticket))).scalars().all()
-    assert len(tickets) == 1
-    rows = await repository.list_messages(tickets[0].conversation_id)
-    assert [row.role for row in rows] == ["user", "assistant", "tool"]
-    assert rows[-1].tool_call_id == "write"
+    assert tickets == []

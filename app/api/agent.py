@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.chat import get_model
 from app.core import agent
-from app.graph.runtime import ConversationBusy, ConversationNotFound
+from app.graph.runtime import ConversationBusy, ConversationNotFound, GraphDivergence
 from app.schemas.agent import AgentRequest, AgentResponse, ToolCallView, ToolResultView
 from app.tools.infra import ToolInfrastructureError
 
@@ -27,6 +27,8 @@ async def run_agent(req: AgentRequest, request: Request,
         raise HTTPException(status_code=404, detail="会话不存在") from None
     except ConversationBusy:
         raise HTTPException(status_code=409, detail="会话正在处理上一条消息") from None
+    except GraphDivergence:
+        raise HTTPException(status_code=503, detail="会话状态需恢复，请开启新对话") from None
     except agent.ContextBudgetExceeded:
         raise HTTPException(status_code=422, detail="消息超出上下文预算") from None
     except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):

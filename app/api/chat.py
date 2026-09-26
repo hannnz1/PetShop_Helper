@@ -4,13 +4,13 @@ import json
 import logging
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core import agent
-from app.graph.runtime import ConversationBusy, ConversationNotFound
+from app.graph.runtime import ConversationBusy, ConversationNotFound, GraphDivergence
 from app.schemas.chat import ChatRequest
 from app.tools.infra import ToolInfrastructureError
 
@@ -33,12 +33,25 @@ def _error(message: str) -> str:
 @router.post("/api/chat")
 async def chat(req: ChatRequest, request: Request,
                model: BaseChatModel = Depends(get_model)) -> StreamingResponse:
+    try:
+        graph_stream = await request.app.state.graph.prepare_stream_turn(
+            req.user_id, req.message, req.conversation_id, model=model,
+        )
+    except ConversationNotFound:
+        raise HTTPException(status_code=404, detail="会话不存在") from None
+    except ConversationBusy:
+        raise HTTPException(status_code=409, detail="会话正在处理上一条消息") from None
+    except GraphDivergence:
+        raise HTTPException(status_code=503, detail="会话状态需恢复，请开启新对话") from None
+    except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):
+        logger.warning("Chat preflight database failure user_id=%s", req.user_id)
+        raise HTTPException(status_code=503, detail="数据库暂时不可用，请稍后重试") from None
+
     async def event_stream() -> AsyncIterator[str]:
         completed = False
+        seen_tools: set[str] = set()
         try:
-            async for mode, payload in request.app.state.graph.astream_turn(
-                req.user_id, req.message, req.conversation_id, model=model
-            ):
+            async for mode, payload in graph_stream:
                 if mode == "messages":
                     chunk, metadata = payload
                     if metadata.get("langgraph_node") == "final_answer" and isinstance(chunk.content, str) and chunk.content:
@@ -48,7 +61,11 @@ async def chat(req: ChatRequest, request: Request,
                     continue
                 for node, update in payload.items():
                     if node == "agent_tools":
-                        for run in update.get("tool_results", []):
+                        for index, run in enumerate(update.get("tool_results", [])):
+                            identifier = run.get("tool_call_id") or f"index:{index}"
+                            if identifier in seen_tools:
+                                continue
+                            seen_tools.add(identifier)
                             yield _sse({"event": "tool", "name": run["name"]})
                     elif node == "forced_rag" and update.get("citations"):
                         yield _sse({"event": "citations", "items": update["citations"]})
@@ -66,6 +83,9 @@ async def chat(req: ChatRequest, request: Request,
         except ConversationBusy:
             yield _error("会话正在处理上一条消息")
             return
+        except GraphDivergence:
+            yield _error("会话状态需恢复，请开启新对话")
+            return
         except agent.ContextBudgetExceeded:
             yield _error("消息超出上下文预算")
             return
@@ -78,6 +98,8 @@ async def chat(req: ChatRequest, request: Request,
             logger.warning("Chat model or orchestration failure user_id=%s", req.user_id)
             yield _error("上游模型暂时不可用，请稍后重试")
             return
+        finally:
+            await graph_stream.aclose()
         if completed:
             yield "data: [DONE]\n\n"
         else:

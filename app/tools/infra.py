@@ -56,6 +56,8 @@ async def execute_tool_call(
     safe_id = call_id if isinstance(call_id, str) and call_id else "invalid-tool-call"
     if not isinstance(name, str) or not name or not isinstance(call_id, str) or not call_id:
         return _error_run(safe_id, safe_name, "工具调用缺少名称或 ID")
+    if name == "create_ticket":
+        return _error_run(safe_id, name, "建工单仅能由用户确认动作执行")
     if allowed_names is not None and name not in allowed_names:
         return _error_run(safe_id, name, "当前路径不允许此工具")
     args = tool_call.get("args")

@@ -15,3 +15,5 @@
 SQLAlchemy 通过 Context7 `/websites/sqlalchemy_en_20` 核对 2.0 的 `AsyncSession`/事务及唯一约束冲突处理；同一个 `request_id` 的并发提交以数据库唯一约束为最终防线，捕获 `IntegrityError` 后须结束失败事务再查询已存在记录。来源：[AsyncIO 扩展](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)、[会话事务](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html/)。实施前仍需在当前 MySQL/asyncmy 版本上做隔离集成测试。
 
 Task 9 前补查 Context7 `/websites/langchain_oss_python`：`ChatPromptTemplate.from_messages(...) | model.with_structured_output(PydanticModel, method=...)` 可构成异步 `ainvoke` 链；OpenAI 集成官方示例使用 Pydantic schema 和 `json_schema`，当前项目已有 `json_mode` 配置与售后提取实测，故分类器沿用同一可配置 method。来源：[LangChain 模型结构化输出](https://docs.langchain.com/oss/python/integrations/chat/openai)、[Runnable 异步调用](https://docs.langchain.com/oss/python/integrations/chat/sambanova)。本机用 `RunnableLambda` 假模型验证链路，真实上游分类准确率待额度恢复。
+
+代码复核修复前再查 Context7 `/langchain-ai/langgraph` 官方源码：编译图的 `aget_state(config)` 返回 `StateSnapshot`，缺检查点时 `values={}`、`next=()`；有未完成任务时 `next` 含后续节点。第 5 章运行时用它与 MySQL 最后审计消息 ID 比较，阻止缺失、过期或未完成检查点静默续聊。来源：[LangGraph Pregel 状态快照实现](https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/pregel/main.py)。

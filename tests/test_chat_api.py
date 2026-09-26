@@ -20,7 +20,9 @@ def _client(tmp_path, producer):
     settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1",
                         chat_api_key="test", graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
     with TestClient(create_app(settings=settings, model=object())) as client:
-        client.app.state.graph.astream_turn = producer
+        async def prepare(*args, **kwargs):
+            return producer(*args, **kwargs)
+        client.app.state.graph.prepare_stream_turn = prepare
         yield client
 
 
