@@ -1,0 +1,4 @@
+{"id":"reference","path":"指代与原话审计","test":"tests/test_ch06_coref.py::test_graph_coref_preserves_raw_query_and_classifier_uses_resolved","expected":"分类使用消解后问题，原始消息仍被保留","status_if_pass":"passed_offline"}
+{"id":"choose_order","path":"缺单中断与续跑","test":"tests/test_ch06_resume_api.py::test_chat_interrupt_then_resume_streams_and_preflights","expected":"先发 select_order 中断帧，选本人订单后同会话发 done","status_if_pass":"passed_offline"}
+{"id":"wrong_order","path":"错号重选","test":"tests/graph/test_ch06_fetch_order.py::test_missing_and_foreign_order_reinterrupt_then_accept_owned","expected":"他人订单重新中断，仅列本人样例订单","status_if_pass":"passed_offline"}
+{"id":"confirm_write","path":"确认后写入","test":"tests/test_ch06_refund_api.py::test_confirm_refund_is_idempotent_and_changes_no_other_state","expected":"确认生成一条待审核申请，重复同 ID 返回同号且订单工单不变","status_if_pass":"passed_offline"}

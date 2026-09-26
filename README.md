@@ -98,6 +98,40 @@ Windows PowerShell 对应命令：
 
 服务以 MySQL 消息审计为准。若 SQLite checkpoint 缺失、过期或上轮执行未完成，续聊会返回 503 并在服务日志记录会话号和审计标记；请保留两份数据供排查，用户可开始新对话。当前没有自动恢复旧会话历史的功能。第 2 章的 `eval-agent`、`eval-prompts` 和旧演示脚本使用单轮工具合同，属于历史验收，不适用于第 5 章的新图接口；使用 `eval-ch05` 查看当前离线结论。
 
+## 第 6 章退款申请流程（样例订单）
+
+先在已有 MySQL 上执行非破坏性迁移，再显式导入固定 `demo-user` 的两条样例订单。重复迁移和重复导入都安全；启动应用不会自动导入演示数据。
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 scripts\migrate_ch06.py
+.\.venv\Scripts\python.exe -X utf8 scripts\seed_ch06_demo.py
+.\.venv\Scripts\python.exe -X utf8 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+浏览器打开 `http://127.0.0.1:8000/`，点击“使用样例订单演示”（手机端为“样例订单”），再询问“能退吗”。系统仅列出当前演示用户的订单；选择后才从同一会话续跑。政策证据足够时可出现退款申请表；用户选固定原因并点击“确认提交申请”后，独立接口才会生成“待人工审核”申请。它不会执行支付退款或修改订单状态。页面 `user_id` 是演示身份，尚无正式登录认证。
+
+PowerShell 可用以下命令观察 SSE 中断与续跑。先从首个 `interrupt` 帧抄出实际 `conversation_id`，再替换下方的 `123`；恢复流也应以 `done` 和 `[DONE]` 结束。需有可用聊天上游才能完成真实回答，本章不自动触发收费验收。
+
+```powershell
+curl.exe -N -X POST http://127.0.0.1:8000/api/chat -H 'Content-Type: application/json' -d '{"user_id":"demo-user","message":"能退吗"}'
+curl.exe -N -X POST http://127.0.0.1:8000/api/actions/resume -H 'Content-Type: application/json' -d '{"user_id":"demo-user","conversation_id":123,"order_id":"1001"}'
+```
+
+确认写入接口示例（仅用于样例库；将会真正新增待审核申请）：
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/api/actions/create-refund -H 'Content-Type: application/json' -d '{"user_id":"demo-user","conversation_id":123,"order_id":"1001","reason":"质量问题","request_id":"demo-refund-1"}'
+```
+
+无模型验收使用隔离 `mewhelp_test` 数据库；不要将测试库配置指向业务库：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 scripts\eval_ch06.py
+.\.venv\Scripts\python.exe -m pytest -q tests\graph tests\test_ch06_coref.py tests\test_ch06_repository.py tests\test_ch06_resume_api.py tests\test_ch06_refund_api.py tests\test_ch05_actions.py tests\test_ch05_agent_api.py tests\test_ch05_chat_stream.py tests\test_tools_infra.py tests\test_agent_orchestration.py tests\test_agent_stream.py
+```
+
+离线页面点击演示：一个终端运行 `.\.venv\Scripts\python.exe -m uvicorn scripts.demo_ui_ch06:app --host 127.0.0.1 --port 8766`，另一个终端运行 `.\.venv\Scripts\python.exe -X utf8 scripts\verify_ui_ch06.py`。该脚本使用本机 Chrome 无头模式和假 SSE，不访问付费模型，也不触碰应用数据库。四路径[离线报告](data/ch06/reports/offline_eval.json)为 `passed_offline`；指代改写与政策扩写的真实效果、真实模型 SSE 仍为 `pending_upstream`，因为此前 glm-5.2 上游返回余额不足且用户选择暂不充值。详见[第 6 章开发记录](dev-notes/ch06.md)。
+
 ## 第 3 章当前可用的演示入口
 
 `.env` 还需本机配置 `SILICONFLOW_API_KEY`。真实 SiliconFlow `BAAI/bge-m3` 已返回两条 1024 维向量；`/kb`、`/admin` 页面和相关 API 已接入。Windows 可在项目根目录运行：

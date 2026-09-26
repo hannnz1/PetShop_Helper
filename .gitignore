@@ -12,3 +12,4 @@ data/*.db*
 data/ch05/*.sqlite*
 *.log
 log/
+ch06-browser-*/

@@ -16,8 +16,8 @@
 </head>
 <body>
 <div class="app">
-<aside class="sidebar"><div class="brand"><span class="mark">♧</span><div>PetShop<span class="tag" style="display:block">HELPER / 客服工作台</span></div></div><button class="new" id="newChat">＋ 开始新对话</button><div class="side-note">为每一份陪伴<br>提供贴心解答。</div><div class="side-foot">客服流程演示<br>订单、商品、物流查询使用模拟数据。<br>转人工仅提供官方渠道指引，不会接入真人。</div></aside>
-<main><header><div><h1>宠物生活，有问有答</h1><span class="status" id="status">准备就绪</span></div><nav class="tabs" aria-label="功能切换"><button class="tab active" data-panel="chatPanel">客服对话</button><button class="tab" data-panel="extractPanel">售后整理</button><a class="tab" href="/admin">后台管理</a><button class="mobile-new" id="mobileNew">新对话</button></nav></header>
+<aside class="sidebar"><div class="brand"><span class="mark">♧</span><div>PetShop<span class="tag" style="display:block">HELPER / 客服工作台</span></div></div><button class="new" id="newChat">＋ 开始新对话</button><button class="new" id="demoOrders">使用样例订单演示</button><div class="side-note">为每一份陪伴<br>提供贴心解答。</div><div class="side-foot">客服流程演示<br>订单、商品、物流查询使用模拟数据。<br>转人工仅提供官方渠道指引，不会接入真人。</div></aside>
+<main><header><div><h1>宠物生活，有问有答</h1><span class="status" id="status">准备就绪</span></div><nav class="tabs" aria-label="功能切换"><button class="tab active" data-panel="chatPanel">客服对话</button><button class="tab" data-panel="extractPanel">售后整理</button><a class="tab" href="/admin">后台管理</a><button class="mobile-new" id="mobileNew">新对话</button><button class="mobile-new" id="mobileDemo">样例订单</button></nav></header>
 <section class="panel" id="chatPanel"><div class="messages" id="messages" role="log" aria-label="聊天记录"><div class="welcome" id="welcome"><span class="kicker">HELLO, PET PARENTS</span><h2>你好，我是小喵。<br>今天有什么可以帮你？</h2><p>商品咨询、购物疑问或售后问题，告诉我你的需要。</p><div class="suggestions"><button data-question="给猫咪挑选猫粮时要注意什么？">挑选宠物用品 <small>一起理清选购思路 ↗</small></button><button data-question="猫爬架收到后损坏了，申请售后需要准备什么？">处理售后问题 <small>了解需要准备的信息 ↗</small></button></div></div></div><form class="composer" id="chatForm"><label for="message" class="hint">向小喵提问</label><textarea id="message" placeholder="例如：我买的自动喂食器出了问题…" maxlength="20000" required></textarea><div class="compose-bottom"><span class="hint">Enter 发送 · Shift + Enter 换行</span><div><button type="button" class="secondary" id="stop" hidden>停止</button> <button class="primary" id="send">发送 ↑</button></div></div></form><div class="footnote">AI 回复仅供参考，订单与售后政策请以平台核实信息为准。</div></section>
 <section class="panel" id="extractPanel" hidden><div class="extract"><span class="tag">AFTER-SALES ASSISTANT</span><h2>把问题，说清楚。</h2><p>粘贴售后描述，整理订单号、诉求类型和期望方案。此操作仅提取信息，不会提交工单。</p><form id="extractForm"><label for="description">售后描述</label><textarea id="description" placeholder="订单 MH20260701123 的猫爬架到货就散架了，我想退款。" required maxlength="20000"></textarea><button class="primary" id="extractButton">整理售后信息</button></form><p id="extractStatus" role="status"></p><div class="result" id="extractResult" hidden><dl><dt>订单号</dt><dd id="orderId"></dd><dt>诉求类型</dt><dd id="requestType"></dd><dt>期望方案</dt><dd id="solution"></dd></dl><details><summary>查看 JSON</summary><pre id="jsonResult"></pre></details></div></div></section>
 </main></div>
@@ -136,6 +136,7 @@ function setBusy(value) {
   busy = value; $('send').disabled = value || pendingOrder; $('message').disabled = value || pendingOrder; $('stop').hidden = !value;
   $('status').textContent = value ? '小喵正在回复…' : pendingOrder ? '请先选择订单' : '准备就绪';
   $('newChat').disabled = value; $('mobileNew').disabled = value;
+  $('demoOrders').disabled = value; $('mobileDemo').disabled = value;
   document.querySelectorAll('[data-question]').forEach(button => button.disabled = value);
 }
 function addFeedback(answer) {
@@ -247,6 +248,12 @@ function newChat() {
   $('welcome').hidden = false; $('message').value = ''; $('message').focus();
 }
 $('newChat').onclick = newChat; $('mobileNew').onclick = newChat; $('stop').onclick = () => controller?.abort();
+function useDemoOrders() {
+  if (busy) return;
+  newChat(); userId = 'demo-user'; localStorage.setItem(userKey, userId);
+  $('status').textContent = '已切换到样例订单演示';
+}
+$('demoOrders').onclick = useDemoOrders; $('mobileDemo').onclick = useDemoOrders;
 document.querySelectorAll('[data-panel]').forEach(tab => tab.onclick = () => {
   document.querySelectorAll('[data-panel]').forEach(item => item.classList.toggle('active', item === tab));
   document.querySelectorAll('.panel').forEach(panel => panel.hidden = panel.id !== tab.dataset.panel);
