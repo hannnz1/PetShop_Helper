@@ -27,6 +27,7 @@ from app.kb import milvus_client
 from app.graph.build import build_graph
 from app.graph.runtime import GraphRuntime
 from app.graph.nodes import close_context_log, open_context_log, validate_startup_budget
+from app.tools import registry as tool_registry
 
 _INDEX = Path(__file__).parent / "static" / "index.html"
 _STATIC = Path(__file__).parent / "static"
@@ -42,6 +43,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
                 "CHAT_MODEL, CHAT_BASE_URL and CHAT_API_KEY must be configured"
             ) from None
 
+        tool_registry.scan_builtin()
         validate_startup_budget(config)
         owned_model = model is None
         try:

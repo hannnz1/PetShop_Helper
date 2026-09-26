@@ -9,9 +9,10 @@ from sqlalchemy.exc import OperationalError
 from app.tools import infra, registry
 
 
-def test_registry_contains_exactly_five_tools():
+def test_registry_exposes_only_registered_read_tools():
     names = {tool.name for tool in registry.get_all_tools()}
-    assert names == {"query_order", "query_product", "query_logistics", "query_faq"}
+    assert names == {"query_order", "query_product", "query_faq", "submit_refund"}
+    assert registry.get_tool("query_logistics") is None  # MCP owns logistics after Task 5.
     assert registry.get_tool("create_ticket") is not None
     assert registry.get_tool("missing") is None
 
