@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     steady_turn_chars: int = Field(default=280, gt=0)
     cjk_chars_per_token: float = Field(default=1.0, gt=0)
     layer2_assistant_chars: int = Field(default=48, gt=0)
+    summary_injection_max_tokens: int = Field(default=250, gt=0)
     chat_timeout: float = Field(default=60, gt=0)
     max_agent_steps: int = Field(default=6, ge=1, le=12)
     graph_checkpoint_path: str = "data/ch05/checkpoints.sqlite"

@@ -25,6 +25,7 @@ class ModelContext:
     injected_summary: str
     token_count: int
     window_rows: tuple[WindowRow, ...]
+    omitted_summary_segments: int = 0
 
 
 def _complete_turns(snapshot: ContextSnapshot) -> list[tuple[VisibleMessage, VisibleMessage]]:
@@ -67,9 +68,18 @@ def _trim_layer(messages: list[BaseMessage], rows: list[WindowRow], max_tokens: 
     return kept, rows[len(rows) - len(kept):] if kept else []
 
 
-def _summary(snapshot: ContextSnapshot) -> str:
-    return "\n".join(segment.content for segment in sorted(snapshot.summaries, key=lambda row: row.seq)
-                     if segment.upto_msg_id <= snapshot.summary_upto_msg_id and segment.content.strip())
+def bounded_summary(snapshot: ContextSnapshot, settings: Settings) -> tuple[str, int]:
+    """Keep a newest contiguous suffix of complete immutable summary segments."""
+    segments = [segment for segment in sorted(snapshot.summaries, key=lambda row: row.seq)
+                if segment.upto_msg_id <= snapshot.summary_upto_msg_id and segment.content.strip()]
+    kept: list[str] = []
+    for segment in reversed(segments):
+        candidate = "\n".join([segment.content, *kept])
+        if estimate_tokens([HumanMessage(content=candidate)],
+                           chars_per_token=settings.cjk_chars_per_token) > settings.summary_injection_max_tokens:
+            break
+        kept.insert(0, segment.content)
+    return "\n".join(kept), len(segments) - len(kept)
 
 
 def _history(snapshot: ContextSnapshot, budget: ContextBudget,
@@ -84,8 +94,10 @@ def _history(snapshot: ContextSnapshot, budget: ContextBudget,
 def build_history_context(snapshot: ContextSnapshot, budget: ContextBudget,
                           *, settings: Settings | None = None) -> str:
     """Summary and a budgeted visible window for coreference and intent."""
-    history, _rows = _history(snapshot, budget, settings or get_settings())
-    lines = [f"早期摘要：{_summary(snapshot)}"] if _summary(snapshot) else []
+    settings = settings or get_settings()
+    history, _rows = _history(snapshot, budget, settings)
+    summary, _omitted = bounded_summary(snapshot, settings)
+    lines = [f"早期摘要：{summary}"] if summary else []
     for message in history:
         lines.append(f"{'用户' if isinstance(message, HumanMessage) else '客服'}：{message.content}")
     return "\n".join(lines)
@@ -107,7 +119,7 @@ def build_model_context(
         raise ContextBudgetExceeded("current graph exchange exceeds context token budget")
 
     history, rows = _history(snapshot, budget, settings)
-    summary = _summary(snapshot)
+    summary, omitted = bounded_summary(snapshot, settings)
     combined = "\n".join(part for part in (
         f"早期摘要：\n{summary}" if summary else "",
         f"本轮已核验证据：\n{evidence}" if evidence else "",
@@ -122,4 +134,4 @@ def build_model_context(
                    if prior_tool_count else [])
     return ModelContext(messages, summary,
                         estimate_tokens(messages, chars_per_token=settings.cjk_chars_per_token),
-                        tuple([*rows, *prior_tools]))
+                        tuple([*rows, *prior_tools]), omitted)

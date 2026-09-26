@@ -11,7 +11,7 @@ from langgraph.types import interrupt
 from app.config import get_settings
 from app.core.agent import FAQ_REFUSAL
 from app.core.context_budget import ContextBudgetExceeded, FixedCosts, derive_budget, validate_context_budget
-from app.core.context_layers import build_history_context, build_model_context
+from app.core.context_layers import bounded_summary, build_history_context, build_model_context
 from app.core import coref as coref_service, query_understanding, retrieval, selfcheck
 from app.core.intent import safe_classify
 from app.core.memory import estimate_tokens
@@ -73,7 +73,7 @@ def _tool_schema_text(route: str) -> str:
 
 def _budget(state: dict, snapshot, *, final: bool = False, settings=None):
     settings = settings or get_settings()
-    summary = "\n".join(item.content for item in snapshot.summaries if item.content.strip())
+    summary, _omitted = bounded_summary(snapshot, settings)
     evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
     fixed = FixedCosts.measure(
         settings,
@@ -123,6 +123,7 @@ def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
               "step": state.get("steps", 0), "phase": "final_answer" if final else "agent_llm",
               "summary_layer2_budget": budget.layer2,
               "injected_summary": view.injected_summary,
+              "omitted_summary_segments": view.omitted_summary_segments,
               "message_count": len(view.messages), "token_estimate": view.token_count,
               "bound_tool_schema_tokens": schema_tokens,
               "window_rows": [vars(row) for row in view.window_rows],

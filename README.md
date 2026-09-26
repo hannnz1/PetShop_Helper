@@ -100,6 +100,33 @@ Windows PowerShell 对应命令：
 
 第 7 章的 `log/app.log` 记录每轮 `history_ctx` 和每次模型调用的实际 `model_ctx`，包含对话原文，供本机排查。该目录被 Git 忽略；只在受信任的本机账户下运行服务，并定期按运维保留期限清理此文件。浏览器和聊天 API 不提供这些调试日志。
 
+## 第 7 章三层上下文与多会话（离线验收）
+
+已有数据库先运行增量迁移；可重复运行，旧原文与 checkpoint 保留。演示前确认 `DATABASE_URL` 指向需要演示的库。当前本机端口 3307 是隔离测试 MySQL，原 Docker 业务卷尚未恢复，不能把它当作旧业务库。页面左侧可选择旧会话并逐页回载原文；“新对话”保留旧会话。退款选择只在所属会话恢复。
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 scripts\migrate_ch07.py
+.\.venv\Scripts\python.exe -X utf8 scripts\migrate_ch07.py
+.\.venv\Scripts\python.exe -X utf8 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+离线评估不连接聊天上游，可用以下占位配置在隔离测试库运行；全量 pytest 还需要知识库测试所用的 Milvus 服务。`eval_ch07.py` 将合成二十轮、演示级联和标注摘要参考答案分列，输出 [离线报告](data/ch07/reports/offline_eval.json)。真实 glm 二十轮、早期订单追问、摘要质量与 usage 对照仍列为 `pending_upstream`，余额恢复后须在演示库单独验收。
+
+```powershell
+$env:CHAT_MODEL='offline-test'
+$env:CHAT_BASE_URL='http://127.0.0.1:9/v1'
+$env:CHAT_API_KEY='offline-test'
+$env:DATABASE_URL='mysql+asyncmy://root:root@127.0.0.1:3307/mewhelp?charset=utf8mb4'
+$env:TEST_DATABASE_URL='mysql+asyncmy://root:root@127.0.0.1:3307/mewhelp_test?charset=utf8mb4'
+.\.venv\Scripts\python.exe -X utf8 scripts\eval_ch07.py --offline
+.\.venv\Scripts\python.exe -m pytest -q tests\test_ch07_budget.py
+$env:TOKEN_BUDGET='32768' # 旧 Graph 测试的显式大窗口；预算默认值测试已单独运行
+.\.venv\Scripts\python.exe -m pytest -q tests\test_ch07_layers.py tests\test_ch07_summarizer.py tests\test_ch07_repository.py tests\test_ch07_conversations_api.py tests\graph\test_ch07_context.py
+Remove-Item Env:TOKEN_BUDGET
+```
+
+`SUMMARY_INJECTION_MAX_TOKENS` 默认 250，只注入预算内最新完整摘要段；较早段仍在数据库中，`model_ctx` 会记录未注入段数。`log/app.log` 的 `history_ctx` 和 `model_ctx` 含原文及可能的联系方式，仅限受信任的本机账户读取。按业务保留期限备份必要审计后，停止服务再清理：`Remove-Item -LiteralPath .\log\app.log`。不要将日志或离线占位密钥提交到仓库。
+
 ## 第 6 章退款申请流程（样例订单）
 
 先在已有 MySQL 上执行非破坏性迁移，再显式导入固定 `demo-user` 的两条样例订单。重复迁移和重复导入都安全；启动应用不会自动导入演示数据。

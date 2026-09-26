@@ -1,0 +1,65 @@
+{
+  "mode": "offline",
+  "counts": {
+    "pass": 3,
+    "fail": 0,
+    "pending_upstream": 4
+  },
+  "cases": [
+    {
+      "id": "default_20_turns",
+      "status": "pass",
+      "details": {
+        "turns": 20,
+        "layer1_budget": 4186
+      }
+    },
+    {
+      "id": "demo_22_turn_cascade",
+      "status": "pass",
+      "details": {
+        "turns": 22,
+        "history_budget": 5650,
+        "layer1_budget": 3955,
+        "layer2_budget": 1695
+      }
+    },
+    {
+      "id": "labeled_summary_references",
+      "status": "pass",
+      "details": {
+        "labeled_case_ids": [
+          "order_unresolved",
+          "contact_request",
+          "greeting_only",
+          "uncertain_policy"
+        ],
+        "scope": "reference labels only; no model generation"
+      }
+    },
+    {
+      "id": "real_glm_default_20_turns",
+      "status": "pending_upstream",
+      "details": "glm balance unavailable; no paid request made"
+    },
+    {
+      "id": "real_glm_demo_cascade",
+      "status": "pending_upstream",
+      "details": "glm balance unavailable; no paid request made"
+    },
+    {
+      "id": "real_glm_early_order_recall",
+      "status": "pending_upstream",
+      "details": "glm balance unavailable; no paid request made"
+    },
+    {
+      "id": "real_glm_summary_quality_and_usage",
+      "status": "pending_upstream",
+      "details": "glm balance unavailable; no paid request made"
+    }
+  ],
+  "limits": [
+    "Synthetic cascade validates rendering, not async scheduling or real model quality.",
+    "SSE and page switching are covered by separate regression/browser acceptance."
+  ]
+}

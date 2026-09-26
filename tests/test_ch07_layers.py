@@ -7,6 +7,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from app.core.context_budget import ContextBudget, ContextBudgetExceeded
 from app.core.context_layers import build_history_context, build_model_context
+from app.core.memory import estimate_tokens
+from app.config import Settings
 from app.db.repository import ContextSnapshot, SummarySegment, VisibleMessage
 
 
@@ -103,6 +105,38 @@ def test_each_layer_trims_whole_turns_when_its_budget_is_zero():
     assert "可以送货吗？" not in str(model.messages)
     assert "可以送货，费用见页面。" not in str(model.messages)
     assert "我订的蓝色猫窝怎么样？" in str(model.messages)
+
+
+def test_near_boundary_layer_trim_keeps_only_latest_complete_turn():
+    source = ContextSnapshot(7, 0, 0, (
+        VisibleMessage(1, "user", "较早问题"), VisibleMessage(2, "assistant", "较早答复"),
+        VisibleMessage(3, "user", "最近问题"), VisibleMessage(4, "assistant", "最近答复"),
+    ), ())
+    newest = [HumanMessage("最近问题"), AIMessage("最近答复")]
+    limit = estimate_tokens(newest)
+    model = build_model_context(source, [HumanMessage("当前问题")], "当前问题", "", "系统",
+                                budget(recent=limit, older=0))
+    assert "最近问题" in str(model.messages) and "最近答复" in str(model.messages)
+    assert "较早问题" not in str(model.messages) and "较早答复" not in str(model.messages)
+
+
+def test_summary_injection_caps_whole_newest_segments():
+    settings = Settings(_env_file=None, chat_model="offline-test",
+                        chat_base_url="http://127.0.0.1:9/v1", chat_api_key="offline-test",
+                        summary_injection_max_tokens=32)
+    source = ContextSnapshot(7, 6, 6, (), (
+        SummarySegment(1, 1, 2, "旧订单 1001 的" + "甲" * 50),
+        SummarySegment(2, 3, 4, "中间订单 2002 的" + "乙" * 50),
+        SummarySegment(3, 5, 6, "最近订单 3003 待确认"),
+    ))
+    model = build_model_context(source, [HumanMessage("当前问题")], "当前问题", "", "系统",
+                                budget(), settings=settings)
+    assert "3003" in model.injected_summary
+    assert "1001" not in model.injected_summary and "2002" not in model.injected_summary
+    assert model.omitted_summary_segments == 2
+    assert estimate_tokens([HumanMessage(model.injected_summary)],
+                           chars_per_token=settings.cjk_chars_per_token) <= 32
+    assert "1001" in source.summaries[0].content
 
 
 def test_layer2_reply_length_uses_setting(monkeypatch):
