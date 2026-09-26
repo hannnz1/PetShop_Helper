@@ -143,7 +143,11 @@ class GraphRuntime:
             )
             final_marker = (result.get("trace") or {}).get("audit_message_id")
             if final_marker is not None and final_marker > (prior_marker or 0):
-                schedule_summary(resolved)
+                layer2_limit = (result.get("trace") or {}).get("summary_layer2_budget")
+                if layer2_limit is not None:
+                    schedule_summary(resolved, layer2_token_limit=layer2_limit)
+                else:
+                    schedule_summary(resolved)
             return result
         finally:
             self._active.remove(resolved)

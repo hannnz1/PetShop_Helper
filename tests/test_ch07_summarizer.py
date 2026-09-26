@@ -1,6 +1,8 @@
 """Chapter 7 async summary boundaries against the isolated MySQL schema."""
 
 import asyncio
+import logging
+from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -8,9 +10,23 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from app.api.chat import graph_event_stream
+from app.config import Settings
+from app.core.memory import estimate_tokens
 from app.core.summarizer import summarize_pending
 from app.db import repository
 from app.graph.runtime import GraphRuntime
+from app.graph import nodes
+from app.db.repository import ContextSnapshot
+
+
+def compact_settings(**overrides):
+    values = dict(chat_model='offline-test', chat_base_url='http://127.0.0.1:9/v1',
+                  chat_api_key='offline-test', model_context_window=900,
+                  max_output_tokens=100, chat_max_tokens=100,
+                  max_agent_steps=1, max_user_input_tokens=100,
+                  tool_result_max_tokens=50)
+    values.update(overrides)
+    return Settings(**values)
 
 
 class SummaryModel:
@@ -71,6 +87,41 @@ async def test_failure_keeps_anchor_and_retry_succeeds(db_session_factory, db_cl
     assert result.status == 'failed'
     assert (await repository.get_context_snapshot(cid, 'owner')).summary_upto_msg_id == 0
     assert (await summarize_pending(cid, SummaryModel(), layer2_token_limit=1)).status == 'committed'
+
+
+@pytest.mark.asyncio
+async def test_repository_read_failure_returns_failed_and_logs(monkeypatch, caplog):
+    async def unavailable(_cid):
+        raise ConnectionError('database unavailable')
+
+    monkeypatch.setattr(repository, 'get_summary_work', unavailable)
+    caplog.set_level(logging.ERROR, logger='app.graph.nodes')
+    result = await summarize_pending(42, SummaryModel(), layer2_token_limit=1)
+    assert result.status == 'failed'
+    assert 'summary fail conversation_id=42' in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_oversized_backlog_is_summarized_in_oldest_bounded_prefixes(db_session_factory, db_clean):
+    cid = await repository.create_conversation('owner')
+    endpoints = []
+    for index in range(8):
+        _first, last = await seeded_layer2(cid, f'订单 {1000 + index} 的猫粮售后诉求。' * 5)
+        endpoints.append(last)
+    model = SummaryModel('明确订单和售后诉求')
+    config = compact_settings()
+    covered = []
+    for _ in endpoints:
+        outcome = await summarize_pending(cid, model, layer2_token_limit=1, settings=config)
+        assert outcome.status == 'committed'
+        covered.append(outcome.upto_msg_id)
+        assert estimate_tokens(model.calls[-1], chars_per_token=config.cjk_chars_per_token) + 100 + 250 <= config.model_context_window
+        if outcome.upto_msg_id == endpoints[-1]:
+            break
+    assert covered[0] < endpoints[-1]
+    assert covered[-1] == endpoints[-1]
+    assert covered == sorted(set(covered))
+    assert len((await repository.get_context_snapshot(cid, 'owner')).summaries) == len(covered)
 
 
 @pytest.mark.asyncio
@@ -144,6 +195,40 @@ async def test_schedule_only_after_done_frame_and_not_pending(monkeypatch):
 
     assert not any('[DONE]' in frame for frame in [frame async for frame in graph_event_stream(pending(), 'owner')])
     assert scheduled == [7]
+
+
+@pytest.mark.asyncio
+async def test_sse_carries_actual_small_layer2_budget_to_scheduler(monkeypatch):
+    scheduled = []
+
+    def capture(cid, *, layer2_token_limit=None):
+        scheduled.append((cid, layer2_token_limit))
+
+    monkeypatch.setattr('app.api.chat.schedule_summary', capture)
+
+    async def completed():
+        yield 'updates', {'log_turn': {'conversation_id': 7,
+                                      'trace': {'summary_layer2_budget': 24}}}
+
+    assert '[DONE]' in ''.join([frame async for frame in graph_event_stream(completed(), 'owner')])
+    assert scheduled == [(7, 24)]
+
+
+@pytest.mark.asyncio
+async def test_graph_computes_small_layer2_allocation_from_injected_settings(db_session_factory, db_clean):
+    cid = await repository.create_conversation('owner')
+    config = compact_settings(model_context_window=5000, steady_turn_chars=20,
+                              expected_history_turns=20)
+    snapshot = ContextSnapshot(cid, 0, 0, (), ())
+    runtime = SimpleNamespace(context={'snapshot': snapshot, 'settings': config,
+                                       'classifier': None})
+    state = {'query': '你好', 'resolved_query': '你好', 'conversation_id': cid}
+    classified = await nodes.classify_intent_node(state, runtime)
+    actual = classified['summary_layer2_budget']
+    assert 0 < actual < 1695
+    logged = await nodes.log_turn({**state, **classified, 'answer': '您好'})
+    assert logged['trace']['summary_layer2_budget'] == actual
+
 
 
 @pytest.mark.asyncio

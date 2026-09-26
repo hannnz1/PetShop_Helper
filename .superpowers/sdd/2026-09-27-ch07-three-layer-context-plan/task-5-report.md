@@ -23,4 +23,20 @@
 - Empty fact output writes an empty immutable segment and advances the anchor; `context_layers` already excludes empty segments from model input. Model errors leave the anchor unchanged for a later turn or restart scan.
 - SSE schedules only after the `[DONE]` frame resumes and the graph has exhausted normally. Disconnects, pending interrupts, and graph/audit errors do not reach that call. Non-stream invoke requires a newly advanced audit marker. Summary task work never changes the already produced reply.
 - Startup scans persisted Layer2 gaps; shutdown waits at most five seconds, cancels lingering tasks, then waits one additional second. `trigger/start/done/skip/fail` events use the existing local `log/app.log` context logger.
-- Remaining limit: the configured `LAYER2_SUMMARY_TOKENS` threshold is a dedicated Layer2 ceiling (default 1695, demo target), while per-route model budgets may be smaller; the model view still applies its own final trim. Prompt factual quality cannot be established without the unavailable upstream model.
+- Remaining limit: Prompt factual quality cannot be established without the unavailable upstream model.
+
+## Independent review fix round — 2026-09-27
+
+The reviewer found that the first implementation used an independent 1695-token threshold, left pre-model database reads outside the worker exception boundary, and could send all original Layer2 text to a single summary call. Three new RED tests reproduced these faults:
+
+- `test_repository_read_failure_returns_failed_and_logs`: uncaught `ConnectionError` escaped from `get_summary_work`.
+- `test_oversized_backlog_is_summarized_in_oldest_bounded_prefixes`: the worker did not accept injected settings or bound the original batch.
+- `test_sse_carries_actual_small_layer2_budget_to_scheduler`: the 24-token allocation in the completed graph update was lost (`(7, None)` instead of `(7, 24)`).
+
+The fix records the actual derived Layer2 allocation in graph state and completion trace, including non-model reply routes. SSE and completed non-stream invokes pass it into the scheduler; restart recovery reads checkpoint state and re-derives the limit using current injected settings and the persisted summary snapshot. The standalone 1695 setting was removed. All database, configuration, token-estimation, prompt, and commit work now sits inside the worker exception boundary; unexpected task exceptions are also observed by the scheduling callback. Summary input is the oldest complete contiguous prefix whose formatted prompt plus output and safety reserves fit the configured model window. A single oversized turn fails without moving the anchor; later runs can progress when the input or configuration changes.
+
+Verification with `CHAT_MODEL=offline-test`, `CHAT_BASE_URL=http://127.0.0.1:9/v1`, `CHAT_API_KEY=offline-test`, and isolated MySQL on port 3307 (optional pytest autoload disabled):
+
+- `python -m pytest -p pytest_asyncio.plugin -q tests/test_ch07_summarizer.py tests/test_ch07_repository.py tests/graph/test_ch07_context.py tests/graph/test_ch06_resume.py --tb=short` → **37 passed, 1 Starlette deprecation warning in 11.82 s**.
+- `python -m pytest -p pytest_asyncio.plugin -q tests/graph/test_runtime.py tests/test_ch07_budget.py tests/test_ch07_layers.py --tb=short` → **19 passed in 2.74 s**.
+- `git diff --check` → exit 0, only Git LF-to-CRLF notices. No paid upstream call was made.

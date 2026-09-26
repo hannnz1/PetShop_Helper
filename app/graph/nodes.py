@@ -121,6 +121,7 @@ def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
         raise ContextBudgetExceeded("model context exceeds configured window")
     record = {"conversation_id": state.get("conversation_id"),
               "step": state.get("steps", 0), "phase": "final_answer" if final else "agent_llm",
+              "summary_layer2_budget": budget.layer2,
               "injected_summary": view.injected_summary,
               "message_count": len(view.messages), "token_estimate": view.token_count,
               "bound_tool_schema_tokens": schema_tokens,
@@ -206,7 +207,15 @@ async def classify_intent_node(state: dict, runtime: Runtime[dict]) -> dict:
         intent = await safe_classify(_HistoryClassifier(), state.get("resolved_query") or state["query"])
     else:
         intent = await safe_classify(classifier, state.get("resolved_query") or state["query"]) if classifier else "unknown"
-    return {"intent": intent, "route": route_by_intent(intent)}
+    route = route_by_intent(intent)
+    result = {"intent": intent, "route": route}
+    snapshot = runtime.context.get("snapshot") if runtime.context else None
+    if snapshot is not None:
+        settings = runtime.context.get("settings") or get_settings()
+        budget = runtime.context.get("budget") or _budget(
+            {**state, "route": route}, snapshot, settings=settings)
+        result["summary_layer2_budget"] = budget.layer2
+    return result
 
 
 def _fit_messages(state: dict, system_text: str) -> list:
@@ -259,6 +268,7 @@ async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
     tokens = int(usage.get("total_tokens") or 0)
     return {
         "messages": [planned], "planned_tool_calls": calls, "model_ctx": record,
+        "summary_layer2_budget": record["summary_layer2_budget"],
         "tool_calls": [*state.get("tool_calls", []), *calls],
         "steps": state.get("steps", 0) + 1,
         "tokens_used": state.get("tokens_used", 0) + tokens,
@@ -322,7 +332,8 @@ async def final_answer(state: dict, runtime: Runtime[dict]) -> dict:
         if isinstance(chunk.content, str):
             parts.append(chunk.content)
     answer = "".join(parts).strip() or "暂时无法给出可靠答复，请稍后再试。"
-    return {"answer": answer, "messages": [AIMessage(content=answer)], "model_ctx": record}
+    return {"answer": answer, "messages": [AIMessage(content=answer)], "model_ctx": record,
+            "summary_layer2_budget": record["summary_layer2_budget"]}
 
 
 async def chitchat_reply(state: dict) -> dict:
@@ -356,6 +367,7 @@ async def log_turn(state: dict) -> dict:
     )
     return {"conversation_id": conversation_id,
             "trace": {"intent": state.get("intent"), "route": state.get("route"),
+                      "summary_layer2_budget": state.get("summary_layer2_budget", 0),
                       "steps": state.get("steps", 0), "tokens_used": state.get("tokens_used", 0),
                       "audit_message_id": marker}}
 

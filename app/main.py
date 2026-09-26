@@ -53,7 +53,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
         application.state.settings = config
         context_log = open_context_log(Path(__file__).parent.parent / "log" / "app.log")
         application.state.model = shared_model
-        configure_summary_model(shared_model)
+        configure_summary_model(shared_model, config)
         application.state.store = SessionStore()
         application.state.active_sessions = set()
         application.state.active_session_owners = {}
@@ -64,7 +64,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
             async with GraphRuntime(Path(config.graph_checkpoint_path), build_graph,
                                     classifier=classifier, settings=config) as graph:
                 application.state.graph = graph
-                await schedule_recovery()
+                await schedule_recovery(graph)
                 yield
         finally:
             await close_summary_tasks()

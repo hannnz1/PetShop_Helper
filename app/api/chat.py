@@ -39,6 +39,7 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     """Translate one prepared graph stream for chat and resume endpoints."""
     completed = False
     completed_conversation_id = None
+    completed_layer2_budget = None
     interrupted = False
     interrupt_event = None
     seen_tools: set[str] = set()
@@ -86,6 +87,7 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
                 elif node == "log_turn":
                     completed = True
                     completed_conversation_id = update["conversation_id"]
+                    completed_layer2_budget = (update.get("trace") or {}).get("summary_layer2_budget")
     except ConversationNotFound:
         yield _error("会话不存在")
         return
@@ -117,7 +119,11 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     if completed:
         yield _sse({"event": "done", "conversation_id": completed_conversation_id})
         yield "data: [DONE]\n\n"
-        schedule_summary(completed_conversation_id)
+        if completed_layer2_budget is not None:
+            schedule_summary(completed_conversation_id,
+                             layer2_token_limit=completed_layer2_budget)
+        else:
+            schedule_summary(completed_conversation_id)
     else:
         yield _error("上游模型暂时不可用，请稍后重试")
 
