@@ -59,8 +59,10 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
     const count=data.meta?.question_count??'—', best=data.best;
     kpis.append(card('评估题数',count),card('最佳整体 MRR',best?percent(best.mrr):'—'),
       card('最佳策略',best?(labels[best.strategy]||best.strategy):'—'),
-      card('库外拒答率',percent(data.generation?.refusal_rate)));
-    $('status').textContent=`上次评估：${data.meta?.evaluated_at?new Date(data.meta.evaluated_at).toLocaleString('zh-CN'):'时间未知'} · Top-${data.meta?.top_k??'—'}`;
+      card('库外拒答率',data.generation_done?percent(data.generation?.refusal_rate):'—'));
+    const partial=data.meta?.status==='partial';
+    $('status').textContent=`上次评估：${data.meta?.evaluated_at?new Date(data.meta.evaluated_at).toLocaleString('zh-CN'):'时间未知'} · Top-${data.meta?.top_k??'—'}`+(partial?` · 评估未完成（生成错误 ${data.generation_error_count||0}，检索错误 ${data.meta?.retrieval_error_count||0}）`:'');
+    $('status').classList.toggle('warn',partial);
     const tabs=$('metricTabs');tabs.replaceChildren();for(const [key,label] of [['mrr','MRR'],['recall_at_5','Recall@5'],['evidence','证据覆盖度']]){
       const button=node('button',metric===key?'active':'',label);button.type='button';button.onclick=()=>{metric=key;renderChart();for(const child of tabs.children)child.classList.toggle('active',child===button);};tabs.append(button);
     }renderChart();
@@ -68,7 +70,7 @@ main{max-width:1200px;margin:auto;padding:35px 22px 80px}.eyebrow{font-size:11px
       tr.append(node('td','',labels[strategy]||strategy));for(const bucket of ['A_policy','B_model','C_colloquial','E_multi'])tr.append(node('td','',percent(byBucket[bucket]?.mrr)));
       tr.append(node('td','',percent(weighted(byBucket,'recall_at_5'))),node('td','',percent(average(Object.values(data.evidence_coverage[strategy]||{})))));table.append(tr);
     }
-    const gen=$('generation');gen.replaceChildren();if(!data.generation_done){gen.append(node('p','', '本轮仅有检索与证据指标；生成段尚未完成。可在上游可用时重跑。'));return;}
+    const gen=$('generation');gen.replaceChildren();if(!data.generation_done){gen.append(node('p','', partial?'本轮因检索或生成调用错误未完成；当前指标不能用于验收。上游恢复后可续跑失败项。':'本轮仅有检索与证据指标；生成段尚未完成。可在上游可用时重跑。'));return;}
     gen.className='generation';const values=data.generation||{};
     gen.append(card('忠实度',percent(values.faithfulness)),card('库外拒答率',percent(values.refusal_rate)));
     for(const strategy of strategies){const score=average(Object.values(values.answer_coverage?.[strategy]||{}));gen.append(card((labels[strategy]||strategy)+' 答案覆盖',percent(score)));}

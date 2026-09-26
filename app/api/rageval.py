@@ -54,7 +54,8 @@ def _hallucination(report: dict | None, counts: dict[str, int], statuses: dict[s
              "refusal_missed": None, "cases_judged": 0, "cases_confirmed": 0,
              "dismissed": 0, "pending": 0, "judged": 0, "confirmed": 0,
              "judged_rate": None, "confirmed_rate": None, "ledger": ledger}
-    if not report or not isinstance(report.get("generation"), dict):
+    if (not report or report.get("meta", {}).get("status") == "partial"
+            or not isinstance(report.get("generation"), dict)):
         return empty
     evaluated = int(report.get("meta", {}).get("question_count") or 0)
     buckets = report.get("retrieval", {}).get("hybrid_rerank", {})
@@ -98,7 +99,9 @@ def overview(request: Request) -> dict:
         "retrieval": report["retrieval"],
         "evidence_coverage": report["evidence_coverage"],
         "generation": report.get("generation"),
-        "generation_done": report.get("generation") is not None,
+        "generation_done": (report.get("generation") is not None
+                            and report["meta"].get("status") != "partial"),
+        "generation_error_count": len((report.get("generation") or {}).get("errors") or []),
         "best": _best(report["retrieval"]), "job": job,
     }
 

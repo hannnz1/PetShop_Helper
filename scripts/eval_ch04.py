@@ -126,13 +126,14 @@ def _read_cache(path: Path | None) -> dict[str, object]:
     if path is None or not path.is_file():
         return {}
     entries = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue  # An interrupted append can leave a partial final line.
-        if isinstance(row, dict) and isinstance(row.get("key"), str):
-            entries[row["key"]] = row.get("value")
+    with path.open("rb") as stream:
+        for line in stream:
+            try:
+                row = json.loads(line.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                continue  # A partial final line must not hide earlier checkpoints.
+            if isinstance(row, dict) and isinstance(row.get("key"), str):
+                entries[row["key"]] = row.get("value")
     return entries
 
 
@@ -177,6 +178,15 @@ async def _cache_path() -> Path:
              settings.recall_top_k, K]
     digest = hashlib.sha256(json.dumps(scope, ensure_ascii=False, default=str).encode()).hexdigest()[:20]
     return CACHE_DIR / f"retrieval-{digest}.jsonl"
+
+
+def _generation_cache_path(retrieval_cache: Path) -> Path:
+    """Generation also depends on prompt wording and the model adapter."""
+    scope = [retrieval_cache.name]
+    for name in ("app/core/prompts.py", "app/core/llm.py"):
+        scope.append(hashlib.sha256((ROOT / name).read_bytes()).hexdigest())
+    digest = hashlib.sha256(json.dumps(scope).encode()).hexdigest()[:20]
+    return retrieval_cache.with_name(f"generation-{digest}.jsonl")
 
 
 async def _retrieve_all(
@@ -263,7 +273,7 @@ async def _try_call(coroutine, label: str, errors: list[str]):
 async def _save_unfaithful_case(
     sample: dict, answer: str, reason: str, hits: list[dict],
     judge_model: str, errors: list[str],
-) -> None:
+) -> bool:
     """Store the exact ranked evidence sent to the judge; failure is advisory."""
     citations = [
         {"n": index, "chunk_id": hit.get("id"),
@@ -277,13 +287,18 @@ async def _save_unfaithful_case(
             answer=answer, reason=reason, citations=citations,
             judge_model=judge_model,
         )
+        return True
     except Exception as exc:  # noqa: BLE001 - ledger must not erase evaluation results
         errors.append(f"ledger {sample['id']}: {type(exc).__name__}")
+        return False
 
 
 async def _generation(
     samples: list[dict], hits: dict, lines: list[str], cache_path: Path | None = None,
+    concurrency: int = 3,
 ) -> dict | None:
+    if not 1 <= concurrency <= 12:
+        raise ValueError("generation concurrency must be between 1 and 12")
     settings = get_settings()
     model = get_chat_model()
     answer_chain = RAG_ANSWER_PROMPT | model
@@ -298,11 +313,17 @@ async def _generation(
     faith_chain = FAITHFULNESS_PROMPT | get_chat_model(temperature=0).with_structured_output(
         _FaithJudge, method=settings.structured_output_method,
     )
-    gate = asyncio.Semaphore(3)
+    gate = asyncio.Semaphore(concurrency)
     errors: list[str] = []
     records: list[dict] = []
     cached = _read_cache(cache_path)
     completed = 0
+
+    def checkpoint(key: str, record: dict) -> None:
+        try:
+            _append_cache(cache_path, key, record)
+        except OSError as exc:
+            lines.append(f"GENERATION_CACHE_ERROR {record['strategy']}/{record['id']}: {type(exc).__name__}")
 
     def tick() -> None:
         nonlocal completed
@@ -327,7 +348,7 @@ async def _generation(
             if not found:
                 record.update(answer="暂时没有查到相关信息", covered=0, faithful=True)
                 records.append(record)
-                _append_cache(cache_path, cache_key, record)
+                checkpoint(cache_key, record)
                 tick()
                 return
             response = await _try_call(
@@ -341,6 +362,7 @@ async def _generation(
                 return
             answer = str(response.content)
             record["answer"] = answer
+            ledger_saved = True
             if not sample["should_refuse"]:
                 coverage = await _try_call(
                     judge_model.ainvoke(coverage_prompt.format(
@@ -361,16 +383,16 @@ async def _generation(
                     record["faithful"] = faith.faithful if faith is not None else None
                     record["faith_reason"] = faith.reason if faith is not None else ""
                     if faith is not None and not faith.faithful:
-                        await _save_unfaithful_case(
+                        ledger_saved = await _save_unfaithful_case(
                             sample, answer, faith.reason, found,
                             settings.chat_model, errors,
                         )
             else:
                 record["refused"] = "暂时没有查到" in answer or "无法" in answer or "不能" in answer
             records.append(record)
-            if (sample["should_refuse"] or record.get("covered") is not None) and record.get("faithful") is not False:
-                if strategy != "hybrid_rerank" or sample["should_refuse"] or record.get("faithful") is True:
-                    _append_cache(cache_path, cache_key, record)
+            if (sample["should_refuse"] or record.get("covered") is not None) and ledger_saved:
+                if strategy != "hybrid_rerank" or sample["should_refuse"] or record.get("faithful") is not None:
+                    checkpoint(cache_key, record)
             tick()
 
     await asyncio.gather(*(one(strategy, sample) for strategy in STRATEGIES for sample in samples))
@@ -419,8 +441,12 @@ def _write_report(report: dict, lines: list[str]) -> None:
     (REPORT_DIR / "rag_eval.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _report_exit_code(report: dict) -> int:
+    return 2 if report["meta"]["status"] == "partial" else 0
+
+
 async def main(skip_generation: bool = False, samples_path: Path = SAMPLES,
-               use_cache: bool = False) -> dict:
+               use_cache: bool = False, generation_concurrency: int = 3) -> dict:
     samples = _load_samples(samples_path)
     lines = [f"RAG evaluation: {len(samples)} questions, Top-{K}"]
     cache_path = await _cache_path() if use_cache else None
@@ -433,25 +459,46 @@ async def main(skip_generation: bool = False, samples_path: Path = SAMPLES,
     generation = None
     if not skip_generation:
         try:
-            generation_cache = (
-                cache_path.with_name(cache_path.name.replace("retrieval-", "generation-", 1))
-                if cache_path is not None else None
-            )
+            generation_cache = _generation_cache_path(cache_path) if cache_path is not None else None
             if generation_cache is not None:
                 print(f"generation cache: {generation_cache}", flush=True)
-            generation = await _generation(samples, hits, lines, cache_path=generation_cache)
+            generation = await _generation(
+                samples, hits, lines, cache_path=generation_cache,
+                concurrency=generation_concurrency,
+            )
         except Exception as exc:  # noqa: BLE001 - deterministic results still publish
             lines.append(f"GENERATION_UNAVAILABLE {type(exc).__name__}")
     lines.append("GENERATION " + json.dumps(
         {key: value for key, value in (generation or {}).items() if key not in {"records", "errors"}},
         ensure_ascii=False,
     ))
+    pipeline_errors = sum(
+        line.startswith(("REWRITE_ERROR ", "RETRIEVAL_ERROR ")) for line in lines
+    )
+    if skip_generation:
+        status = "partial" if pipeline_errors else "retrieval_only"
+    else:
+        records = (generation or {}).get("records") or []
+        complete = (
+            generation is not None
+            and not pipeline_errors
+            and not generation.get("errors")
+            and len(records) == len(samples) * len(STRATEGIES)
+            and not any(record.get("error") for record in records)
+            and (not any(sample["should_refuse"] for sample in samples)
+                 or generation.get("refusal_rate") is not None)
+            and (not any(not sample["should_refuse"] for sample in samples)
+                 or generation.get("faithfulness") is not None)
+        )
+        status = "complete" if complete else "partial"
+    lines.append(f"STATUS {status}")
     settings = get_settings()
     report = {
         "meta": {
             "evaluated_at": datetime.now(timezone.utc).isoformat(), "question_count": len(samples),
             "top_k": K, "recall_k": RECALL_K, "embed_model": settings.embed_model,
             "rerank_model": settings.rerank_model, "judge_model": settings.chat_model,
+            "status": status, "retrieval_error_count": pipeline_errors,
         },
         **summary, "generation": generation,
     }
@@ -464,5 +511,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-generation", action="store_true")
     parser.add_argument("--fresh", action="store_true", help="ignore the local retrieval cache")
+    parser.add_argument("--generation-concurrency", type=int, default=3,
+                        help="parallel generation jobs (1-12; default 3)")
     options = parser.parse_args()
-    asyncio.run(main(skip_generation=options.skip_generation, use_cache=not options.fresh))
+    report = asyncio.run(main(
+        skip_generation=options.skip_generation,
+        use_cache=not options.fresh,
+        generation_concurrency=options.generation_concurrency,
+    ))
+    raise SystemExit(_report_exit_code(report))

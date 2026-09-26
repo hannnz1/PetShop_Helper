@@ -212,3 +212,173 @@ async def test_generation_cache_resumes_without_repeating_model_calls(tmp_path, 
     assert first == second
     assert calls == {"answer": 4, "_CoverageJudge": 4, "_FaithJudge": 1}
     assert len(cache.read_text(encoding="utf-8").splitlines()) == 4
+
+
+def test_cache_ignores_torn_multibyte_final_row(tmp_path):
+    cache = tmp_path / "cache.jsonl"
+    cache.write_bytes(b'{"key":"good","value":1}\n{"key":"bad","value":"\xe4')
+    assert eval_ch04._read_cache(cache) == {"good": 1}
+
+
+def test_generation_cache_scope_tracks_prompt_and_model_adapter(tmp_path, monkeypatch):
+    root = tmp_path
+    (root / "app/core").mkdir(parents=True)
+    (root / "app/core/prompts.py").write_text("first", encoding="utf-8")
+    (root / "app/core/llm.py").write_text("adapter", encoding="utf-8")
+    monkeypatch.setattr(eval_ch04, "ROOT", root)
+    retrieval_cache = root / "retrieval-abc.jsonl"
+    first = eval_ch04._generation_cache_path(retrieval_cache)
+    (root / "app/core/prompts.py").write_text("changed", encoding="utf-8")
+    second = eval_ch04._generation_cache_path(retrieval_cache)
+    assert first != second
+
+
+@pytest.mark.asyncio
+async def test_unfaithful_case_is_not_rebilled_or_reopened_on_resume(tmp_path, monkeypatch):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    sample = {"id": "A1", "bucket": "A_policy", "query": "邮费是多少", "expect_points": ["满99元包邮"],
+              "should_refuse": False}
+    hits = {
+        (strategy, "A1"): [{"id": 7, "question": "运费", "answer": "满99元包邮", "section_path": "运费"}]
+        for strategy in eval_ch04.STRATEGIES
+    }
+    calls = {"answer": 0, "ledger": 0}
+
+    class FakeModel(RunnableLambda):
+        def __init__(self):
+            async def answer(_prompt):
+                calls["answer"] += 1
+                return AIMessage(content="满99元包邮 [1]，且所有订单免费")
+            super().__init__(answer)
+
+        def with_structured_output(self, schema, method=None):
+            async def judge(_prompt):
+                if schema is eval_ch04._CoverageJudge:
+                    return schema(covered_count=1, reason="covered")
+                return schema(faithful=False, reason="无免费证据")
+            return RunnableLambda(judge)
+
+    async def save_case(*args, **kwargs):
+        calls["ledger"] += 1
+
+    monkeypatch.setattr(eval_ch04, "get_chat_model", lambda **kwargs: FakeModel())
+    monkeypatch.setattr(eval_ch04.repository, "upsert_faith_case", save_case)
+    cache = tmp_path / "generation.jsonl"
+    first = await eval_ch04._generation([sample], hits, [], cache_path=cache)
+    second = await eval_ch04._generation([sample], hits, [], cache_path=cache)
+    assert first == second
+    assert calls == {"answer": 4, "ledger": 1}
+
+
+@pytest.mark.asyncio
+async def test_generation_cache_write_failure_keeps_report(tmp_path, monkeypatch):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    sample = {"id": "D1", "bucket": "D_absent", "query": "有火星车吗", "should_refuse": True}
+    hits = {(strategy, "D1"): [{"question": "商品", "answer": "没有火星车"}]
+            for strategy in eval_ch04.STRATEGIES}
+
+    class FakeModel(RunnableLambda):
+        def __init__(self):
+            async def answer(_prompt):
+                return AIMessage(content="暂时没有查到")
+            super().__init__(answer)
+
+        def with_structured_output(self, schema, method=None):
+            return RunnableLambda(lambda _: None)
+
+    def fail_checkpoint(*args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(eval_ch04, "get_chat_model", lambda **kwargs: FakeModel())
+    monkeypatch.setattr(eval_ch04, "_append_cache", fail_checkpoint)
+    lines = []
+    report = await eval_ch04._generation([sample], hits, lines, cache_path=tmp_path / "cache.jsonl")
+    assert len(report["records"]) == 4
+    assert report["refusal_rate"] == 1.0
+    assert any("GENERATION_CACHE_ERROR" in line for line in lines)
+
+
+@pytest.mark.asyncio
+async def test_generation_concurrency_can_be_raised_for_full_eval(monkeypatch):
+    import asyncio
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    samples = [{"id": item, "bucket": "D_absent", "query": item, "should_refuse": True}
+               for item in ("D1", "D2")]
+    hits = {(strategy, sample["id"]): [{"question": "商品", "answer": "未收录"}]
+            for strategy in eval_ch04.STRATEGIES for sample in samples}
+    active = 0
+    peak = 0
+
+    class FakeModel(RunnableLambda):
+        def __init__(self):
+            async def answer(_prompt):
+                nonlocal active, peak
+                active += 1
+                peak = max(peak, active)
+                await asyncio.sleep(0.03)
+                active -= 1
+                return AIMessage(content="暂时没有查到")
+            super().__init__(answer)
+
+        def with_structured_output(self, schema, method=None):
+            return RunnableLambda(lambda _: None)
+
+    monkeypatch.setattr(eval_ch04, "get_chat_model", lambda **kwargs: FakeModel())
+    await eval_ch04._generation(samples, hits, [], concurrency=6)
+    assert peak == 6
+
+
+@pytest.mark.asyncio
+async def test_partial_generation_report_is_saved_but_cli_status_fails(tmp_path, monkeypatch):
+    sample = {"id": "A1", "bucket": "A_policy", "query": "邮费是多少", "expect_section": ["运费"],
+              "expect_points": ["满99元包邮"], "should_refuse": False}
+    source = tmp_path / "samples.jsonl"
+    source.write_text(json.dumps(sample, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(eval_ch04, "REPORT_DIR", tmp_path / "reports")
+
+    async def retrieve(*args, **kwargs):
+        return {(strategy, "A1"): [] for strategy in eval_ch04.STRATEGIES}
+
+    async def generation(*args, **kwargs):
+        return {"errors": ["answer vector/A1: OpenAIRateLimitError"], "records": [
+            {"id": "A1", "strategy": "vector", "error": "answer unavailable"},
+        ]}
+
+    monkeypatch.setattr(eval_ch04, "_retrieve_all", retrieve)
+    monkeypatch.setattr(eval_ch04, "_generation", generation)
+    report = await eval_ch04.main(samples_path=source)
+    assert report["meta"]["status"] == "partial"
+    assert eval_ch04._report_exit_code(report) != 0
+    saved = json.loads((tmp_path / "reports/rag_eval.json").read_text(encoding="utf-8"))
+    assert saved["meta"]["status"] == "partial"
+
+
+@pytest.mark.asyncio
+async def test_retrieval_error_prevents_complete_report(tmp_path, monkeypatch):
+    sample = {"id": "A1", "bucket": "A_policy", "query": "邮费是多少", "expect_section": ["运费"],
+              "expect_points": ["满99元包邮"], "should_refuse": False}
+    source = tmp_path / "samples.jsonl"
+    source.write_text(json.dumps(sample, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(eval_ch04, "REPORT_DIR", tmp_path / "reports")
+
+    async def retrieve(samples, lines, cache_path=None):
+        lines.append("RETRIEVAL_ERROR hybrid/A1: TimeoutError")
+        return {(strategy, "A1"): [] for strategy in eval_ch04.STRATEGIES}
+
+    async def generation(*args, **kwargs):
+        return {"errors": [], "records": [
+            {"id": "A1", "strategy": strategy, "answer": "满99元包邮"}
+            for strategy in eval_ch04.STRATEGIES
+        ], "faithfulness": 1.0}
+
+    monkeypatch.setattr(eval_ch04, "_retrieve_all", retrieve)
+    monkeypatch.setattr(eval_ch04, "_generation", generation)
+    report = await eval_ch04.main(samples_path=source)
+    assert report["meta"]["status"] == "partial"
+    assert eval_ch04._report_exit_code(report) != 0

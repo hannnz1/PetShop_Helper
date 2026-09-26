@@ -54,6 +54,22 @@ def test_dashboard_preserves_saved_metrics_and_chooses_best(tmp_path, monkeypatc
     assert body["present"] is True
 
 
+def test_partial_report_does_not_claim_generation_complete(tmp_path, monkeypatch):
+    report = {
+        "meta": {"question_count": 300, "status": "partial"},
+        "retrieval": {"vector": {"A_policy": {"count": 60, "mrr": 0.8}}},
+        "evidence_coverage": {},
+        "generation": {"errors": ["answer A1: OpenAIRateLimitError"], "records": []},
+    }
+    (tmp_path / "rag_eval.json").write_text(json.dumps(report), encoding="utf-8")
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.get("/api/rag-eval/overview")
+    body = response.json()
+    assert body["present"] is True
+    assert body["generation_done"] is False
+    assert body["generation_error_count"] == 1
+
+
 def test_faith_case_api_uses_current_report_and_handles_review_errors(tmp_path, monkeypatch):
     report = {
         "meta": {"question_count": 300},
