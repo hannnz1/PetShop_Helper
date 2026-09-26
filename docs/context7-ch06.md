@@ -7,6 +7,8 @@
 
 政策查询扩写另行核对同一官方 Models 文档：`with_structured_output(PydanticModel, method="json_mode")` 支持运行时 Pydantic 校验；`json_mode` 只保证 JSON 形状，字段语义须在 Prompt 明示。本地配置仍使用 `structured_output_method`，没有改上游协议。
 
+退款建议工具另查 `/websites/reference_langchain` 的 [`InjectedToolArg` reference](https://reference.langchain.com/python/langchain-core/tools/base/InjectedToolArg)：`Annotated` 标记的运行时注入参数不在模型可见 schema 中；本项目仍在图拦截层以可信 `state.user_id` 重验归属，通用执行分发层无条件拒绝同名调用。
+
 以上查询不含密钥、用户数据或仓库专有代码。接口核对在实现前完成；不把文档示例等同本地版本行为。
 
 ## 本机安装版本冒烟

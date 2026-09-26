@@ -9,6 +9,7 @@ from app.tools.business import (
     query_order,
     query_product,
 )
+from app.tools.refunds import submit_refund
 
 _ALL: tuple[BaseTool, ...] = (
     query_order,
@@ -16,7 +17,7 @@ _ALL: tuple[BaseTool, ...] = (
     query_logistics,
     query_faq,
 )
-_BY_NAME: dict[str, BaseTool] = {tool.name: tool for tool in (*_ALL, create_ticket)}
+_BY_NAME: dict[str, BaseTool] = {tool.name: tool for tool in (*_ALL, create_ticket, submit_refund)}
 
 NO_RETRY: set[str] = {"create_ticket"}
 INJECT_CONVERSATION: set[str] = {"create_ticket"}
@@ -31,6 +32,8 @@ def get_chat_tools(route: str) -> list[BaseTool]:
     """The graph binds only read tools; writes require a user action."""
     if route == "knowledge":
         return [query_order]
+    if route == "refund":
+        return [submit_refund]
     if route == "business":
         return [query_order, query_product, query_logistics]
     return []

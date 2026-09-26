@@ -2,7 +2,7 @@
 
 import re
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import interrupt
 
@@ -94,6 +94,13 @@ def _fit_messages(state: dict, system_text: str) -> list:
     system = [SystemMessage(content=system_text)]
     if state.get("evidence"):
         system.append(SystemMessage(content=f"本轮已核验证据:\n{state['evidence']}"))
+    if state.get("route") == "refund" and state.get("order_data"):
+        order = state["order_data"]
+        system.append(SystemMessage(content=(
+            f"本轮已核验本人演示订单：订单号 {order.get('order_id', '')}，"
+            f"状态 {order.get('status', '')}，商品 {order.get('product', '')}。"
+            "只能说可填写待人工审核申请，不能声称已退款或审核通过。"
+        )))
     budget = get_settings().token_budget
     if estimate_tokens([*system, *current]) > budget:
         raise ContextBudgetExceeded("current graph exchange exceeds context token budget")
@@ -134,14 +141,44 @@ async def agent_tools(state: dict) -> dict:
     allowed = {tool.name for tool in get_chat_tools(state["route"])}
     tool_messages = []
     results = list(state.get("tool_results", []))
+    actions = list(state.get("suggested_actions", []))
     for call in state["planned_tool_calls"]:
+        if isinstance(call, dict) and call.get("name") == "submit_refund":
+            call_id = call.get("id") if isinstance(call.get("id"), str) else "invalid-refund-call"
+            args = call.get("args") if isinstance(call.get("args"), dict) else {}
+            proposed_id = str(args.get("order_id") or "")
+            owned = await repository.get_owned_sample_order(state["user_id"], proposed_id)
+            permitted = (
+                state.get("route") == "refund" and _strong_evidence(state)
+                and proposed_id == state.get("order_id") and owned is not None
+            )
+            if permitted:
+                draft = {"order_id": proposed_id, "reason": args.get("reason")}
+                if not any(item.get("type") == "refund_form" and item.get("draft", {}).get("order_id") == proposed_id
+                           for item in actions):
+                    actions.append({"type": "refund_form", "draft": draft})
+                content = "已向用户展示退款申请表单，待用户确认；尚未提交申请。请停止调用其他工具。"
+            else:
+                content = "未核验本人订单或退款政策证据，本次不提供退款申请入口。"
+                if (state.get("route") == "refund" and owned is None
+                        and not any(item.get("type") == "select_order" for item in actions)):
+                    actions.append({"type": "select_order",
+                                    "orders": await repository.list_sample_orders(state["user_id"])})
+            tool_messages.append(ToolMessage(
+                content=content, tool_call_id=call_id, name="submit_refund",
+                status="success" if permitted else "error",
+            ))
+            results.append({"tool_call_id": call_id, "name": "submit_refund",
+                            "ok": permitted, "content": content})
+            continue
         run = await execute_tool_call(
             call, state["conversation_id"], allowed_names=allowed,
         )
         tool_messages.append(run.tool_message)
         results.append({"tool_call_id": run.tool_call_id, "name": run.name,
                         "ok": run.ok, "content": str(run.tool_message.content)})
-    return {"messages": tool_messages, "tool_results": results}
+    return {"messages": tool_messages, "tool_results": results,
+            "suggested_actions": actions}
 
 
 async def final_answer(state: dict, runtime: Runtime[dict]) -> dict:

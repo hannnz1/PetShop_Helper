@@ -107,11 +107,11 @@
 
 **Interfaces:** `submit_refund(order_id: str, user_id: InjectedToolArg, reason: str | None = None) -> dict` 仅返回待用户确认；`agent_tools` 拦截同名调用并输出 `suggested_actions=[{"type":"refund_form","draft":...}]`。
 
-- [ ] 写失败测试：模型提出退款但数据库不变；本人订单+强证据才有表单；他人订单/错号/弱证据无表单；重复建议不重复动作；最终答复不称已退款。
-- [ ] 跑 `pytest -q tests/graph/test_ch06_refund_action.py` 确认红。
-- [ ] 将建议工具只绑定在 refund 路径，图拦截前重校验归属和本轮订单；可信分发层拒绝 `submit_refund` 实际写入，旧 `create_ticket` 禁止规则保持。
-- [ ] 跑定向测试及旧工具安全回归。
-- [ ] 提交并追记。
+- [x] 写失败测试：模型提出退款但数据库不变；本人订单+强证据才有表单；他人订单/错号/弱证据无表单；重复建议不重复动作；最终答复不称已退款。
+- [x] 跑 `pytest -q tests/graph/test_ch06_refund_action.py` 确认红。
+- [x] 将建议工具只绑定在 refund 路径，图拦截前重校验归属和本轮订单；可信分发层拒绝 `submit_refund` 实际写入，旧 `create_ticket` 禁止规则保持。
+- [x] 跑定向测试及旧工具安全回归。
+- [x] 提交并追记。
 
 ### Task 7: 图续跑及 SSE 中断帧
 
