@@ -132,6 +132,8 @@ curl.exe -X POST http://127.0.0.1:8000/api/actions/create-refund -H 'Content-Typ
 
 离线页面点击演示：一个终端运行 `.\.venv\Scripts\python.exe -m uvicorn scripts.demo_ui_ch06:app --host 127.0.0.1 --port 8766`，另一个终端运行 `.\.venv\Scripts\python.exe -X utf8 scripts\verify_ui_ch06.py`。该脚本使用本机 Chrome 无头模式和假 SSE，不访问付费模型，也不触碰应用数据库。四路径[离线报告](data/ch06/reports/offline_eval.json)为 `passed_offline`；指代改写与政策扩写的真实效果、真实模型 SSE 仍为 `pending_upstream`，因为此前 glm-5.2 上游返回余额不足且用户选择暂不充值。详见[第 6 章开发记录](dev-notes/ch06.md)。
 
+本机最终回归使用独立端口 `3307` 的临时 MySQL 容器和 `mewhelp_test` 测试库，22 个测试文件分别启动进程，共 113 项通过；Windows 下将这些文件放在单一进程运行曾发生原生扩展异常退出。当前 Docker Desktop 指向空的新数据区，原应用 MySQL 容器未挂载；E 盘 Docker VHDX 备份未改动。因此真实服务演示命令须待原业务数据恢复或在明确的演示库完成迁移和种子导入后运行，不能将临时测试容器当作原业务库。
+
 ## 第 3 章当前可用的演示入口
 
 `.env` 还需本机配置 `SILICONFLOW_API_KEY`。真实 SiliconFlow `BAAI/bge-m3` 已返回两条 1024 维向量；`/kb`、`/admin` 页面和相关 API 已接入。Windows 可在项目根目录运行：
