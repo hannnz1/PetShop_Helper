@@ -1,5 +1,7 @@
 """Asynchronous persistence for customer-service conversations and tool data."""
 
+from __future__ import annotations
+
 from uuid import uuid4
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -8,7 +10,7 @@ import hashlib
 import re
 import unicodedata
 
-from sqlalchemy import case, delete, func, insert, or_, select, text, update
+from sqlalchemy import and_, case, delete, func, insert, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 import app.db.base as db
@@ -65,6 +67,62 @@ async def list_messages(conversation_id: int) -> list[Message]:
             .order_by(Message.id)
         )
         return list(result.scalars())
+
+
+async def list_owned_conversations(
+    user_id: str, limit: int, before: tuple[datetime, int] | None = None,
+) -> tuple[list[dict], tuple[datetime, int] | None]:
+    """Page owned conversations by update time and ID; include empty conversations."""
+    first_question = (select(Message.content).where(
+        Message.conversation_id == Conversation.id,
+        Message.role == "user",
+        Message.content.is_not(None),
+    ).order_by(Message.id).limit(1).correlate(Conversation).scalar_subquery())
+    statement = select(Conversation, first_question).where(Conversation.user_id == user_id)
+    if before is not None:
+        when, conversation_id = before
+        statement = statement.where(or_(
+            Conversation.updated_at < when,
+            and_(Conversation.updated_at == when, Conversation.id < conversation_id),
+        ))
+    statement = statement.order_by(Conversation.updated_at.desc(), Conversation.id.desc()).limit(limit + 1)
+    async with db.async_session() as session:
+        rows = (await session.execute(statement)).all()
+    page = rows[:limit]
+    items = [{
+        "id": conversation.id,
+        "preview": (question or "")[:100],
+        "has_summary": bool(conversation.summary),
+        "updated_at": conversation.updated_at.isoformat(),
+    } for conversation, question in page]
+    cursor = (page[-1][0].updated_at, page[-1][0].id) if len(rows) > limit else None
+    return items, cursor
+
+
+async def list_owned_visible_messages(
+    conversation_id: int, user_id: str, limit: int, after: int | None = None,
+) -> tuple[list[VisibleMessage], int | None] | None:
+    """Return one bounded page of original user/assistant text for an owner."""
+    async with db.async_session() as session:
+        owned = await session.scalar(select(Conversation.id).where(
+            Conversation.id == conversation_id, Conversation.user_id == user_id,
+        ))
+        if owned is None:
+            return None
+        statement = select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.role.in_(("user", "assistant")),
+            Message.content.is_not(None),
+            Message.tool_call_id.is_(None),
+            or_(Message.tool_calls.is_(None), func.json_type(Message.tool_calls) == "NULL"),
+        )
+        if after is not None:
+            statement = statement.where(Message.id > after)
+        rows = (await session.scalars(statement.order_by(Message.id).limit(limit + 1))).all()
+    page = rows[:limit]
+    return [VisibleMessage(row.id, row.role, row.content) for row in page], (
+        page[-1].id if len(rows) > limit else None
+    )
 
 
 async def last_message_id(conversation_id: int) -> int | None:
