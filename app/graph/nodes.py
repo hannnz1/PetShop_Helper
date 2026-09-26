@@ -8,7 +8,7 @@ from langgraph.types import interrupt
 
 from app.config import get_settings
 from app.core.agent import ContextBudgetExceeded, FAQ_REFUSAL
-from app.core import coref as coref_service
+from app.core import coref as coref_service, query_understanding, retrieval, selfcheck
 from app.core.intent import safe_classify
 from app.core.memory import estimate_tokens
 from app.core.prompts import GRAPH_AGENT_SYSTEM, GRAPH_FINAL_SYSTEM
@@ -237,3 +237,53 @@ async def forced_rag(state: dict) -> dict:
 
 def confidence_gate(state: dict) -> str:
     return "agent" if _strong_evidence(state) else "fallback"
+
+
+async def retrieve_policy(state: dict, runtime: Runtime[dict]) -> dict:
+    """Search owned-order policy evidence before any refund suggestion."""
+    base = state.get("resolved_query") or state["query"]
+    order_status = (state.get("order_data") or {}).get("status", "")
+    seed = f"{base} {order_status}".strip()
+    model = runtime.context.get("model") if runtime.context else None
+    queries = await query_understanding.expand_queries(seed, model)
+    merged: dict[object, dict] = {}
+    try:
+        for query in queries:
+            for hit in await retrieval.search_knowledge(
+                query, strategy="hybrid_rerank", bm25_query=query,
+            ):
+                if not isinstance(hit, dict) or "id" not in hit:
+                    continue
+                score = hit.get("rerank_score")
+                if not isinstance(score, (int, float)):
+                    continue
+                prior = merged.get(hit["id"])
+                if prior is None or score > prior["rerank_score"]:
+                    merged[hit["id"]] = hit
+        ranked = sorted(merged.values(), key=lambda item: item["rerank_score"], reverse=True)
+        top_score = ranked[0]["rerank_score"] if ranked else 0.0
+        if top_score < get_settings().rerank_min_score:
+            source, reason = "retrieval_low_conf", f"政策证据不足(top={top_score:.3f})"
+        else:
+            selected = ranked[:3]
+            evidence_texts = [f"{hit['question']} {hit['answer']}" for hit in selected]
+            check = await selfcheck.check_sufficient(seed, evidence_texts)
+            if not check["useful"]:
+                source, reason = "self_check", check["reason"] or "政策证据不足"
+            else:
+                citations = [
+                    {"n": index, "id": hit["id"], "section_path": hit["section_path"],
+                     "question": hit["question"], "answer": hit["answer"],
+                     "content_type": hit.get("content_type")}
+                    for index, hit in enumerate(selected, 1)
+                ]
+                evidence = "\n".join(
+                    f"[{item['n']}] {item['question']}: {item['answer']}" for item in citations
+                )
+                return {"sufficient": True, "evidence": evidence,
+                        "citations": citations, "reason": ""}
+    except Exception as exc:  # noqa: BLE001 - retrieval and self-check fail closed
+        source, reason = "self_check", f"政策检索失败: {type(exc).__name__}"
+    await repository.insert_low_confidence(state["conversation_id"], state["query"], source, reason)
+    return {"sufficient": False, "evidence": "", "citations": [],
+            "source": source, "reason": reason}

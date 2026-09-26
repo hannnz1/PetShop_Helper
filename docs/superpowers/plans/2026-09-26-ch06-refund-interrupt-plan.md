@@ -95,11 +95,11 @@
 
 **Interfaces:** `expand_queries(query: str, model: BaseChatModel) -> list[str]`，最多 3 条非空，失败 `[query]`；`retrieve_policy(state, runtime) -> dict` 统一为 `sufficient/evidence/citations/reason`。
 
-- [ ] 写失败测试：订单状态进检索种子、最多三查、同 chunk 取最高分、扩写失败回原查询、弱证据/错误格式不进入 Agent 且无退款动作。
-- [ ] 跑 `pytest -q tests/graph/test_ch06_policy.py` 确认红。
-- [ ] 沿用第 4/5 章 hybrid-rerank/充分性契约组装退款政策证据；模型 Prompt 只用于查询扩写，不更改库中原文。
-- [ ] 跑定向及现有 RAG 证据闸测试。
-- [ ] 提交并追记证据不足结果。
+- [x] 写失败测试：订单状态进检索种子、最多三查、同 chunk 取最高分、扩写失败回原查询、弱证据/错误格式不进入 Agent 且无退款动作。
+- [x] 跑 `pytest -q tests/graph/test_ch06_policy.py` 确认红。
+- [x] 沿用第 4/5 章 hybrid-rerank/充分性契约组装退款政策证据；模型 Prompt 只用于查询扩写，不更改库中原文。
+- [x] 跑定向及现有 RAG 证据闸测试。
+- [x] 提交并追记证据不足结果。
 
 ### Task 6: 模型建议退款表单，不写申请
 

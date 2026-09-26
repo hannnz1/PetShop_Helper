@@ -5,6 +5,8 @@
 - SQLAlchemy 2.0 官方文档 `/websites/sqlalchemy_en_20`：`async_sessionmaker.begin()` 管理自动提交并关闭的异步事务；MySQL 唯一约束等同唯一索引。申请写入遇唯一冲突后必须离开失败事务再查同 `request_id`。来源：[AsyncIO ORM](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)、[MySQL dialect](https://docs.sqlalchemy.org/en/20/dialects/mysql.html)。
 - LangChain Python 官方文档 `/websites/langchain_oss_python_langchain`：聊天模型可用消息对象调用，模型工具通过 `bind_tools` 产生结构化 `tool_calls`。本章 Prompt 链和建议动作工具沿用项目现有 LangChain 版本，首个测试验证实际接口。来源：[Models](https://docs.langchain.com/oss/python/langchain/models)。
 
+政策查询扩写另行核对同一官方 Models 文档：`with_structured_output(PydanticModel, method="json_mode")` 支持运行时 Pydantic 校验；`json_mode` 只保证 JSON 形状，字段语义须在 Prompt 明示。本地配置仍使用 `structured_output_method`，没有改上游协议。
+
 以上查询不含密钥、用户数据或仓库专有代码。接口核对在实现前完成；不把文档示例等同本地版本行为。
 
 ## 本机安装版本冒烟
