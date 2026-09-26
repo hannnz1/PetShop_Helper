@@ -8,9 +8,9 @@ SOURCE_TYPES = {
     "product-faq.md": "faq",
     "returns-policy.md": "policy",
     "after-sales-manual.md": "manual",
-    "product-models.md": "faq",
+    "product-specs.md": "spec",
 }
-CONTENT_TYPES = frozenset({"faq", "policy", "manual", "mined"})
+CONTENT_TYPES = frozenset({"faq", "policy", "manual", "spec", "mined"})
 
 
 def resolve_source(filename: str) -> tuple[Path, str]:

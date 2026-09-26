@@ -24,7 +24,19 @@ def get_client(uri: str | None = None) -> MilvusClient:
     target = uri or get_settings().milvus_uri
     if target.endswith(".db"):
         Path(target).parent.mkdir(parents=True, exist_ok=True)
-    return MilvusClient(uri=target)
+    client = MilvusClient(uri=target)
+    client._petshop_hybrid = target.startswith(("http://", "https://"))
+    return client
+
+
+def hybrid_enabled() -> bool:
+    """The configured Standalone service owns the hybrid default collection."""
+    return get_settings().milvus_uri.startswith(("http://", "https://"))
+
+
+def client_uses_hybrid(client: MilvusClient) -> bool:
+    """Honor an explicit connection URI even when it differs from .env."""
+    return getattr(client, "_petshop_hybrid", hybrid_enabled())
 
 
 def get_runtime_client() -> MilvusClient:
@@ -68,9 +80,12 @@ def release_runtime_owner() -> None:
             _close_runtime_clients_locked()
 
 
-def ensure_collection(client: MilvusClient, collection: str = COLLECTION) -> None:
+def ensure_collection(
+    client: MilvusClient, collection: str = COLLECTION, *, hybrid: bool | None = None,
+) -> None:
     """Create the fixed schema once, with MySQL IDs as Milvus primary keys."""
-    if collection != COLLECTION:
+    use_hybrid = client_uses_hybrid(client) if hybrid is None else hybrid
+    if collection != COLLECTION or use_hybrid:
         _ensure_hybrid_collection(client, collection)
         return
     if client.has_collection(COLLECTION):

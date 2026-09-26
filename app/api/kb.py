@@ -229,9 +229,16 @@ async def search(request: SearchRequest) -> dict:
     if not request.query.strip():
         raise HTTPException(400, "query is required")
     try:
-        hits = await retrieval.search_knowledge(
-            request.query, top_k=request.top_k, min_score=request.min_score,
-        )
+        if milvus_client.hybrid_enabled():
+            hits = await retrieval.search_knowledge(
+                request.query, top_k=request.top_k, strategy="vector",
+            )
+            if request.min_score is not None:
+                hits = [hit for hit in hits if hit["score"] >= request.min_score]
+        else:
+            hits = await retrieval.search_knowledge(
+                request.query, top_k=request.top_k, min_score=request.min_score,
+            )
     except Exception as exc:
         raise HTTPException(503, "knowledge search unavailable") from exc
     return {"route": "dense", "hits": hits}

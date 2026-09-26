@@ -165,3 +165,21 @@ async def test_empty_input_and_invalid_batch_size(db_session_factory, db_clean, 
     assert await dualwrite.write_pending([]) == []
     with pytest.raises(ValueError, match="batch_size"):
         await dualwrite.vectorize_pending(milvus, batch_size=0)
+
+
+@pytest.mark.asyncio
+async def test_default_standalone_pending_write_uses_hybrid_shape(db_session_factory, db_clean, monkeypatch):
+    ids = await dualwrite.write_pending([_chunk(0)])
+
+    async def good_embed(texts):
+        return [_vector() for _ in texts]
+
+    submitted = []
+    monkeypatch.setattr(dualwrite.embeddings, "embed_texts", good_embed)
+    monkeypatch.setattr(dualwrite.milvus_client, "client_uses_hybrid", lambda client: True, raising=False)
+    monkeypatch.setattr(dualwrite.milvus_client, "upsert_vectors", lambda client, rows, collection=None: submitted.extend(rows))
+    monkeypatch.setattr(dualwrite.milvus_client, "flush", lambda client, collection=None: None)
+    assert await dualwrite.vectorize_pending(object()) == 1
+    assert submitted[0]["id"] == ids[0]
+    assert "dense" in submitted[0] and "text" in submitted[0]
+    assert "vector" not in submitted[0]

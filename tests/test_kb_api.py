@@ -143,6 +143,21 @@ def test_search_returns_dense_hits(monkeypatch):
     }]}
 
 
+def test_standalone_search_keeps_dense_admin_route(monkeypatch):
+    async def fake_search(query, **kwargs):
+        assert query == "邮费是多少"
+        assert kwargs == {"top_k": 2, "strategy": "vector"}
+        return [{"id": 7, "score": 0.8}, {"id": 8, "score": 0.2}]
+
+    monkeypatch.setattr(kb.milvus_client, "hybrid_enabled", lambda: True)
+    monkeypatch.setattr(kb.retrieval, "search_knowledge", fake_search)
+    with _client() as client:
+        response = client.post("/api/kb/search", json={
+            "query": "邮费是多少", "top_k": 2, "min_score": 0.5,
+        })
+    assert response.json() == {"route": "dense", "hits": [{"id": 7, "score": 0.8}]}
+
+
 def test_search_rejects_invalid_top_k_before_embedding():
     with _client() as client:
         response = client.post("/api/kb/search", json={"query": "运费", "top_k": 0})

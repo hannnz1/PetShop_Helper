@@ -58,7 +58,7 @@ async def _vectorize_pending_locked(client, batch_size: int, collection: str) ->
             raise ValueError("embedding count differs from pending batch")
         if any(len(vector) != milvus_client.DIM for vector in vectors):
             raise ValueError("embedding dimension differs from Milvus collection")
-        if collection == milvus_client.COLLECTION:
+        if collection == milvus_client.COLLECTION and not milvus_client.client_uses_hybrid(client):
             rows = [
                 {
                     "id": row.id, "vector": vector,

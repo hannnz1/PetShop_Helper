@@ -282,6 +282,13 @@ async def list_pending_chunks() -> list[KnowledgeChunk]:
         return list(result.scalars())
 
 
+async def list_all_chunks() -> list[KnowledgeChunk]:
+    """Read the MySQL authority set, including already-vectorized rows."""
+    async with db.async_session() as session:
+        result = await session.execute(select(KnowledgeChunk).order_by(KnowledgeChunk.id))
+        return list(result.scalars())
+
+
 async def mark_chunk_vectorized(chunk_id: int, vector_id: str) -> None:
     async with db.async_session.begin() as session:
         row = await session.get(KnowledgeChunk, chunk_id)

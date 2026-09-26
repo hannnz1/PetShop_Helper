@@ -18,26 +18,26 @@
 {"id":"A18","bucket":"A_policy","query":"电子类商品保修多久？","expect_section":["保修说明"],"expect_points":["保修 12 个月","自签收日起算"],"should_refuse":false}
 {"id":"A19","bucket":"A_policy","query":"人为损坏的电子商品属于保修范围吗？","expect_section":["保修说明"],"expect_points":["人为损坏不在保修范围"],"should_refuse":false}
 {"id":"A20","bucket":"A_policy","query":"退货核验后退款到账时效能确定吗？","expect_section":["退款时效"],"expect_points":["到账时效以平台售后规则为准"],"should_refuse":false}
-{"id":"B1","bucket":"B_model","query":"MH-W20 饮水机的滤芯多久换？","expect_section":["MH-W20 饮水机"],"expect_points":["每 2 周更换一次"],"should_refuse":false}
-{"id":"B2","bucket":"B_model","query":"MH-W40 饮水机的滤芯多久换？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次"],"should_refuse":false}
-{"id":"B3","bucket":"B_model","query":"MH-W60 饮水机的滤芯多久换？","expect_section":["MH-W60 饮水机"],"expect_points":["每 4 周更换一次"],"should_refuse":false}
-{"id":"B4","bucket":"B_model","query":"MH-W40 有 UV 杀菌吗？","expect_section":["MH-W40 饮水机"],"expect_points":["UV 杀菌功能"],"should_refuse":false}
-{"id":"B5","bucket":"B_model","query":"W20 款换芯周期是两周还是三周？","expect_section":["MH-W20 饮水机"],"expect_points":["每 2 周更换一次"],"should_refuse":false}
-{"id":"B6","bucket":"B_model","query":"MH-W40 换芯周期与杀菌功能分别是什么？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次","UV 杀菌功能"],"should_refuse":false}
-{"id":"B7","bucket":"B_model","query":"W60 款是不是每四周换一次芯？","expect_section":["MH-W60 饮水机"],"expect_points":["每 4 周更换一次"],"should_refuse":false}
-{"id":"B8","bucket":"B_model","query":"MH-W20 的耗材更换间隔？","expect_section":["MH-W20 饮水机"],"expect_points":["每 2 周更换一次"],"should_refuse":false}
-{"id":"B9","bucket":"B_model","query":"MH-W40 的耗材更换间隔？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次"],"should_refuse":false}
-{"id":"B10","bucket":"B_model","query":"MH-W60 的耗材更换间隔？","expect_section":["MH-W60 饮水机"],"expect_points":["每 4 周更换一次"],"should_refuse":false}
-{"id":"B11","bucket":"B_model","query":"MH-W20 不是 MH-W40，滤芯多久换？","expect_section":["MH-W20 饮水机"],"expect_points":["每 2 周更换一次"],"should_refuse":false}
-{"id":"B12","bucket":"B_model","query":"MH-W40 不是 MH-W20，滤芯多久换？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次"],"should_refuse":false}
-{"id":"B13","bucket":"B_model","query":"MH-W60 不是 MH-W40，滤芯多久换？","expect_section":["MH-W60 饮水机"],"expect_points":["每 4 周更换一次"],"should_refuse":false}
-{"id":"B14","bucket":"B_model","query":"W40 这个型号有没有紫外线杀菌功能？","expect_section":["MH-W40 饮水机"],"expect_points":["UV 杀菌功能"],"should_refuse":false}
-{"id":"B15","bucket":"B_model","query":"请给我 MH-W20 的滤芯建议周期，别说 W60。","expect_section":["MH-W20 饮水机"],"expect_points":["每 2 周更换一次"],"should_refuse":false}
-{"id":"B16","bucket":"B_model","query":"请给我 MH-W60 的滤芯建议周期，别说 W20。","expect_section":["MH-W60 饮水机"],"expect_points":["每 4 周更换一次"],"should_refuse":false}
-{"id":"B17","bucket":"B_model","query":"智能饮水机 MH-W40 是每两周换芯吗？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次"],"should_refuse":false}
-{"id":"B18","bucket":"B_model","query":"智能饮水机 MH-W20 是每三周换芯吗？","expect_section":["MH-W20 饮水机"],"expect_points":["每 2 周更换一次"],"should_refuse":false}
-{"id":"B19","bucket":"B_model","query":"智能饮水机 MH-W60 是每三周换芯吗？","expect_section":["MH-W60 饮水机"],"expect_points":["每 4 周更换一次"],"should_refuse":false}
-{"id":"B20","bucket":"B_model","query":"W40 那款多久换滤芯，能不能 UV 杀菌？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次","UV 杀菌功能"],"should_refuse":false}
+{"id": "B1", "bucket": "B_model", "query": "MH-LP100 的废砂盒多久倒一次", "expect_section": ["MH-LP100"], "expect_points": ["5 至 7 天", "7 天(单猫)"], "should_refuse": false}
+{"id": "B2", "bucket": "B_model", "query": "智能猫砂盆 Pro MH-LP100 有没有 App 远程监控", "expect_section": ["MH-LP100"], "expect_points": ["App 远程监控"], "should_refuse": false}
+{"id": "B3", "bucket": "B_model", "query": "MH-LP50 和 Pro 版有什么区别", "expect_section": ["MH-LP50"], "expect_points": ["无 App", "价格更低"], "should_refuse": false}
+{"id": "B4", "bucket": "B_model", "query": "MH-LP200 适合多大的猫,几天倒一次废砂盒", "expect_section": ["MH-LP200"], "expect_points": ["2kg 至 12kg", "每 3 至 5 天"], "should_refuse": false}
+{"id": "B5", "bucket": "B_model", "query": "自动饮水机 MH-W20 的滤芯多久换一次", "expect_section": ["MH-W20"], "expect_points": ["每 2 周"], "should_refuse": false}
+{"id": "B6", "bucket": "B_model", "query": "MH-W40 的滤芯多久换一次,有没有杀菌功能", "expect_section": ["MH-W40"], "expect_points": ["每 3 周", "UV"], "should_refuse": false}
+{"id": "B7", "bucket": "B_model", "query": "MH-W60 水箱有多大,多久换一次滤芯", "expect_section": ["MH-W60"], "expect_points": ["6L", "每 4 周"], "should_refuse": false}
+{"id": "B8", "bucket": "B_model", "query": "MH-W20 水箱容量是多大", "expect_section": ["MH-W20"], "expect_points": ["2L"], "should_refuse": false}
+{"id": "B9", "bucket": "B_model", "query": "猫爬架 MH-CT30 单层能承重多少", "expect_section": ["MH-CT30"], "expect_points": ["单层最大 10kg"], "should_refuse": false}
+{"id": "B10", "bucket": "B_model", "query": "恒温加热垫 MH-HP12 可以一直通电开着吗", "expect_section": ["MH-HP12"], "expect_points": ["不超过 12 小时"], "should_refuse": false}
+{"id": "B11", "bucket": "B_model", "query": "MH-HP12 加热垫的尺寸是多少", "expect_section": ["MH-HP12"], "expect_points": ["40cm × 30cm"], "should_refuse": false}
+{"id": "B12", "bucket": "B_model", "query": "MH-HP20 加热垫有几档温度,分别是多少度", "expect_section": ["MH-HP20"], "expect_points": ["三档", "30℃ / 38℃ / 45℃"], "should_refuse": false}
+{"id": "B13", "bucket": "B_model", "query": "MH-FD10 喂食器有没有摄像头", "expect_section": ["MH-FD10"], "expect_points": ["不含摄像头"], "should_refuse": false}
+{"id": "B14", "bucket": "B_model", "query": "MH-FD30 喂食器能远程投喂吗,粮桶多大", "expect_section": ["MH-FD30"], "expect_points": ["1080P 摄像头", "6L", "App 远程"], "should_refuse": false}
+{"id": "B15", "bucket": "B_model", "query": "全景看护摄像头 MH-CAM1 是多少分辨率", "expect_section": ["MH-CAM1"], "expect_points": ["2K"], "should_refuse": false}
+{"id": "B16", "bucket": "B_model", "query": "智能猫砂盆 Lite MH-LP50 能不能联网用 App", "expect_section": ["MH-LP50"], "expect_points": ["不含 App"], "should_refuse": false}
+{"id": "B17", "bucket": "B_model", "query": "MH-W40 的水箱容量是多大", "expect_section": ["MH-W40"], "expect_points": ["4L"], "should_refuse": false}
+{"id": "B18", "bucket": "B_model", "query": "自动饮水机 Pro 不锈钢 MH-W60 是什么材质,几个水泵", "expect_section": ["MH-W60"], "expect_points": ["304 不锈钢", "双泵"], "should_refuse": false}
+{"id": "B19", "bucket": "B_model", "query": "MH-FD10 粮桶容量多大,一天最多喂几餐", "expect_section": ["MH-FD10"], "expect_points": ["4L", "6 餐"], "should_refuse": false}
+{"id": "B20", "bucket": "B_model", "query": "MH-LP200 的猫砂容量是多大", "expect_section": ["MH-LP200"], "expect_points": ["12L"], "should_refuse": false}
 {"id":"C1","bucket":"C_colloquial","query":"那个邮费要多少啊？","expect_section":["运费怎么算"],"expect_points":["未满收取 10 元运费"],"should_refuse":false}
 {"id":"C2","bucket":"C_colloquial","query":"买到多少才不收送货钱？","expect_section":["运费怎么算"],"expect_points":["满 99 元包邮"],"should_refuse":false}
 {"id":"C3","bucket":"C_colloquial","query":"凑单凑到九十九还用掏运费不？","expect_section":["运费怎么算"],"expect_points":["满 99 元包邮"],"should_refuse":false}
@@ -57,7 +57,7 @@
 {"id":"C17","bucket":"C_colloquial","query":"电器坏了，一年内还管不管？","expect_section":["保修说明"],"expect_points":["保修 12 个月"],"should_refuse":false}
 {"id":"C18","bucket":"C_colloquial","query":"摔坏的电器还能走保修不？","expect_section":["保修说明"],"expect_points":["人为损坏不在保修范围"],"should_refuse":false}
 {"id":"C19","bucket":"C_colloquial","query":"退回去验过以后钱啥时到？","expect_section":["退款时效"],"expect_points":["到账时效以平台售后规则为准"],"should_refuse":false}
-{"id":"C20","bucket":"C_colloquial","query":"猫咪喝水那款 W40 的芯多久一换？","expect_section":["MH-W40 饮水机"],"expect_points":["每 3 周更换一次"],"should_refuse":false}
+{"id":"C20","bucket":"C_colloquial","query":"猫咪喝水那款 W40 的芯多久一换？","expect_section":["MH-W40"],"expect_points":["每 3 周更换一次"],"should_refuse":false}
 {"id":"D1","bucket":"D_absent","query":"可以货到付款吗？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D2","bucket":"D_absent","query":"支持数字人民币付款吗？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D3","bucket":"D_absent","query":"怎么注销账号？","expect_section":[],"expect_points":[],"should_refuse":true}
@@ -69,9 +69,9 @@
 {"id":"D9","bucket":"D_absent","query":"买宠物食品需要交进口关税吗？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D10","bucket":"D_absent","query":"能让无人机当天送达吗？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D11","bucket":"D_absent","query":"猫砂盆 Pro 的电池容量是多少？","expect_section":[],"expect_points":[],"should_refuse":true}
-{"id":"D12","bucket":"D_absent","query":"MH-W40 饮水机的水箱容量是几升？","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D12","bucket":"D_absent","query":"MH-W40 饮水机的水泵功率是多少瓦？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D13","bucket":"D_absent","query":"MH-W20 饮水机能用手机蓝牙控制吗？","expect_section":[],"expect_points":[],"should_refuse":true}
-{"id":"D14","bucket":"D_absent","query":"宠物加热垫的最高温度是多少？","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D14","bucket":"D_absent","query":"MH-HP20 加热垫的电池容量是多少毫安时？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D15","bucket":"D_absent","query":"平台卖的猫粮蛋白质含量多少？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D16","bucket":"D_absent","query":"电子礼品卡能在门店使用吗？","expect_section":[],"expect_points":[],"should_refuse":true}
 {"id":"D17","bucket":"D_absent","query":"能提供宠物训练课程吗？","expect_section":[],"expect_points":[],"should_refuse":true}

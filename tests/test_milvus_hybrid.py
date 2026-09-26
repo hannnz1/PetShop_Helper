@@ -1,10 +1,28 @@
 """Chapter 4 hybrid search against an isolated real Standalone collection."""
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
 from app.kb import milvus_client as mc
+
+
+def test_default_collection_uses_hybrid_schema_after_standalone_switch(monkeypatch):
+    called = []
+    monkeypatch.setattr(mc, "get_settings", lambda: SimpleNamespace(milvus_uri="http://127.0.0.1:19530"))
+    monkeypatch.setattr(mc, "_ensure_hybrid_collection", lambda client, name: called.append(name))
+    mc.ensure_collection(object())
+    assert called == ["knowledge"]
+
+
+def test_explicit_lite_client_keeps_legacy_schema_after_switch(monkeypatch):
+    called = []
+    monkeypatch.setattr(mc, "get_settings", lambda: SimpleNamespace(milvus_uri="http://127.0.0.1:19530"))
+    monkeypatch.setattr(mc, "_validate_collection", lambda client: called.append("legacy"))
+    fake = SimpleNamespace(_petshop_hybrid=False, has_collection=lambda name: True, load_collection=lambda name: None)
+    mc.ensure_collection(fake)
+    assert called == ["legacy"]
 
 
 def _vector(axis: int) -> list[float]:
