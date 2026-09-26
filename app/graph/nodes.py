@@ -71,8 +71,8 @@ def _tool_schema_text(route: str) -> str:
     return json.dumps(schemas, ensure_ascii=False, sort_keys=True)
 
 
-def _budget(state: dict, snapshot, *, final: bool = False):
-    settings = get_settings()
+def _budget(state: dict, snapshot, *, final: bool = False, settings=None):
+    settings = settings or get_settings()
     summary = "\n".join(item.content for item in snapshot.summaries if item.content.strip())
     evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
     fixed = FixedCosts.measure(
@@ -106,14 +106,15 @@ def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
     # unpersisted graph invocation has no committed visible history yet.
     snapshot = runtime.context.get("snapshot") or ContextSnapshot(
         state.get("conversation_id", 0), 0, 0, (), ())
-    budget = runtime.context.get("budget") or _budget(state, snapshot, final=final)
+    settings = runtime.context.get("settings") or get_settings()
+    budget = runtime.context.get("budget") or _budget(state, snapshot, final=final, settings=settings)
     evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
     view = build_model_context(snapshot, state["messages"], state["query"],
-                               evidence, _system_text(state, final), budget)
-    settings = get_settings()
+                               evidence, _system_text(state, final), budget, settings=settings)
     window = min(settings.model_context_window,
                  settings.token_budget if "token_budget" in settings.model_fields_set else settings.model_context_window)
-    schema_tokens = (estimate_tokens([SystemMessage(content=_tool_schema_text(state["route"]))])
+    schema_tokens = (estimate_tokens([SystemMessage(content=_tool_schema_text(state["route"]))],
+                                     chars_per_token=settings.cjk_chars_per_token)
                      if not final else 0)
     if (view.token_count + schema_tokens
             + max(settings.max_output_tokens, settings.chat_max_tokens) + 250 > window):
@@ -182,8 +183,10 @@ async def coref(state: dict, runtime: Runtime[dict]) -> dict:
     model = runtime.context.get("model") if runtime.context else None
     snapshot = runtime.context.get("snapshot") if runtime.context else None
     if snapshot is not None:
-        budget = runtime.context.get("budget") or _budget(state, snapshot)
-        history = build_history_context(snapshot, budget)
+        budget = runtime.context.get("budget") or _budget(
+            state, snapshot, settings=runtime.context.get("settings"))
+        history = build_history_context(snapshot, budget,
+                                        settings=runtime.context.get("settings") or get_settings())
     else:
         history = _history_text(state.get("messages", []))
     logger.info("history_ctx %s", json.dumps({"conversation_id": state.get("conversation_id"),
@@ -262,7 +265,7 @@ async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
     }
 
 
-async def agent_tools(state: dict) -> dict:
+async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict:
     allowed = {tool.name for tool in get_chat_tools(state["route"])}
     tool_messages = []
     results = list(state.get("tool_results", []))
@@ -303,7 +306,10 @@ async def agent_tools(state: dict) -> dict:
         tool_messages.append(run.tool_message)
         results.append({"tool_call_id": run.tool_call_id, "name": run.name,
                         "ok": run.ok, "content": str(run.tool_message.content)})
-    if estimate_tokens(tool_messages) > get_settings().tool_result_max_tokens:
+    settings = runtime.context.get("settings") if runtime and runtime.context else None
+    settings = settings or get_settings()
+    if (estimate_tokens(tool_messages, chars_per_token=settings.cjk_chars_per_token)
+            > settings.tool_result_max_tokens):
         raise ContextBudgetExceeded("tool result batch exceeds per-step token budget")
     return {"messages": tool_messages, "tool_results": results,
             "suggested_actions": actions}

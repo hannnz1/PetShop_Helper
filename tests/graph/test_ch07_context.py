@@ -240,6 +240,54 @@ def test_tiny_legacy_cap_is_rejected_at_app_startup(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_model_call_uses_runtime_settings_for_budget(monkeypatch):
+    from app.config import Settings
+
+    large = Settings(_env_file=None, chat_model="offline-test", chat_base_url="http://127.0.0.1:9/v1",
+                     chat_api_key="offline-test", token_budget=32768)
+    small = large.model_copy(update={"token_budget": 500, "model_context_window": 500})
+    monkeypatch.setattr(nodes, "get_settings", lambda: large)
+
+    class Model:
+        def bind_tools(self, tools):
+            raise AssertionError("invalid budget must fail before model binding")
+
+    context = SimpleNamespace(context={"model": Model(), "snapshot": snapshot(), "settings": small})
+    with pytest.raises(ContextBudgetExceeded):
+        await nodes.agent_llm({"conversation_id": 7, "query": "查订单", "route": "business",
+                               "messages": [HumanMessage("查订单")], "steps": 0}, context)
+
+
+@pytest.mark.asyncio
+async def test_model_context_estimate_uses_runtime_cjk_calibration(monkeypatch):
+    from app.config import Settings
+    from app.core import context_layers, memory
+    from app.core.memory import estimate_tokens
+
+    default = Settings(_env_file=None, chat_model="offline-test", chat_base_url="http://127.0.0.1:9/v1",
+                       chat_api_key="offline-test", cjk_chars_per_token=4, token_budget=32768)
+    custom = default.model_copy(update={"cjk_chars_per_token": 1})
+    monkeypatch.setattr(nodes, "get_settings", lambda: default)
+    monkeypatch.setattr(context_layers, "get_settings", lambda: default)
+    monkeypatch.setattr(memory, "get_settings", lambda: default)
+
+    class Model:
+        def bind_tools(self, tools):
+            return self
+
+        async def ainvoke(self, messages):
+            self.messages = messages
+            return AIMessage(content="stop")
+
+    model = Model()
+    context = SimpleNamespace(context={"model": model, "snapshot": snapshot(), "settings": custom})
+    result = await nodes.agent_llm({"conversation_id": 7, "query": "查订单", "route": "business",
+                                    "messages": [HumanMessage("查订单")], "steps": 0}, context)
+    assert result["model_ctx"]["token_estimate"] == estimate_tokens(
+        model.messages, chars_per_token=custom.cjk_chars_per_token)
+
+
+@pytest.mark.asyncio
 async def test_context_log_writes_local_file_without_propagating_raw_text(tmp_path, caplog):
     caplog.set_level(logging.INFO)
     path = tmp_path / "log" / "app.log"

@@ -9,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
+from app.config import Settings
 from app.db import repository
 from app.graph.state import new_turn
 
@@ -40,11 +41,13 @@ class GraphRuntime:
 
     def __init__(self, checkpoint_path: Path,
                  graph_factory: Callable[[AsyncSqliteSaver], Any],
-                 classifier: Any | None = None, *, enforce_audit: bool = True) -> None:
+                 classifier: Any | None = None, *, enforce_audit: bool = True,
+                 settings: Settings | None = None) -> None:
         self.checkpoint_path = Path(checkpoint_path)
         self.graph_factory = graph_factory
         self.classifier = classifier
         self.enforce_audit = enforce_audit
+        self.settings = settings
         self.graph: Any | None = None
         self._saver_context: Any | None = None
         self._active: set[int] = set()
@@ -133,7 +136,8 @@ class GraphRuntime:
             return await self.graph.ainvoke(
                 new_turn(user_id, resolved, message),
                 {"configurable": {"thread_id": str(resolved)}},
-                context={"model": model, "classifier": self.classifier, "snapshot": snapshot},
+                context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
+                         "settings": self.settings},
             )
         finally:
             self._active.remove(resolved)
@@ -174,7 +178,8 @@ class GraphRuntime:
                 async for event in self.graph.astream(
                     new_turn(user_id, resolved, message),
                     {"configurable": {"thread_id": str(resolved)}},
-                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot},
+                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
+                             "settings": self.settings},
                     stream_mode=["messages", "updates"],
                 ):
                     yield event
@@ -206,7 +211,8 @@ class GraphRuntime:
                 async for event in self.graph.astream(
                     Command(resume=order_id),
                     {"configurable": {"thread_id": str(resolved)}},
-                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot},
+                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
+                             "settings": self.settings},
                     stream_mode=["messages", "updates"],
                 ):
                     yield event

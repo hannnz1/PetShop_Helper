@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.core.intent import IntentClassifier
 from app.config import get_settings
+from app.config import Settings
 from app.db.repository import ContextSnapshot
 from app.core.context_budget import ContextBudget
 from app.graph import nodes
@@ -19,6 +20,7 @@ class GraphContext(TypedDict, total=False):
     classifier: IntentClassifier
     snapshot: ContextSnapshot
     budget: ContextBudget
+    settings: Settings
 
 
 def build_graph(checkpointer=None):

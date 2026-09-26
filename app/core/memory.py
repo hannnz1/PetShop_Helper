@@ -40,15 +40,17 @@ def _validate_complete_turns(messages: list[BaseMessage]) -> None:
             raise ValueError("history must contain complete Human/AI turns")
 
 
-def trim_history(messages: list[BaseMessage], max_tokens: int) -> list[BaseMessage]:
+def trim_history(messages: list[BaseMessage], max_tokens: int,
+                 *, chars_per_token: float | None = None) -> list[BaseMessage]:
     """Keep newest whole turns that fit; never retain half a turn."""
     if max_tokens < 0:
         raise ValueError("max_tokens must be nonnegative")
     _validate_complete_turns(messages)
 
+    counter = lambda rows: estimate_tokens(rows, chars_per_token=chars_per_token)
     start = len(messages)
     for index in range(len(messages) - 2, -1, -2):
-        if estimate_tokens(messages[index:]) > max_tokens:
+        if counter(messages[index:]) > max_tokens:
             break
         start = index
 
@@ -61,7 +63,7 @@ def trim_history(messages: list[BaseMessage], max_tokens: int) -> list[BaseMessa
     trimmed = trim_messages(
         candidate,
         strategy="last",
-        token_counter=estimate_tokens,
+        token_counter=counter,
         max_tokens=max_tokens,
         start_on="human",
         end_on="ai",

@@ -60,7 +60,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
         try:
             classifier = ModelIntentClassifier(shared_model, config.structured_output_method)
             async with GraphRuntime(Path(config.graph_checkpoint_path), build_graph,
-                                    classifier=classifier) as graph:
+                                    classifier=classifier, settings=config) as graph:
                 application.state.graph = graph
                 yield
         finally:
