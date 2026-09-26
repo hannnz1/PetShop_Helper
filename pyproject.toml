@@ -6,6 +6,7 @@ dependencies = [
     "asyncmy>=0.2.9",
     "cryptography>=46.0.0",
     "fastapi>=0.141.1",
+    "httpx>=0.28.1",
     "langchain>=1.4.2",
     "langchain-openai>=1.6.3",
     "langchain-text-splitters>=1.1,<2",

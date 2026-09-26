@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=3, gt=0)
     retrieval_min_score: float = Field(default=0.4, ge=0, le=1)
     rerank_api_key: SecretStr | None = None
+    rerank_base_url: str = "https://api.siliconflow.cn/v1"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     recall_top_k: int = Field(default=50, gt=0)
     rerank_top_k: int = Field(default=10, gt=0)

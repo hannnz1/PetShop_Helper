@@ -160,6 +160,7 @@ def test_ch04_retrieval_defaults_preserve_pre_migration_milvus(monkeypatch):
     )
     assert settings.milvus_uri == "data/milvus_knowledge.db"
     assert settings.rerank_api_key is None
+    assert settings.rerank_base_url == "https://api.siliconflow.cn/v1"
     assert settings.rerank_model == "BAAI/bge-reranker-v2-m3"
     assert settings.recall_top_k == 50
     assert settings.rerank_top_k == 10
@@ -170,6 +171,7 @@ def test_ch04_retrieval_settings_load_from_environment(monkeypatch):
     overrides = {
         "MILVUS_URI": "http://127.0.0.1:19530",
         "RERANK_API_KEY": "test-rerank-key",
+        "RERANK_BASE_URL": "https://api.siliconflow.cn/v1/",
         "RERANK_MODEL": "BAAI/test-reranker",
         "RECALL_TOP_K": "30",
         "RERANK_TOP_K": "7",
@@ -183,6 +185,7 @@ def test_ch04_retrieval_settings_load_from_environment(monkeypatch):
     )
     assert settings.milvus_uri == overrides["MILVUS_URI"]
     assert settings.rerank_api_key.get_secret_value() == "test-rerank-key"
+    assert settings.rerank_base_url == overrides["RERANK_BASE_URL"]
     assert "test-rerank-key" not in repr(settings)
     assert settings.rerank_model == "BAAI/test-reranker"
     assert settings.recall_top_k == 30
