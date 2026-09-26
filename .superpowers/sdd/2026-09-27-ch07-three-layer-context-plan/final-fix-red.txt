@@ -1,0 +1,51 @@
+FFFFFF                                                                   [100%]
+================================== FAILURES ===================================
+_________ test_summary_content_blocks_fail_closed[answer0-committed] __________
+tests\test_ch07_summarizer.py:287: in test_summary_content_blocks_fail_closed
+    assert outcome.status == expected
+E   AssertionError: assert 'skipped' == 'committed'
+E     
+E     - committed
+E     + skipped
+----------------------------- Captured log setup ------------------------------
+WARNING  asyncmy:asyncio.py:251 Can't create database 'mewhelp_test'; database exists
+WARNING  asyncmy:asyncio.py:251 Integer display width is deprecated and will be removed in a future release.
+___________ test_summary_content_blocks_fail_closed[answer1-failed] ___________
+tests\test_ch07_summarizer.py:287: in test_summary_content_blocks_fail_closed
+    assert outcome.status == expected
+E   AssertionError: assert 'skipped' == 'failed'
+E     
+E     - failed
+E     + skipped
+___________ test_summary_content_blocks_fail_closed[answer2-failed] ___________
+tests\test_ch07_summarizer.py:287: in test_summary_content_blocks_fail_closed
+    assert outcome.status == expected
+E   AssertionError: assert 'skipped' == 'failed'
+E     
+E     - failed
+E     + skipped
+___________ test_summary_content_blocks_fail_closed[answer3-failed] ___________
+tests\test_ch07_summarizer.py:287: in test_summary_content_blocks_fail_closed
+    assert outcome.status == expected
+E   AssertionError: assert 'skipped' == 'failed'
+E     
+E     - failed
+E     + skipped
+______________ test_graph_zero_anchor_automatic_cascade[invoke] _______________
+tests\test_ch07_summarizer.py:340: in test_graph_zero_anchor_automatic_cascade
+    assert snapshot.layer1_from_msg_id > 0
+E   AssertionError: assert 0 > 0
+E    +  where 0 = ContextSnapshot(conversation_id=1, summary_upto_msg_id=0, layer1_from_msg_id=0, messages=(VisibleMessage(id=1, role='u...2 ��è����Ҫ�������� 1002 ��è����Ҫ����'), VisibleMessage(id=4, role='assistant', content='���ã�����С�������԰����˽���Ʒ���������ۺ����⡣')), summaries=()).layer1_from_msg_id
+______________ test_graph_zero_anchor_automatic_cascade[stream] _______________
+tests\test_ch07_summarizer.py:340: in test_graph_zero_anchor_automatic_cascade
+    assert snapshot.layer1_from_msg_id > 0
+E   AssertionError: assert 0 > 0
+E    +  where 0 = ContextSnapshot(conversation_id=1, summary_upto_msg_id=0, layer1_from_msg_id=0, messages=(VisibleMessage(id=1, role='u...2 ��è����Ҫ�������� 1002 ��è����Ҫ����'), VisibleMessage(id=4, role='assistant', content='���ã�����С�������԰����˽���Ʒ���������ۺ����⡣')), summaries=()).layer1_from_msg_id
+=========================== short test summary info ===========================
+FAILED tests/test_ch07_summarizer.py::test_summary_content_blocks_fail_closed[answer0-committed]
+FAILED tests/test_ch07_summarizer.py::test_summary_content_blocks_fail_closed[answer1-failed]
+FAILED tests/test_ch07_summarizer.py::test_summary_content_blocks_fail_closed[answer2-failed]
+FAILED tests/test_ch07_summarizer.py::test_summary_content_blocks_fail_closed[answer3-failed]
+FAILED tests/test_ch07_summarizer.py::test_graph_zero_anchor_automatic_cascade[invoke]
+FAILED tests/test_ch07_summarizer.py::test_graph_zero_anchor_automatic_cascade[stream]
+6 failed, 14 deselected in 6.50s
