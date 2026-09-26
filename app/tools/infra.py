@@ -44,6 +44,7 @@ async def execute_tool_call(
     conversation_id: int,
     timeout: float | None = None,
     max_retries: int = 2,
+    allowed_names: set[str] | None = None,
 ) -> ToolRun:
     """Run one model call, preserving DB failures for the API error boundary."""
 
@@ -55,6 +56,8 @@ async def execute_tool_call(
     safe_id = call_id if isinstance(call_id, str) and call_id else "invalid-tool-call"
     if not isinstance(name, str) or not name or not isinstance(call_id, str) or not call_id:
         return _error_run(safe_id, safe_name, "工具调用缺少名称或 ID")
+    if allowed_names is not None and name not in allowed_names:
+        return _error_run(safe_id, name, "当前路径不允许此工具")
     args = tool_call.get("args")
     if not isinstance(args, dict):
         return _error_run(safe_id, safe_name, "工具参数格式错误")

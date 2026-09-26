@@ -28,5 +28,14 @@ def get_all_tools() -> list[BaseTool]:
     return list(_ALL)
 
 
+def get_chat_tools(route: str) -> list[BaseTool]:
+    """The graph binds only read tools; writes require a user action."""
+    if route == "knowledge":
+        return [query_order]
+    if route == "business":
+        return [query_order, query_product, query_logistics]
+    return []
+
+
 def get_tool(name: str) -> BaseTool | None:
     return _BY_NAME.get(name)

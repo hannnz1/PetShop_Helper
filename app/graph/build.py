@@ -1,0 +1,50 @@
+"""Compose the deterministic exits around the bounded tool loop."""
+
+from typing import TypedDict
+
+from langchain_core.language_models import BaseChatModel
+from langgraph.graph import END, START, StateGraph
+
+from app.core.intent import IntentClassifier
+from app.config import get_settings
+from app.graph import nodes
+from app.graph.routing import route_by_intent, should_continue
+from app.graph.state import ConversationState
+
+
+class GraphContext(TypedDict, total=False):
+    model: BaseChatModel
+    classifier: IntentClassifier
+
+
+def build_graph(checkpointer=None):
+    builder = StateGraph(ConversationState, context_schema=GraphContext)
+    for name in (
+        "coref", "classify_intent_node", "forced_rag", "agent_llm",
+        "agent_tools", "final_answer", "chitchat_reply", "complaint_reply",
+        "fallback_reply", "log_turn",
+    ):
+        builder.add_node(name, getattr(nodes, name))
+    builder.add_edge(START, "coref")
+    builder.add_edge("coref", "classify_intent_node")
+    builder.add_conditional_edges(
+        "classify_intent_node",
+        lambda state: route_by_intent(state["intent"]),
+        {"business": "agent_llm", "knowledge": "forced_rag",
+         "complaint": "complaint_reply", "chitchat": "chitchat_reply",
+         "fallback": "fallback_reply"},
+    )
+    builder.add_conditional_edges(
+        "forced_rag", nodes.confidence_gate,
+        {"agent": "agent_llm", "fallback": "fallback_reply"},
+    )
+    builder.add_conditional_edges(
+        "agent_llm",
+        lambda state: should_continue(state, max_steps=get_settings().max_agent_steps),
+        {"tools": "agent_tools", "final": "final_answer", "fallback": "fallback_reply"},
+    )
+    builder.add_edge("agent_tools", "agent_llm")
+    for name in ("final_answer", "chitchat_reply", "complaint_reply", "fallback_reply"):
+        builder.add_edge(name, "log_turn")
+    builder.add_edge("log_turn", END)
+    return builder.compile(checkpointer=checkpointer)
