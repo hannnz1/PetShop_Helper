@@ -7,6 +7,8 @@
 :root{--bg:#f5f7f4;--ink:#213c32;--muted:#748078;--green:#237b59;--line:#dfe7e0}*{box-sizing:border-box}body{margin:0;background:var(--bg);font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif;color:var(--ink)}button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.5}.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}.sidebar{padding:32px 24px;border-right:1px solid var(--line);background:#eaf0e8;display:flex;flex-direction:column;gap:28px}.brand{display:flex;gap:12px;align-items:center;font-weight:750;font-size:18px}.mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:var(--green);color:white;font-size:24px}.tag{font-size:11px;letter-spacing:2px;color:var(--muted)}.new{border:1px solid #b6cbbb;background:transparent;border-radius:10px;padding:12px;color:var(--ink)}.side-note{font-size:13px;color:#617365}.side-foot{margin-top:auto;font-size:12px;color:var(--muted)}main{max-width:1100px;width:100%;margin:auto;display:flex;flex-direction:column;height:100vh;padding:0 44px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:92px;border-bottom:1px solid var(--line)}h1{font-size:18px;margin:0}.status{font-size:12px;color:var(--muted)}.status:before{content:"";display:inline-block;width:7px;height:7px;background:#89988a;border-radius:50%;margin-right:7px}.tabs{display:flex;gap:8px}.tab{background:none;border:0;border-radius:8px;padding:8px 13px;color:var(--muted)}.tab.active{background:#e4eee6;color:var(--green);font-weight:600}.panel{flex:1;min-height:0;display:flex;flex-direction:column}.panel[hidden]{display:none}.messages{flex:1;overflow:auto;padding:26px 0;scroll-behavior:smooth}.welcome{margin:7vh auto 35px;max-width:570px}.welcome .kicker{color:var(--green);font-size:12px;letter-spacing:2px}.welcome h2{font-size:34px;line-height:1.4;margin:16px 0;font-weight:650}.welcome p{color:var(--muted)}.suggestions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:26px}.suggestions button{border:1px solid var(--line);background:white;border-radius:12px;text-align:left;padding:17px;color:var(--ink)}.suggestions small{display:block;color:var(--muted);margin-top:4px}.msg{display:flex;gap:12px;margin-bottom:24px;align-items:flex-start}.msg.user{justify-content:flex-end}.avatar{width:32px;height:32px;background:#e1eee4;border-radius:10px;display:grid;place-items:center;flex-shrink:0;font-size:17px}.bubble{white-space:pre-wrap;overflow-wrap:anywhere;max-width:85%;padding:14px 18px;background:white;border:1px solid var(--line);border-radius:0 14px 14px 14px}.user .bubble{background:#e1eee4;border-color:#e1eee4;border-radius:14px 0 14px 14px}.bubble.error{border-color:#e4b3a3;color:#99492f}.composer{padding:16px;background:white;border:1px solid #d6e0d7;border-radius:16px;box-shadow:0 8px 30px #2a4a3210}.composer textarea{width:100%;resize:none;border:0;background:none;outline:none;color:var(--ink);min-height:64px;max-height:150px}.composer:focus-within{border-color:var(--green)}.compose-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px}.hint{font-size:11px;color:var(--muted)}.primary{border:0;background:var(--green);color:white;border-radius:9px;padding:9px 22px}.secondary{border:1px solid var(--line);background:white;color:var(--ink);border-radius:9px;padding:8px 16px}.footnote{text-align:center;font-size:11px;color:var(--muted);padding:12px 0 17px}.extract{max-width:680px;width:100%;margin:48px auto;overflow:auto}.extract h2{font-size:26px;margin:0}.extract p{color:var(--muted)}.extract textarea{width:100%;height:160px;border:1px solid var(--line);border-radius:12px;padding:16px;resize:vertical;margin:12px 0;outline-color:var(--green)}.result{background:white;border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:22px}.result dl{margin:0}.result dt{font-size:12px;color:var(--muted);margin-top:12px}.result dt:first-child{margin:0}.result dd{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}.result pre{font-size:12px;white-space:pre-wrap;color:var(--muted);margin-bottom:0}.error-text{color:#99492f!important}.mobile-new{display:none}@media(max-width:760px){.app{display:block}.sidebar{display:none}main{padding:0 18px;height:100dvh}header{min-height:82px;flex-wrap:wrap;padding:12px 0;gap:6px}h1{font-size:16px}.status{display:none}.tab{padding:6px 8px}.mobile-new{display:block;border:0;background:none;color:var(--green);font-size:12px}.welcome{margin-top:5vh}.welcome h2{font-size:28px}.suggestions{gap:8px}.suggestions button{padding:12px}.hint{font-size:10px}.bubble{max-width:88%}.extract{margin-top:25px}}
 .tool-trace{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.tool-trace:empty{display:none}.tool-badge{font-size:11px;color:#617365;background:#f6f8f5;border:1px dashed #b6cbbb;border-radius:99px;padding:2px 9px}.assistant .bubble{white-space:normal}.answer{white-space:normal;overflow-wrap:anywhere}.answer p{margin:0 0 .65em}.answer p:last-child{margin-bottom:0}.answer ul,.answer ol{margin:.4em 0;padding-left:1.4em}.answer pre{overflow:auto;background:#eff3ef;padding:10px;border-radius:8px}.answer code{font-family:Consolas,monospace;background:#eff3ef;border-radius:3px;padding:1px 3px}.answer pre code{background:none;padding:0}.answer table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%}.answer th,.answer td{border:1px solid var(--line);padding:4px 8px;text-align:left}.answer blockquote{border-left:3px solid #b6cbbb;margin:.5em 0;padding-left:10px;color:#617365}.answer a{color:var(--green)}.answer.typing:after{content:'● ● ●';color:#89988a;letter-spacing:3px;animation:pulse 1s infinite alternate}@keyframes pulse{from{opacity:.3}to{opacity:1}}
 .tabs a.tab{text-decoration:none;display:inline-flex;align-items:center}
+.cite{display:inline-flex;align-items:center;margin:0 2px;padding:0 5px;border:1px solid #9dbda7;border-radius:5px;background:#edf5ef;color:#196845;font-size:11px;line-height:1.6;vertical-align:baseline}.cite:hover,.cite:focus-visible{background:#dceee1;outline:2px solid #94bca0}.citation-panel{margin-top:12px;padding:12px 14px;border:1px solid #bed6c4;border-radius:10px;background:#f4faf5;font-size:13px}.citation-panel[hidden]{display:none}.citation-head{display:flex;justify-content:space-between;gap:12px;font-weight:650}.citation-close{border:0;background:transparent;color:var(--green);padding:0 3px}.citation-source{margin:5px 0;color:#536c5b}.citation-text{white-space:pre-wrap;margin:7px 0 0}.feedback{display:flex;align-items:center;gap:6px;margin-top:10px;color:var(--muted);font-size:12px}.feedback button{border:1px solid var(--line);background:#f7faf7;border-radius:7px;padding:2px 7px}.feedback button[aria-pressed="true"]{color:var(--green);border-color:#8dbca0;background:#e0f1e5}.feedback button[aria-pressed="false"]:disabled{opacity:.4}.feedback-note{margin-left:4px}
+.app{grid-template-columns:250px minmax(0,1fr)}main,.bubble,.answer{min-width:0}.answer li{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -29,7 +31,7 @@ function escapeHtml(text) {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
-function inlineMarkdown(raw) {
+function inlineMarkdown(raw, citations = new Map()) {
   const slots = [];
   let safe = escapeHtml(raw);
   safe = safe.replace(/`([^`]+)`/g, (_, code) => {
@@ -41,16 +43,22 @@ function inlineMarkdown(raw) {
     slots.push(`<a href="${clean}" target="_blank" rel="noopener noreferrer">${clean}</a>`);
     return `\uE000${slots.length - 1}\uE001${suffix}`;
   });
+  safe = safe.replace(/\[(\d+)\]/g, (label, number) => {
+    if (!citations.has(Number(number))) return label;
+    slots.push(`<button type="button" class="cite" data-citation="${Number(number)}" aria-label="查看引用 ${Number(number)}">[${Number(number)}]</button>`);
+    return `\uE000${slots.length - 1}\uE001`;
+  });
   safe = safe.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
   return safe.replace(/\uE000(\d+)\uE001/g, (_, index) => slots[Number(index)]);
 }
-function renderMarkdown(raw) {
+function renderMarkdown(raw, citations = new Map()) {
   const lines = raw.replace(/\r\n/g, '\n').split('\n'), out = [];
   let paragraph = [], list = null, quote = [], inCode = false, code = [];
-  const flushParagraph = () => { if (paragraph.length) out.push('<p>' + paragraph.map(inlineMarkdown).join('<br>') + '</p>'); paragraph = []; };
+  const inline = value => inlineMarkdown(value, citations);
+  const flushParagraph = () => { if (paragraph.length) out.push('<p>' + paragraph.map(inline).join('<br>') + '</p>'); paragraph = []; };
   const flushList = () => { if (list) out.push(`</${list}>`); list = null; };
-  const flushQuote = () => { if (quote.length) out.push('<blockquote>' + quote.map(inlineMarkdown).join('<br>') + '</blockquote>'); quote = []; };
+  const flushQuote = () => { if (quote.length) out.push('<blockquote>' + quote.map(inline).join('<br>') + '</blockquote>'); quote = []; };
   const closeBlocks = () => { flushParagraph(); flushList(); flushQuote(); };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i], trimmed = line.trim();
@@ -66,12 +74,12 @@ function renderMarkdown(raw) {
       closeBlocks(); const header = cells(line); i += 2; const rows = [];
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) { rows.push(cells(lines[i])); i++; }
       i--;
-      out.push('<table><thead><tr>' + header.map(c => '<th>' + inlineMarkdown(c) + '</th>').join('') + '</tr></thead><tbody>' +
-        rows.map(row => '<tr>' + header.map((_, n) => '<td>' + inlineMarkdown(row[n] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table>');
+      out.push('<table><thead><tr>' + header.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>' +
+        rows.map(row => '<tr>' + header.map((_, n) => '<td>' + inline(row[n] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table>');
       continue;
     }
     const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (heading) { closeBlocks(); const n = heading[1].length; out.push(`<h${n}>${inlineMarkdown(heading[2])}</h${n}>`); continue; }
+    if (heading) { closeBlocks(); const n = heading[1].length; out.push(`<h${n}>${inline(heading[2])}</h${n}>`); continue; }
     if (/^(?:---+|\*\*\*+)\s*$/.test(trimmed)) { closeBlocks(); out.push('<hr>'); continue; }
     const quoted = /^>\s?(.*)$/.exec(line);
     if (quoted) { flushParagraph(); flushList(); quote.push(quoted[1]); continue; }
@@ -80,7 +88,7 @@ function renderMarkdown(raw) {
     if (bullet || numbered) {
       flushParagraph(); const kind = bullet ? 'ul' : 'ol';
       if (list !== kind) { flushList(); out.push(`<${kind}>`); list = kind; }
-      out.push('<li>' + inlineMarkdown((bullet || numbered)[1]) + '</li>'); continue;
+      out.push('<li>' + inline((bullet || numbered)[1]) + '</li>'); continue;
     }
     flushList(); paragraph.push(line);
   }
@@ -97,7 +105,26 @@ function bubble(role, text) {
   if (role === 'assistant') {
     const trace = document.createElement('div'); trace.className = 'tool-trace'; outer.append(trace);
     content = document.createElement('div'); content.className = 'answer typing'; outer.append(content);
-    content.toolTrace = trace;
+    content.toolTrace = trace; content.citations = new Map();
+    const panel = document.createElement('div'); panel.className = 'citation-panel'; panel.hidden = true; outer.append(panel);
+    content.citationPanel = panel;
+    content.addEventListener('click', event => {
+      const button = event.target.closest('button[data-citation]');
+      if (!button || !content.contains(button)) return;
+      const item = content.citations.get(Number(button.dataset.citation));
+      if (!item) return;
+      panel.replaceChildren();
+      const head = document.createElement('div'); head.className = 'citation-head';
+      const title = document.createElement('span'); title.textContent = `引用 [${item.n}] · 来源原文`;
+      const close = document.createElement('button'); close.type = 'button'; close.className = 'citation-close';
+      close.textContent = '关闭'; close.setAttribute('aria-label', '关闭引用详情'); close.onclick = () => { panel.hidden = true; button.focus(); };
+      head.append(title, close);
+      const source = document.createElement('div'); source.className = 'citation-source';
+      source.textContent = item.section_path || '知识库';
+      const text = document.createElement('p'); text.className = 'citation-text';
+      text.textContent = [item.question, item.answer].filter(Boolean).join('：');
+      panel.append(head, source, text); panel.hidden = false; close.focus(); scrollBottom();
+    });
   } else { outer.textContent = text; }
   $('messages').append(row); scrollBottom(); return content;
 }
@@ -106,6 +133,24 @@ function setBusy(value) {
   $('status').textContent = value ? '小喵正在回复…' : '准备就绪';
   $('newChat').disabled = value; $('mobileNew').disabled = value;
   document.querySelectorAll('[data-question]').forEach(button => button.disabled = value);
+}
+function addFeedback(answer) {
+  const row = document.createElement('div'); row.className = 'feedback';
+  const label = document.createElement('span'); label.textContent = '这段回答有帮助吗？'; row.append(label);
+  const note = document.createElement('span'); note.className = 'feedback-note';
+  for (const [icon, value] of [['👍', 'up'], ['👎', 'down']]) {
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = icon;
+    button.setAttribute('aria-label', value === 'up' ? '有帮助' : '没帮助');
+    button.setAttribute('aria-pressed', 'false');
+    button.onclick = () => {
+      for (const choice of row.querySelectorAll('button')) {
+        choice.disabled = true; choice.setAttribute('aria-pressed', String(choice === button));
+      }
+      note.textContent = '已反馈';
+    };
+    row.append(button);
+  }
+  row.append(note); answer.parentElement.append(row);
 }
 function newChat() {
   if (busy) return;
@@ -151,10 +196,14 @@ $('chatForm').onsubmit = async event => {
       if (value.event === 'tool' && typeof value.name === 'string') {
         const badge = document.createElement('span'); badge.className = 'tool-badge'; badge.textContent = '🔧 调用了 ' + value.name;
         answer.toolTrace.append(badge); scrollBottom();
+      } else if (value.event === 'citations' && Array.isArray(value.items)) {
+        answer.citations = new Map(value.items.filter(item => Number.isSafeInteger(item.n) && item.n > 0)
+          .map(item => [item.n, item]));
+        if (content) answer.innerHTML = renderMarkdown(content, answer.citations);
       } else if (value.event === 'done' && Number.isSafeInteger(value.conversation_id) && value.conversation_id > 0) {
         conversationId = value.conversation_id; localStorage.setItem(conversationKey, String(conversationId));
       } else if (typeof value.delta === 'string') {
-        content += value.delta; answer.classList.remove('typing'); answer.innerHTML = renderMarkdown(content); scrollBottom();
+        content += value.delta; answer.classList.remove('typing'); answer.innerHTML = renderMarkdown(content, answer.citations); scrollBottom();
       }
     };
     while (true) {
@@ -165,6 +214,7 @@ $('chatForm').onsubmit = async event => {
     }
     if (!done) throw Error('连接已中断，回复未完成，请重试。');
     if (!content) throw Error('模型未返回文本，请重试。');
+    addFeedback(answer);
   } catch (error) {
     controller?.abort(); answer.classList.remove('typing'); answer.classList.add('error');
     const notice = error.name === 'AbortError' ? '已停止生成，本轮不会作为完整对话保存。' : error.message;
