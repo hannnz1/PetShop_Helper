@@ -1,7 +1,7 @@
 {
   "mode": "offline",
   "counts": {
-    "pass": 3,
+    "pass": 4,
     "fail": 0,
     "pending_upstream": 4
   },
@@ -11,17 +11,29 @@
       "status": "pass",
       "details": {
         "turns": 20,
+        "retained_original_turns": 20,
+        "summary_segments": 0,
         "layer1_budget": 4186
       }
     },
     {
-      "id": "demo_22_turn_cascade",
+      "id": "post_cascade_22_turn_rendering",
       "status": "pass",
       "details": {
         "turns": 22,
+        "scope": "post-cascade model rendering from a synthetic snapshot",
         "history_budget": 5650,
         "layer1_budget": 3955,
         "layer2_budget": 1695
+      }
+    },
+    {
+      "id": "offline_cascade_transitions",
+      "status": "pass",
+      "details": {
+        "scope": "real isolated-MySQL transitions with deterministic fake summary model",
+        "tests_passed": 3,
+        "pytest_output": "3 passed in 4.38s"
       }
     },
     {
@@ -59,7 +71,7 @@
     }
   ],
   "limits": [
-    "Synthetic cascade validates rendering, not async scheduling or real model quality.",
+    "Post-cascade rendering uses a synthetic snapshot; transition tests use fake summary output.",
     "SSE and page switching are covered by separate regression/browser acceptance."
   ]
 }

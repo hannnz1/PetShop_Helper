@@ -110,7 +110,7 @@ Windows PowerShell 对应命令：
 .\.venv\Scripts\python.exe -X utf8 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-离线评估不连接聊天上游，可用以下占位配置在隔离测试库运行；全量 pytest 还需要知识库测试所用的 Milvus 服务。`eval_ch07.py` 将合成二十轮、演示级联和标注摘要参考答案分列，输出 [离线报告](data/ch07/reports/offline_eval.json)。真实 glm 二十轮、早期订单追问、摘要质量与 usage 对照仍列为 `pending_upstream`，余额恢复后须在演示库单独验收。
+离线评估不连接聊天上游，可用以下占位配置在隔离测试库运行；全量 pytest 还需要知识库测试所用的 Milvus 服务。`eval_ch07.py` 验证默认配置的二十轮原文实际进入模型输入；演示配置的 22 轮案例只验证已完成级联后的模型渲染，另用隔离 MySQL 与假摘要模型测试降级、追加、失败重试和并发去重。标注摘要案例只核对参考答案，输出 [离线报告](data/ch07/reports/offline_eval.json)。真实 glm 二十轮、早期订单追问、摘要质量与 usage 对照仍列为 `pending_upstream`，余额恢复后须在演示库单独验收。
 
 ```powershell
 $env:CHAT_MODEL='offline-test'

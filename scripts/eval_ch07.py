@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,21 +23,39 @@ REPORT = ROOT / "data/ch07/reports/offline_eval.json"
 
 
 def config(**overrides):
-    return Settings(_env_file=None, chat_model="offline-test",
-                    chat_base_url="http://127.0.0.1:9/v1", chat_api_key="offline-test",
-                    **overrides)
+    values = dict(chat_model="offline-test", chat_base_url="http://127.0.0.1:9/v1",
+                  chat_api_key="offline-test", token_budget=32768,
+                  model_context_window=32768, max_output_tokens=2000,
+                  max_user_input_tokens=2000, tool_result_max_tokens=1200,
+                  max_agent_steps=6, chat_max_tokens=1024,
+                  expected_history_turns=20, steady_turn_chars=280,
+                  cjk_chars_per_token=1.0, layer2_assistant_chars=48,
+                  summary_injection_max_tokens=250)
+    values.update(overrides)
+    return Settings(_env_file=None, **values)
 
 
 def default_twenty_turns():
     settings = config()
     budget = derive_budget(settings, FixedCosts(678, 1700, 250, 250))
-    turns = [row for _ in range(20) for row in
-             (HumanMessage("请问商品有货吗？"), AIMessage("您好，请提供商品名称。"))]
+    rows = [row for turn in range(1, 21) for row in
+            (VisibleMessage(turn * 2 - 1, "user", f"第 {turn} 轮商品有货吗？"),
+             VisibleMessage(turn * 2, "assistant", f"第 {turn} 轮请提供商品名称。"))]
+    turns = [HumanMessage(row.content) if row.role == "user" else AIMessage(row.content)
+             for row in rows]
     assert estimate_tokens(turns, chars_per_token=settings.cjk_chars_per_token) <= budget.layer1
-    return {"turns": 20, "layer1_budget": budget.layer1}
+    snapshot = ContextSnapshot(7, 0, 0, tuple(rows), ())
+    model = build_model_context(snapshot, [HumanMessage("当前新问题")], "当前新问题",
+                                "", "系统", budget, settings=settings)
+    assert [(row.role, row.content) for row in model.window_rows] == [
+        (row.role, row.content) for row in rows]
+    assert [message.content for message in model.messages[1:-1]] == [row.content for row in rows]
+    assert model.injected_summary == "" and model.omitted_summary_segments == 0
+    return {"turns": 20, "retained_original_turns": len(model.window_rows) // 2,
+            "summary_segments": 0, "layer1_budget": budget.layer1}
 
 
-def demo_cascade_and_early_order():
+def post_cascade_rendering():
     settings = config(model_context_window=18000, max_output_tokens=2000,
                       max_user_input_tokens=2000, max_agent_steps=3,
                       tool_result_max_tokens=1200, rerank_top_k=5)
@@ -56,8 +76,31 @@ def demo_cascade_and_early_order():
     assert any(row.layer == 2 for row in model.window_rows)
     assert any(row.layer == 1 for row in model.window_rows)
     assert model.messages[-1].name == "verified_context"
-    return {"turns": 22, "history_budget": budget.history_total,
+    return {"turns": 22, "scope": "post-cascade model rendering from a synthetic snapshot",
+            "history_budget": budget.history_total,
             "layer1_budget": budget.layer1, "layer2_budget": budget.layer2}
+
+
+def offline_transition_regressions():
+    """Exercise real isolated-MySQL downgrade and append-only transitions."""
+    env = os.environ.copy()
+    database_urls = {key: env[key] for key in ("DATABASE_URL", "TEST_DATABASE_URL") if key in env}
+    for field in Settings.model_fields:
+        env.pop(field.upper(), None)
+    env.update(database_urls)
+    env.update(CHAT_MODEL="offline-test", CHAT_BASE_URL="http://127.0.0.1:9/v1",
+               CHAT_API_KEY="offline-test", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    command = [sys.executable, "-m", "pytest", "-q", "-p", "pytest_asyncio.plugin",
+               "tests/test_ch07_summarizer.py::test_token_threshold_and_append_only_batch",
+               "tests/test_ch07_summarizer.py::test_failure_keeps_anchor_and_retry_succeeds",
+               "tests/test_ch07_summarizer.py::test_concurrent_tasks_commit_range_once",
+               "--tb=short"]
+    result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True,
+                            text=True, encoding="utf-8", errors="replace", check=False)
+    if result.returncode:
+        raise AssertionError((result.stdout + result.stderr)[-2000:])
+    return {"scope": "real isolated-MySQL transitions with deterministic fake summary model",
+            "tests_passed": 3, "pytest_output": result.stdout.strip().splitlines()[-1]}
 
 
 def labeled_summary_cases():
@@ -82,7 +125,8 @@ def main():
     del args
     results = []
     for case_id, check in (("default_20_turns", default_twenty_turns),
-                           ("demo_22_turn_cascade", demo_cascade_and_early_order),
+                           ("post_cascade_22_turn_rendering", post_cascade_rendering),
+                           ("offline_cascade_transitions", offline_transition_regressions),
                            ("labeled_summary_references", labeled_summary_cases)):
         try:
             details = check()
@@ -96,7 +140,7 @@ def main():
     counts = {status: sum(row["status"] == status for row in results)
               for status in ("pass", "fail", "pending_upstream")}
     report = {"mode": "offline", "counts": counts, "cases": results,
-              "limits": ["Synthetic cascade validates rendering, not async scheduling or real model quality.",
+              "limits": ["Post-cascade rendering uses a synthetic snapshot; transition tests use fake summary output.",
                          "SSE and page switching are covered by separate regression/browser acceptance."]}
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
