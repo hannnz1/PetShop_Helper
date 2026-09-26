@@ -18,3 +18,5 @@
 Task 7 另核对官方 [`aget_state`](https://reference.langchain.com/python/langgraph/pregel/main/Pregel/aget_state) 与 [`StateSnapshot`](https://reference.langchain.com/python/langgraph/types/StateSnapshot)：本机待选单快照的 `next=("pick_order",)`（实际业务节点为 `fetch_order`）、`snapshot.interrupts[0].value.type="select_order"`，`tasks[0].interrupts` 有同一载荷。续跑前同时比较 MySQL 审计标记、节点名、载荷类型与会话归属；普通新消息在合法 pending 上返回 409。
 
 Task 8 核对 Pydantic v2 官方 [`Literal` 类型约束](https://docs.pydantic.dev/latest/why/)与 [`field_validator(mode="before")`](https://docs.pydantic.dev/latest/concepts/validators/)：固定五种原因由 `Literal` 约束，原始值先检查多余空白，再由 Pydantic 验证。FastAPI 请求验证失败返回 422，仓储事务仍独立重验会话与订单归属。
+
+复核修复核对 LangChain 官方 [`ChatPromptTemplate`](https://reference.langchain.com/python/langchain-core/prompts/chat/ChatPromptTemplate)：模板可通过 `invoke(variables)` 取得消息值并转换为消息列表；指代改写在调用模型前按现有保守 token 估算检查完整模板输入，输出超预算回原话。

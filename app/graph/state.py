@@ -33,7 +33,7 @@ class ConversationState(TypedDict, total=False):
 
 
 def new_turn(user_id: str, conversation_id: int, message: str) -> ConversationState:
-    """Reset per-turn fields while the reducer keeps previous messages."""
+    """Reset turn fields; the reducer keeps messages and trace keeps the audit marker."""
     return {
         "messages": [HumanMessage(content=message)],
         "user_id": user_id, "conversation_id": conversation_id, "query": message,
@@ -42,5 +42,5 @@ def new_turn(user_id: str, conversation_id: int, message: str) -> ConversationSt
         "intent": "", "route": "", "evidence": "", "citations": [],
         "sufficient": False, "answer": "", "planned_tool_calls": [],
         "tool_calls": [], "tool_results": [], "steps": 0, "tokens_used": 0,
-        "suggested_actions": [], "trace": {},
+        "suggested_actions": [],
     }

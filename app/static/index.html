@@ -170,6 +170,26 @@ function renderActions(answer) {
         host.append(note);
       };
       host.append(button);
+    } else if (action.type === 'select_order' && action.mode === 'new_turn' && Array.isArray(action.orders)) {
+      const choices = document.createElement('div'); choices.className = 'order-options';
+      const note = document.createElement('div'); note.className = 'action-note';
+      note.textContent = '请选择本人订单，客服将用所选订单重新判断。'; host.append(note);
+      for (const order of action.orders) {
+        const choice = document.createElement('button'); choice.type = 'button'; choice.className = 'order-choice';
+        const title = document.createElement('strong'); title.textContent = `订单 ${order.order_id} · ${order.product}`;
+        const detail = document.createElement('small'); detail.textContent = `${order.status} · ¥${order.amount}`;
+        choice.append(title, detail);
+        choice.onclick = async () => {
+          if (busy) return;
+          choices.querySelectorAll('button').forEach(button => button.disabled = true);
+          const message = `订单${order.order_id}可以申请退款吗`;
+          const succeeded = await runConversation('/api/chat',
+            {user_id: userId, conversation_id: conversationId, message}, message);
+          if (!succeeded) choices.querySelectorAll('button').forEach(button => button.disabled = false);
+        };
+        choices.append(choice);
+      }
+      host.append(choices);
     } else if (action.type === 'refund_form') {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = '申请退款';
       const form = document.createElement('form'); form.className = 'action-form'; form.hidden = true;

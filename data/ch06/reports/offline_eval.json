@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-09-26T11:47:47.769019+00:00",
+  "created_at": "2026-09-26T12:03:39.558804+00:00",
   "scope": "Ch06 deterministic offline paths; no paid model or embedding calls",
   "paths": [
     {
@@ -8,7 +8,7 @@
       "expected": "分类使用消解后问题，原始消息仍被保留",
       "test": "tests/test_ch06_coref.py::test_graph_coref_preserves_raw_query_and_classifier_uses_resolved",
       "status": "passed_offline",
-      "result": "1 passed in 1.94s"
+      "result": "1 passed in 1.98s"
     },
     {
       "id": "choose_order",
@@ -16,7 +16,7 @@
       "expected": "先发 select_order 中断帧，选本人订单后同会话发 done",
       "test": "tests/test_ch06_resume_api.py::test_chat_interrupt_then_resume_streams_and_preflights",
       "status": "passed_offline",
-      "result": "1 passed, 1 warning in 2.98s"
+      "result": "1 passed, 1 warning in 4.97s"
     },
     {
       "id": "wrong_order",
@@ -24,7 +24,7 @@
       "expected": "他人订单重新中断，仅列本人样例订单",
       "test": "tests/graph/test_ch06_fetch_order.py::test_missing_and_foreign_order_reinterrupt_then_accept_owned",
       "status": "passed_offline",
-      "result": "1 passed in 2.66s"
+      "result": "1 passed in 4.90s"
     },
     {
       "id": "confirm_write",
@@ -32,7 +32,7 @@
       "expected": "确认生成一条待审核申请，重复同 ID 返回同号且订单工单不变",
       "test": "tests/test_ch06_refund_api.py::test_confirm_refund_is_idempotent_and_changes_no_other_state",
       "status": "passed_offline",
-      "result": "1 passed, 1 warning in 3.01s"
+      "result": "1 passed, 1 warning in 4.85s"
     }
   ],
   "annotated_prompts": {

@@ -161,9 +161,10 @@ async def agent_tools(state: dict) -> dict:
                 content = "已向用户展示退款申请表单，待用户确认；尚未提交申请。请停止调用其他工具。"
             else:
                 content = "未核验本人订单或退款政策证据，本次不提供退款申请入口。"
-                if (state.get("route") == "refund" and owned is None
+                if (state.get("route") == "refund" and proposed_id != state.get("order_id")
                         and not any(item.get("type") == "select_order" for item in actions)):
                     actions.append({"type": "select_order",
+                                    "mode": "new_turn",
                                     "orders": await repository.list_sample_orders(state["user_id"])})
             tool_messages.append(ToolMessage(
                 content=content, tool_call_id=call_id, name="submit_refund",

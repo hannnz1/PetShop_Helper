@@ -14,6 +14,7 @@ async def _seed(factory):
         await session.execute(text("""
             INSERT INTO sample_orders (order_id,user_id,status,product,amount)
             VALUES ('1001','alice','已签收','猫粮',88.00),
+                   ('1002','alice','已发货','饮水机',139.00),
                    ('2001','bob','已签收','猫砂',39.00)
         """))
 
@@ -64,7 +65,21 @@ async def test_weak_evidence_or_wrong_order_never_yields_refund_form(db_session_
     assert not any(action["type"] == "refund_form" for action in weak.get("suggested_actions", []))
     assert not any(action["type"] == "refund_form" for action in wrong.get("suggested_actions", []))
     assert wrong["tool_results"][0]["ok"] is False
-    assert [order["order_id"] for order in wrong["suggested_actions"][0]["orders"]] == ["1001"]
+    assert [order["order_id"] for order in wrong["suggested_actions"][0]["orders"]] == ["1001", "1002"]
+
+
+@pytest.mark.asyncio
+async def test_model_order_mismatch_offers_usable_new_turn_selection(db_session_factory, db_clean):
+    await _seed(db_session_factory)
+    for proposed in ("2001", "1002"):
+        result = await nodes.agent_tools(_state(call_order_id=proposed))
+        assert result["suggested_actions"] == [{
+            "type": "select_order", "mode": "new_turn",
+            "orders": [
+                {"order_id": "1001", "user_id": "alice", "status": "已签收", "product": "猫粮", "amount": 88.0},
+                {"order_id": "1002", "user_id": "alice", "status": "已发货", "product": "饮水机", "amount": 139.0},
+            ],
+        }]
 
 
 @pytest.mark.asyncio

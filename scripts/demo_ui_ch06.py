@@ -33,6 +33,13 @@ async def calls():
 async def chat(request: Request):
     data = await request.json()
     CALLS.append({"path": "/api/chat", "payload": data})
+    if data.get("message") == "模型选错订单":
+        return StreamingResponse(stream(
+            {"delta": "订单号需要重新核对。"},
+            {"event": "actions", "items": [{"type": "select_order", "mode": "new_turn",
+                "orders": [{"order_id": "1001", "product": "演示猫粮", "status": "已签收", "amount": 88}]}]},
+            {"event": "done", "conversation_id": 6001},
+        ), media_type="text/event-stream")
     return StreamingResponse(stream({"event": "interrupt", "kind": "select_order",
                                     "conversation_id": 6001, "orders": [
                                         {"order_id": "1001", "product": "演示猫粮", "status": "已签收", "amount": 88}]}),

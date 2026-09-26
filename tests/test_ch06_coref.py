@@ -19,8 +19,25 @@ async def test_resolve_returns_rewrite_and_falls_back_on_blank_or_failure():
 
     broken = RunnableLambda(fail)
     assert await resolve("那它能退吗", "用户：订单1001在哪", rewrite) == "订单1001能退吗"
-    assert await resolve("订单1001能退吗", "", blank) == "订单1001能退吗"
-    assert await resolve("那它能退吗", "", broken) == "那它能退吗"
+    assert await resolve("那它能退吗", "用户：订单1001在哪", blank) == "那它能退吗"
+    assert await resolve("那它能退吗", "用户：订单1001在哪", broken) == "那它能退吗"
+
+
+@pytest.mark.asyncio
+async def test_coref_over_budget_prompt_or_rewrite_falls_back_without_model_cost():
+    from app.core.coref import resolve
+
+    calls = []
+
+    def oversized(_):
+        calls.append(True)
+        return AIMessage(content="订单1001" * 300)
+
+    model = RunnableLambda(oversized)
+    assert await resolve("那它能退吗", "用户：订单1001在哪", model, max_tokens=40) == "那它能退吗"
+    assert calls == []
+    assert await resolve("那它能退吗", "用户：订单1001在哪", model, max_tokens=500) == "那它能退吗"
+    assert calls == [True]
 
 
 @pytest.mark.asyncio

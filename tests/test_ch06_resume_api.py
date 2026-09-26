@@ -16,6 +16,11 @@ class RefundClassifier:
         return "退款退货"
 
 
+class GreetingThenRefundClassifier:
+    async def classify(self, query):
+        return "闲聊" if query == "你好" else "退款退货"
+
+
 def _frames(response):
     return [json.loads(chunk[6:]) for chunk in response.text.split("\n\n")
             if chunk.startswith("data: {")]
@@ -75,6 +80,36 @@ def test_resume_without_checkpoint_does_not_replay_old_messages(tmp_path, db_ses
         response = client.post("/api/actions/resume", json={"user_id": "alice",
                                                            "conversation_id": cid, "order_id": "1001"})
     assert response.status_code == 503
+
+
+def test_select_order_after_completed_turn_can_resume(tmp_path, db_session_factory, db_clean, monkeypatch):
+    from app.graph import nodes
+    import app.main as main_module
+
+    async def weak_policy(state, runtime):
+        return {"sufficient": False, "evidence": "", "citations": [], "reason": "无政策"}
+
+    monkeypatch.setattr(nodes, "retrieve_policy", weak_policy)
+    monkeypatch.setattr(main_module, "ModelIntentClassifier", lambda *args, **kwargs: GreetingThenRefundClassifier())
+    asyncio.run(_seed(db_session_factory))
+    settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1",
+                        chat_api_key="test", graph_checkpoint_path=str(tmp_path / "second-turn.sqlite"))
+    with TestClient(create_app(settings=settings, model=object())) as client:
+        first = client.post("/api/chat", json={"user_id": "alice", "message": "你好"})
+        assert first.status_code == 200
+        cid = next(item["conversation_id"] for item in _frames(first) if item.get("event") == "done")
+        second = client.post("/api/chat", json={"user_id": "alice", "conversation_id": cid,
+                                                "message": "能退吗"})
+        assert second.status_code == 200
+        assert any(item.get("event") == "interrupt" for item in _frames(second))
+    with TestClient(create_app(settings=settings, model=object())) as client:
+        snapshot = client.portal.call(client.app.state.graph.graph.aget_state,
+                                      {"configurable": {"thread_id": str(cid)}})
+        assert snapshot.next == ("fetch_order",), (snapshot.next, snapshot.interrupts, snapshot.values.get("trace"))
+        resume = client.post("/api/actions/resume", json={"user_id": "alice",
+                                                       "conversation_id": cid, "order_id": "1001"})
+        assert resume.status_code == 200, resume.text
+        assert any(item.get("event") == "done" for item in _frames(resume))
 
 
 def test_json_agent_exposes_order_choice_for_interrupt(tmp_path, db_session_factory, db_clean, monkeypatch):

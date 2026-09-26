@@ -36,10 +36,14 @@ def _error(message: str) -> str:
 async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     """Translate one prepared graph stream for chat and resume endpoints."""
     completed = False
+    interrupted = False
+    interrupt_event = None
     seen_tools: set[str] = set()
     seen_actions: set[str] = set()
     try:
         async for mode, payload in graph_stream:
+            if interrupted:
+                continue
             if mode == "messages":
                 chunk, metadata = payload
                 if metadata.get("langgraph_node") == "final_answer" and isinstance(chunk.content, str) and chunk.content:
@@ -48,14 +52,14 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
             if mode != "updates":
                 continue
             if "__interrupt__" in payload:
-                interrupted = payload["__interrupt__"][0].value
-                event = {"event": "interrupt", "kind": interrupted.get("type", ""),
-                         "conversation_id": interrupted.get("conversation_id")}
+                interrupt_value = payload["__interrupt__"][0].value
+                interrupt_event = {"event": "interrupt", "kind": interrupt_value.get("type", ""),
+                                   "conversation_id": interrupt_value.get("conversation_id")}
                 for field in ("orders", "preview"):
-                    if field in interrupted:
-                        event[field] = interrupted[field]
-                yield _sse(event)
-                return
+                    if field in interrupt_value:
+                        interrupt_event[field] = interrupt_value[field]
+                interrupted = True
+                continue
             for node, update in payload.items():
                 if node == "agent_tools":
                     for index, run in enumerate(update.get("tool_results", [])):
@@ -101,6 +105,9 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
         return
     finally:
         await graph_stream.aclose()
+    if interrupted:
+        yield _sse(interrupt_event)
+        return
     if completed:
         yield "data: [DONE]\n\n"
     else:

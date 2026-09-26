@@ -97,7 +97,17 @@ async def verify():
                 assert writes[0]["payload"]["user_id"] == "demo-user"
                 assert writes[0]["payload"]["order_id"] == "1001"
                 assert writes[0]["payload"]["reason"] == "质量问题"
-                print("PASS: order choice, resume, cancel no write, confirm once, own order only")
+                await evaluate("document.querySelector('#newChat').click()")
+                await evaluate("document.querySelector('#message').value='模型选错订单'; document.querySelector('#chatForm').requestSubmit()")
+                await until("document.querySelectorAll('.order-choice').length === 1")
+                assert await evaluate("document.querySelector('.order-choice').textContent.includes('2001')") is False
+                before = len(requests.get(URL + "_calls").json())
+                await evaluate("document.querySelector('.order-choice').click()")
+                await until("document.querySelectorAll('.order-choice').length === 2")
+                new_calls = requests.get(URL + "_calls").json()[before:]
+                assert new_calls[0]["path"] == "/api/chat", new_calls
+                assert new_calls[0]["payload"]["message"] == "订单1001可以申请退款吗"
+                print("PASS: interrupt resume, cancel no write, confirm once, owned new-turn recovery")
         finally:
             process.terminate()
             try:
