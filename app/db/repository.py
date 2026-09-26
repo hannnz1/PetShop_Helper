@@ -9,7 +9,10 @@ import unicodedata
 from sqlalchemy import delete, func, insert, or_, select, text, update
 
 import app.db.base as db
-from app.db.models import Conversation, Faq, KnowledgeChunk, Message, QaExtractionStaging, Ticket
+from app.db.models import (
+    Conversation, Faq, KnowledgeChunk, LowConfidenceQuestion,
+    Message, QaExtractionStaging, Ticket,
+)
 
 
 def _new_ticket_no() -> str:
@@ -627,3 +630,21 @@ async def staging_stats() -> dict[str, int]:
         "discarded": int(states.get("discarded", 0)),
         "batches": batches,
     }
+
+
+async def insert_low_confidence(
+    conversation_id: int | None, raw_question: str, source: str, reason: str | None,
+) -> int:
+    """Record one low-confidence user question in the MySQL authority store."""
+    if source not in {"retrieval_low_conf", "self_check", "user_feedback"}:
+        raise ValueError("unsupported low-confidence source")
+    if not raw_question.strip():
+        raise ValueError("raw_question must not be blank")
+    async with db.async_session.begin() as session:
+        row = LowConfidenceQuestion(
+            conversation_id=conversation_id, raw_question=raw_question,
+            source=source, reason=reason,
+        )
+        session.add(row)
+        await session.flush()
+        return row.id

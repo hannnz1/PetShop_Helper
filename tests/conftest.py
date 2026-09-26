@@ -16,7 +16,9 @@ from app.config import get_settings
 
 _DDL = Path(__file__).resolve().parent.parent / "sql" / "ch02-ddl.sql"
 _CH03_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql"
+_CH04_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch04-ddl.sql"
 _TABLES = (
+    "low_confidence_questions",
     "messages", "tickets", "conversations", "faq",
     "qa_extraction_staging", "knowledge_chunks",
 )
@@ -78,17 +80,18 @@ def ddl_statements() -> list[str]:
 
 
 def _create_table_stmts() -> list[str]:
-    """Create both chapter schemas from their authoritative files in the test DB."""
+    """Create chapter schemas from their authoritative files in the test DB."""
 
     statements = ddl_statements()
-    lines = [
-        line for line in _CH03_DDL.read_text(encoding="utf-8").splitlines()
-        if not line.lstrip().startswith("--")
-    ]
-    statements.extend(
-        statement.strip() for statement in "\n".join(lines).split(";")
-        if statement.strip()
-    )
+    for ddl in (_CH03_DDL, _CH04_DDL):
+        lines = [
+            line for line in ddl.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("--")
+        ]
+        statements.extend(
+            statement.strip() for statement in "\n".join(lines).split(";")
+            if statement.strip()
+        )
     return statements
 
 

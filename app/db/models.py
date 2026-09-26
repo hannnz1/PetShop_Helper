@@ -1,4 +1,4 @@
-"""ORM mappings for the chapter-two and chapter-three MySQL tables.
+"""ORM mappings for customer-service and knowledge MySQL tables.
 
 The DDL is applied independently; these classes never create or migrate tables.
 """
@@ -138,3 +138,23 @@ class QaExtractionStaging(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=text("CURRENT_TIMESTAMP")
     )
+
+
+class LowConfidenceQuestion(Base):
+    __tablename__ = "low_confidence_questions"
+    __table_args__ = (
+        Index("idx_low_confidence_conversation", "conversation_id"),
+        Index("idx_low_confidence_source", "source"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int | None] = mapped_column(
+        BIGINT(unsigned=True),
+        ForeignKey("conversations.id", name="fk_low_confidence_conversation", ondelete="SET NULL"),
+    )
+    raw_question: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(
+        ENUM("retrieval_low_conf", "self_check", "user_feedback")
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
