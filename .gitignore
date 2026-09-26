@@ -9,5 +9,6 @@ __pycache__/
 .superpowers/
 work/
 data/*.db*
+data/ch05/*.sqlite*
 *.log
 log/

@@ -1,4 +1,4 @@
-.PHONY: dev test eval eval-agent eval-rag judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down
+.PHONY: dev test eval eval-agent eval-rag eval-intent eval-ch05 migrate-ch05 judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down
 
 ifeq ($(OS),Windows_NT)
 milvus-up:
@@ -81,12 +81,30 @@ eval-rag:
 
 judge-check:
 	.\.venv\Scripts\python.exe -X utf8 -m scripts.judge_check
+
+eval-intent:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_intent
+
+eval-ch05:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_ch05
+
+migrate-ch05:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.migrate_ch05
 else
 eval-rag:
 	uv run --locked python -m scripts.eval_ch04
 
 judge-check:
 	uv run --locked python -m scripts.judge_check
+
+eval-intent:
+	uv run --locked python -m scripts.eval_intent
+
+eval-ch05:
+	uv run --locked python -m scripts.eval_ch05
+
+migrate-ch05:
+	uv run --locked python -m scripts.migrate_ch05
 endif
 
 ifeq ($(OS),Windows_NT)

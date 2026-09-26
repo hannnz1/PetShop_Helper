@@ -75,6 +75,27 @@ Windows PowerShell 对应命令：
 
 第 2 章的本机 `glm-5.2` tool-call 冒烟已通过；运行 `python scripts/smoke_toolcall.py` 可重新验证当前上游。完整阶段结论与已知限制见 [开发记录](dev-notes/ch02.md)。
 
+## 第 5 章工作流（本机离线验收）
+
+`/api/chat` 和 `/api/agent` 现在共用 LangGraph 会话与 SQLite checkpoint。意图分类把对话送往业务只读工具、强制知识检索、投诉动作或闲聊出口；`MAX_AGENT_STEPS` 默认 6。投诉答复只建议“转人工”和“建工单”，前者是官方渠道指引演示，后者必须由用户填写并确认才会调用 `POST /api/actions/create-ticket`。客户端提供唯一 `request_id`，相同内容重试返回同一工单号；建单不会自动转人工。服务按单 worker 运行，`GRAPH_CHECKPOINT_PATH` 必须指向可写的本地 SQLite 文件。
+
+已有数据库先运行一次非破坏性迁移，再启动服务：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 scripts\migrate_ch05.py
+.\.venv\Scripts\python.exe -X utf8 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+离线验证不会调用聊天或嵌入上游：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 scripts\eval_intent.py
+.\.venv\Scripts\python.exe -X utf8 scripts\eval_ch05.py
+.\.venv\Scripts\python.exe -X utf8 scripts\demo_ui_ch05.py
+```
+
+最后一个命令只在 `127.0.0.1:8767` 提供假 SSE 与内存工单，用于浏览器查看按钮交互，绝不代表真实建单。真实服务的流式命令仍用前文 `curl -sN /api/chat`；投诉时 SSE 会额外发送 `actions` 帧。第 5 章 [离线报告](data/ch05/reports/offline_eval.json) 的五路径均为 `passed_offline`，真实 glm-5.2 分类准确率、聊天 SSE 和 JSON 验收仍为 `pending_upstream`，因为账户上游已返回余额不足；未自动重试收费调用。开发过程见 [第 5 章记录](dev-notes/ch05.md)。
+
 ## 第 3 章当前可用的演示入口
 
 `.env` 还需本机配置 `SILICONFLOW_API_KEY`。真实 SiliconFlow `BAAI/bge-m3` 已返回两条 1024 维向量；`/kb`、`/admin` 页面和相关 API 已接入。Windows 可在项目根目录运行：
