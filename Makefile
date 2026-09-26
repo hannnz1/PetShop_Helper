@@ -1,4 +1,22 @@
-.PHONY: dev test eval eval-agent eval-rag eval-intent eval-ch05 migrate-ch05 judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down
+.PHONY: dev test eval eval-agent eval-rag eval-intent eval-ch05 migrate-ch05 judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down mcp-up mcp-down
+
+ifeq ($(OS),Windows_NT)
+mcp-up:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mcp.ps1 -Action Start
+
+mcp-down:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mcp.ps1 -Action Stop
+else
+mcp-up:
+	@mkdir -p log data/ch08
+	@uv run --locked python mcp_servers/logistics_server.py > log/mcp-logistics.log 2>&1 & echo $$! > data/ch08/mcp-logistics.pid
+	@uv run --locked python mcp_servers/aftersales_server.py > log/mcp-aftersales.log 2>&1 & echo $$! > data/ch08/mcp-aftersales.pid
+
+mcp-down:
+	-@kill $$(cat data/ch08/mcp-logistics.pid) 2>/dev/null
+	-@kill $$(cat data/ch08/mcp-aftersales.pid) 2>/dev/null
+	@rm -f data/ch08/mcp-logistics.pid data/ch08/mcp-aftersales.pid
+endif
 
 ifeq ($(OS),Windows_NT)
 milvus-up:

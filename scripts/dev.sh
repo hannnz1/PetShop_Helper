@@ -10,4 +10,5 @@ if [[ ! -f .env ]]; then
 fi
 
 uv sync --locked
+make mcp-up
 exec uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000

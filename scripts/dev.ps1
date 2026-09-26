@@ -10,5 +10,7 @@ if (-not (Test-Path -LiteralPath ".env" -PathType Leaf)) {
 uv sync --locked
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+& (Join-Path $PSScriptRoot 'mcp.ps1') -Action Start
+
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000
 exit $LASTEXITCODE
