@@ -47,11 +47,11 @@
 
 **Interfaces:** Produces documented local shapes for `interrupt` update, `Command(resume=str)`, node rerun, `aget_state().next` and cross-runtime checkpoint restore; no business API.
 
-- [ ] 写纯图测试：`ainvoke` 得到 `__interrupt__`；同 `thread_id` 的 `Command(resume="1001")` 得到选单值；节点前只读计数在续跑时增长；`astream(messages+updates)` 可识别中断。
-- [ ] 用本机 `.venv` 跑 `pytest -q tests/graph/test_interrupt_smoke.py`，先确认缺脚本/行为断言失败。
-- [ ] 实现最小纯图冒烟，脚本不建业务库、不调用模型。
-- [ ] 运行测试与脚本并把实际载荷写入 Context7 记录；不符合文档时停下定位而非猜测。
-- [ ] 提交代码、测试、阶段笔记。
+- [x] 写纯图测试：`ainvoke` 得到 `__interrupt__`；同 `thread_id` 的 `Command(resume="1001")` 得到选单值；节点前只读计数在续跑时增长；`astream(messages+updates)` 可识别中断。
+- [x] 用本机 `.venv` 跑 `pytest -q tests/graph/test_interrupt_smoke.py`，先确认缺脚本/行为断言失败。
+- [x] 实现最小纯图冒烟，脚本不建业务库、不调用模型。
+- [x] 运行测试与脚本并把实际载荷写入 Context7 记录；不符合文档时停下定位而非猜测。
+- [x] 提交代码、测试、阶段笔记。
 
 ### Task 2: 演示订单与申请持久层
 
