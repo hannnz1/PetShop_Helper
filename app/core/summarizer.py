@@ -102,6 +102,23 @@ def _completed_batch(rows):
     return pairs
 
 
+def _summary_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list) and content:
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif (isinstance(block, dict) and block.get("type") == "text"
+                  and isinstance(block.get("text"), str)):
+                parts.append(block["text"])
+            else:
+                raise ValueError("unsupported summary content block")
+        return "\n".join(parts)
+    raise ValueError("unsupported summary content")
+
+
 def _facts(text: str) -> str:
     value = text.strip()
     if value.startswith('```'):
@@ -179,7 +196,7 @@ async def summarize_pending(conversation_id: int, model: BaseChatModel,
         logger.info("summary start conversation_id=%s from=%s upto=%s layer2_tokens=%s limit=%s",
                     conversation_id, start_id, end_id, used, limit)
         response = await model.ainvoke(SUMMARY_PROMPT.format_messages(batch=batch))
-        content = _facts(response.content if isinstance(response.content, str) else '')
+        content = _facts(_summary_text(response.content))
         committed = await repository.commit_summary_segment(
             conversation_id, work.summary_upto_msg_id, start_id, end_id, content,
         )

@@ -88,7 +88,7 @@ async def test_each_model_call_logs_exact_messages_and_recalculates_tool_exchang
     for actual, entry in zip(calls, logged, strict=True):
         assert entry["messages"] == [{"role": message.type, "content": message.content,
                                        "name": message.name,
-                                       "tool_calls": getattr(message, "tool_calls", None)}
+                                       "tool_calls": getattr(message, "tool_calls", None), "tool_call_id": getattr(message, "tool_call_id", None)}
                                       for message in actual]
         assert entry["message_count"] == len(actual)
 
@@ -341,3 +341,36 @@ async def test_context_log_writes_local_file_without_propagating_raw_text(tmp_pa
         nodes.close_context_log(handler)
     assert "history_ctx" in path.read_text(encoding="utf-8")
     assert "早期买过猫粮" not in caplog.text
+
+@pytest.mark.asyncio
+async def test_usage_logs_correlate_estimate_and_stream_usage(monkeypatch, caplog):
+    from langchain_core.messages import AIMessageChunk
+    caplog.set_level(logging.INFO, logger='app.graph.nodes')
+    monkeypatch.setattr(nodes, 'get_chat_tools', lambda route: [])
+    usage = {'input_tokens': 100, 'output_tokens': 3, 'total_tokens': 103}
+
+    class Model:
+        def bind_tools(self, tools):
+            return self
+        async def ainvoke(self, messages):
+            return AIMessage(content='planning', usage_metadata=usage)
+        async def astream(self, messages):
+            yield AIMessageChunk(content='答复')
+            yield AIMessageChunk(content='', usage_metadata=usage)
+
+    state = {'conversation_id': 7, 'query': '查询', 'route': 'business',
+             'messages': [HumanMessage('查询')], 'steps': 0, 'tokens_used': 5}
+    first = await nodes.agent_llm(state, runtime(Model()))
+    final = await nodes.final_answer({**state, 'tokens_used': first['tokens_used']}, runtime(Model()))
+    assert final['tokens_used'] == 211
+    logged = [json.loads(r.message.removeprefix('model_usage ')) for r in caplog.records
+              if r.message.startswith('model_usage ')]
+    assert len(logged) == 2
+    contexts = [json.loads(r.message.removeprefix('model_ctx ')) for r in caplog.records
+                if r.message.startswith('model_ctx ')]
+    assert [row['call_id'] for row in logged] == [row['call_id'] for row in contexts]
+    assert len({row['call_id'] for row in logged}) == 2
+    for entry in logged:
+        assert entry['conversation_id'] == 7
+        assert entry['usage'] == usage
+        assert entry['input_token_delta'] == 100 - entry['estimated_input_tokens']

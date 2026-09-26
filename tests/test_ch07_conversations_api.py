@@ -25,11 +25,14 @@ def test_owner_list_orders_pages_and_previews_without_losing_empty_conversations
         foreign = await repository.create_conversation("bob")
         await repository.append_message(old, "tool", "private tool output")
         await repository.append_message(old, "user", "first question")
+        await repository.append_message(old, "assistant", "answer")
+        marker = await repository.last_message_id(old)
+        await repository.advance_layer1(old, marker)
+        await repository.commit_summary_segment(old, 0, marker - 1, marker, "fact")
         await repository.append_message(old, "user", "second question")
         await repository.append_message(foreign, "user", "bob secret")
         await repository.append_message(latest, "user", "latest question")
         async with _test_engine.begin() as conn:
-            await conn.execute(text("UPDATE conversations SET summary='fact' WHERE id=:id"), {"id": old})
             await conn.execute(text("UPDATE conversations SET updated_at='2026-01-01 00:00:00' WHERE id=:id"), {"id": old})
             await conn.execute(text("UPDATE conversations SET updated_at='2026-01-02 00:00:00' WHERE id IN (:a,:b)"), {"a": empty, "b": latest})
         return old, empty, latest

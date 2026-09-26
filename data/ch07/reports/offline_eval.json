@@ -31,9 +31,9 @@
       "id": "offline_cascade_transitions",
       "status": "pass",
       "details": {
-        "scope": "real isolated-MySQL transitions with deterministic fake summary model",
-        "tests_passed": 3,
-        "pytest_output": "3 passed in 4.38s"
+        "scope": "zero-anchor Graph invoke/stream cascade and pending resume safety with isolated MySQL and fake models",
+        "tests_passed": 5,
+        "pytest_output": "5 passed in 5.89s"
       }
     },
     {

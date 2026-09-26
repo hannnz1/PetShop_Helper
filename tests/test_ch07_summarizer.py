@@ -250,7 +250,7 @@ async def test_disconnect_before_completion_does_not_schedule(monkeypatch):
 async def test_nonstream_invoke_schedules_only_new_completed_audit(monkeypatch):
     scheduled = []
     monkeypatch.setattr('app.graph.runtime.schedule_summary', scheduled.append)
-    monkeypatch.setattr(repository, 'get_context_snapshot', lambda *_: asyncio.sleep(0, result=object()))
+    monkeypatch.setattr(repository, 'get_context_snapshot', lambda *_: asyncio.sleep(0, result=ContextSnapshot(7, 0, 0, (), ())))
     monkeypatch.setattr(repository, 'last_message_id', lambda *_: asyncio.sleep(0, result=3))
     runtime = GraphRuntime('unused.sqlite', lambda _: None, enforce_audit=False)
     runtime._conversation_id = lambda *_: asyncio.sleep(0, result=7)
@@ -272,3 +272,171 @@ async def test_nonstream_invoke_schedules_only_new_completed_audit(monkeypatch):
     runtime.graph.next = ('fetch_order',)
     await runtime.ainvoke_turn('owner', 'hi', 7, model=SummaryModel())
     assert scheduled == [7]
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('answer,expected', [
+    ([{'type': 'text', 'text': '订单 1001 尚待处理'}], 'committed'),
+    (['订单 1001 尚待处理'], 'committed'),
+    ([{'type': 'image_url', 'image_url': {'url': 'invalid'}}], 'failed'),
+    ([{'type': 'text', 'text': 42}], 'failed'),
+    ([], 'failed'),
+])
+async def test_summary_content_blocks_fail_closed(db_session_factory, db_clean, answer, expected):
+    cid = await repository.create_conversation('owner')
+    await seeded_layer2(cid)
+    outcome = await summarize_pending(cid, SummaryModel(answer), layer2_token_limit=1)
+    assert outcome.status == expected
+    snapshot = await repository.get_context_snapshot(cid, 'owner')
+    if expected == 'failed':
+        assert snapshot.summary_upto_msg_id == 0
+        assert snapshot.summaries == ()
+        assert (await summarize_pending(cid, SummaryModel(), layer2_token_limit=1)).status == 'committed'
+    else:
+        assert snapshot.summaries[0].content == '订单 1001 尚待处理'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('entrypoint', ['invoke', 'stream'])
+async def test_graph_zero_anchor_automatic_cascade(tmp_path, db_session_factory, db_clean, monkeypatch, entrypoint):
+    from app.graph.build import build_graph
+    from app.core import summarizer
+
+    settings = compact_settings(model_context_window=9000, expected_history_turns=1,
+                                steady_turn_chars=30)
+    model = SummaryModel()
+    model_views = []
+
+    class ChatModel:
+        def bind_tools(self, tools):
+            return self
+        async def ainvoke(self, messages):
+            model_views.append(messages)
+            return AIMessage(content='planning')
+        async def astream(self, messages):
+            model_views.append(messages)
+            yield AIMessage(content='已收到订单问题')
+
+    chat = ChatModel()
+    history_seen = []
+    snapshot_seen = []
+    original_coref = nodes.coref
+
+    async def capture_coref(state, runtime):
+        snapshot_seen.append(runtime.context['snapshot'])
+        return await original_coref(state, runtime)
+
+    monkeypatch.setattr(nodes, 'coref', capture_coref)
+
+    class Classifier:
+        async def classify(self, query):
+            return '订单'
+
+    async def resolve(query, history, model):
+        history_seen.append(history)
+        return query
+
+    monkeypatch.setattr(nodes.coref_service, 'resolve', resolve)
+    summarizer.configure_summary_model(model, settings)
+    cid = None
+    first_segment = None
+    try:
+        async with GraphRuntime(tmp_path / 'cascade.sqlite', build_graph,
+                                classifier=Classifier(), settings=settings) as graph:
+            for index in range(4):
+                query = f'订单 {1001 + index} 的猫粮需要处理' * 3
+                if entrypoint == 'invoke':
+                    result = await graph.ainvoke_turn('owner', query, cid, model=chat)
+                    cid = result['conversation_id']
+                else:
+                    if cid is None:
+                        cid = await repository.create_conversation('owner')
+                    frames = [frame async for frame in graph_event_stream(
+                        graph.astream_turn('owner', query, cid, model=chat), 'owner')]
+                    assert '[DONE]' in ''.join(frames)
+                if summarizer._tasks:
+                    await asyncio.gather(*tuple(summarizer._tasks))
+                snapshot = await repository.get_context_snapshot(cid, 'owner')
+                if index == 0:
+                    assert snapshot.layer1_from_msg_id == snapshot.summary_upto_msg_id == 0
+                else:
+                    assert snapshot.layer1_from_msg_id > 0
+                    assert len(snapshot.summaries) == index
+                    if first_segment is None:
+                        first_segment = snapshot.summaries[0]
+                    assert snapshot.summaries[0] == first_segment
+            # The same turn sees the freshly downgraded Layer2, not a stale Layer1 view.
+            assert snapshot_seen[1].layer1_from_msg_id > 0
+            assert '早期摘要' in history_seen[2]
+            checkpoint = await graph.graph.aget_state({'configurable': {'thread_id': str(cid)}})
+            assert len(checkpoint.values['messages']) == 12
+            assert checkpoint.values['trace']['audit_message_id'] == await repository.last_message_id(cid)
+            assert len(model.calls) == 3
+            assert '1001' not in model.calls[-1][-1].content
+            assert '1003' in model.calls[-1][-1].content
+            assert len(model_views) == 8
+            assert any('早期摘要' in str(message.content) for message in model_views[4])
+    finally:
+        await summarizer.close_summary_tasks()
+
+@pytest.mark.asyncio
+async def test_factual_badge_survives_later_no_facts_segment(db_session_factory, db_clean):
+    cid = await repository.create_conversation('owner')
+    await seeded_layer2(cid)
+    await summarize_pending(cid, SummaryModel(), layer2_token_limit=1)
+    await seeded_layer2(cid, '谢谢')
+    await summarize_pending(cid, SummaryModel('无明确事实'), layer2_token_limit=1)
+    items, _ = await repository.list_owned_conversations('owner', 10)
+    assert items[0]['has_summary'] is True
+
+
+@pytest.mark.asyncio
+async def test_pending_resume_downgrades_only_audited_turns(tmp_path, db_session_factory, db_clean, monkeypatch):
+    from app.graph.build import build_graph
+    from app.graph.runtime import ConversationPending
+    from app.core import summarizer
+
+    class Classifier:
+        intent = '闲聊'
+        async def classify(self, query):
+            return self.intent
+
+    async def resolve(query, history, model):
+        return query
+
+    async def weak_policy(state, runtime):
+        return {'sufficient': False, 'evidence': '', 'citations': [], 'reason': '无政策'}
+
+    monkeypatch.setattr(nodes.coref_service, 'resolve', resolve)
+    monkeypatch.setattr(nodes, 'retrieve_policy', weak_policy)
+    async with db_session_factory.begin() as session:
+        await session.execute(text("INSERT INTO sample_orders (order_id,user_id,status,product,amount) VALUES ('1001','owner','已签收','猫粮',88.00)"))
+    settings = compact_settings(model_context_window=9000, expected_history_turns=1, steady_turn_chars=30)
+    classifier = Classifier()
+    model = SummaryModel()
+    summarizer.configure_summary_model(model, settings)
+    try:
+        async with GraphRuntime(tmp_path / 'resume.sqlite', build_graph, classifier=classifier, settings=settings) as graph:
+            first = await graph.ainvoke_turn('owner', '旧订单的猫粮还有问题' * 5, None, model=model)
+            cid = first['conversation_id']
+            marker = first['trace']['audit_message_id']
+            classifier.intent = '退款退货'
+            pending = await graph.ainvoke_turn('owner', '帮我退款', cid, model=model)
+            assert pending['__interrupt__']
+            snapshot = await repository.get_context_snapshot(cid, 'owner')
+            assert snapshot.layer1_from_msg_id == marker
+            assert snapshot.summary_upto_msg_id == 0
+            assert not model.calls
+            with pytest.raises(ConversationPending):
+                await graph.ainvoke_turn('owner', '别的问题', cid, model=model)
+            good = await graph.prepare_resume_turn('owner', cid, '1001', model=model)
+            assert '[DONE]' in ''.join([x async for x in graph_event_stream(good, 'owner')])
+            if summarizer._tasks:
+                await asyncio.gather(*tuple(summarizer._tasks))
+            after = await repository.get_context_snapshot(cid, 'owner')
+            assert after.summary_upto_msg_id == marker
+            assert after.layer1_from_msg_id == marker
+            assert len(after.summaries) == 1
+            assert len(model.calls) == 1
+            assert after.messages[-2].content == '帮我退款'
+    finally:
+        await summarizer.close_summary_tasks()

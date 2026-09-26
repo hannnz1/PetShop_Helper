@@ -9,7 +9,8 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
-from app.config import Settings
+from app.config import Settings, get_settings
+from app.core.context_layers import layer1_downgrade_boundary
 from app.db import repository
 from app.core.summarizer import schedule_summary
 from app.graph.state import new_turn
@@ -121,6 +122,26 @@ class GraphRuntime:
         if resume:
             raise ResumeNotPending(conversation_id)
 
+    async def _prepare_context_snapshot(self, conversation_id: int, user_id: str):
+        snapshot = await repository.get_context_snapshot(conversation_id, user_id)
+        if snapshot is None:
+            raise ConversationNotFound()
+        # Before routing, reserve the most conservative route allocation. Only
+        # audited pairs exist here: live tools and a pending user turn remain in
+        # the checkpoint and cannot become a downgrade boundary.
+        from app.graph.nodes import _budget
+        settings = self.settings or get_settings()
+        limit = min(_budget({"route": route}, snapshot, settings=settings).layer1
+                    for route in ("business", "knowledge", "refund", "chitchat"))
+        boundary = layer1_downgrade_boundary(snapshot, limit, settings)
+        if boundary > snapshot.layer1_from_msg_id:
+            await repository.advance_layer1(conversation_id, boundary)
+            # Reload even after a lost race: the database boundary is authoritative.
+            snapshot = await repository.get_context_snapshot(conversation_id, user_id)
+            if snapshot is None:
+                raise ConversationNotFound()
+        return snapshot
+
     async def ainvoke_turn(
         self, user_id: str, message: str, conversation_id: int | None,
         *, model: BaseChatModel,
@@ -131,7 +152,7 @@ class GraphRuntime:
         self._claim(resolved)
         try:
             await self._check_audit(resolved, expected_user_id=user_id)
-            snapshot = await repository.get_context_snapshot(resolved, user_id)
+            snapshot = await self._prepare_context_snapshot(resolved, user_id)
             if snapshot is None:
                 raise ConversationNotFound()
             prior_marker = await repository.last_message_id(resolved)
@@ -176,7 +197,7 @@ class GraphRuntime:
         self._claim(resolved)
         try:
             await self._check_audit(resolved, expected_user_id=user_id)
-            snapshot = await repository.get_context_snapshot(resolved, user_id)
+            snapshot = await self._prepare_context_snapshot(resolved, user_id)
             if snapshot is None:
                 raise ConversationNotFound()
         except BaseException:
@@ -209,7 +230,7 @@ class GraphRuntime:
         self._claim(resolved)
         try:
             await self._check_audit(resolved, resume=True, expected_user_id=user_id)
-            snapshot = await repository.get_context_snapshot(resolved, user_id)
+            snapshot = await self._prepare_context_snapshot(resolved, user_id)
             if snapshot is None:
                 raise ConversationNotFound()
         except BaseException:

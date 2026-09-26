@@ -78,7 +78,11 @@ async def list_owned_conversations(
         Message.role == "user",
         Message.content.is_not(None),
     ).order_by(Message.id).limit(1).correlate(Conversation).scalar_subquery())
-    statement = select(Conversation, first_question).where(Conversation.user_id == user_id)
+    factual_segment = (select(ConversationSummary.id).where(
+        ConversationSummary.conversation_id == Conversation.id,
+        func.length(func.trim(ConversationSummary.content)) > 0,
+    ).limit(1).correlate(Conversation).scalar_subquery())
+    statement = select(Conversation, first_question, factual_segment).where(Conversation.user_id == user_id)
     if before is not None:
         when, conversation_id = before
         statement = statement.where(or_(
@@ -92,9 +96,9 @@ async def list_owned_conversations(
     items = [{
         "id": conversation.id,
         "preview": (question or "")[:100],
-        "has_summary": bool(conversation.summary),
+        "has_summary": segment_id is not None,
         "updated_at": conversation.updated_at.isoformat(),
-    } for conversation, question in page]
+    } for conversation, question, segment_id in page]
     cursor = (page[-1][0].updated_at, page[-1][0].id) if len(rows) > limit else None
     return items, cursor
 

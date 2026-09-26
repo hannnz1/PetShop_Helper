@@ -68,6 +68,15 @@ def _trim_layer(messages: list[BaseMessage], rows: list[WindowRow], max_tokens: 
     return kept, rows[len(rows) - len(kept):] if kept else []
 
 
+def layer1_downgrade_boundary(snapshot: ContextSnapshot, max_tokens: int,
+                              settings: Settings) -> int:
+    """Move the oldest whole completed turns out of the recent allocation."""
+    messages, rows = _layer_turns(snapshot, 1, settings)
+    kept, _ = _trim_layer(messages, rows, max_tokens, settings)
+    dropped = len(rows) - len(kept)
+    return rows[dropped - 1].message_id if dropped else snapshot.layer1_from_msg_id
+
+
 def bounded_summary(snapshot: ContextSnapshot, settings: Settings) -> tuple[str, int]:
     """Keep a newest contiguous suffix of complete immutable summary segments."""
     segments = [segment for segment in sorted(snapshot.summaries, key=lambda row: row.seq)

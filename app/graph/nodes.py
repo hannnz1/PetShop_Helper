@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.runtime import Runtime
@@ -119,7 +120,7 @@ def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
     if (view.token_count + schema_tokens
             + max(settings.max_output_tokens, settings.chat_max_tokens) + 250 > window):
         raise ContextBudgetExceeded("model context exceeds configured window")
-    record = {"conversation_id": state.get("conversation_id"),
+    record = {"call_id": uuid4().hex, "conversation_id": state.get("conversation_id"),
               "step": state.get("steps", 0), "phase": "final_answer" if final else "agent_llm",
               "summary_layer2_budget": budget.layer2,
               "injected_summary": view.injected_summary,
@@ -129,10 +130,21 @@ def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
               "window_rows": [vars(row) for row in view.window_rows],
               "messages": [{"role": message.type, "content": message.content,
                             "name": message.name,
-                            "tool_calls": getattr(message, "tool_calls", None)}
+                            "tool_calls": getattr(message, "tool_calls", None),
+                            "tool_call_id": getattr(message, "tool_call_id", None)}
                            for message in view.messages]}
     logger.info("model_ctx %s", json.dumps(record, ensure_ascii=False, default=str))
     return view.messages, record
+
+
+def _log_model_usage(record: dict, usage: dict) -> None:
+    estimated = record["token_estimate"] + record["bound_tool_schema_tokens"]
+    actual = usage.get("input_tokens")
+    logger.info("model_usage %s", json.dumps({
+        "call_id": record["call_id"], "conversation_id": record["conversation_id"], "step": record["step"],
+        "phase": record["phase"], "estimated_input_tokens": estimated,
+        "usage": usage, "input_token_delta": actual - estimated if actual is not None else None,
+    }, ensure_ascii=False))
 
 
 def _extract_order_id(query: str) -> str:
@@ -266,6 +278,7 @@ async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
     planned = await model.bind_tools(tools).ainvoke(messages)
     calls = list(planned.tool_calls or [])
     usage = planned.usage_metadata or {}
+    _log_model_usage(record, usage)
     tokens = int(usage.get("total_tokens") or 0)
     return {
         "messages": [planned], "planned_tool_calls": calls, "model_ctx": record,
@@ -328,13 +341,20 @@ async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict
 
 async def final_answer(state: dict, runtime: Runtime[dict]) -> dict:
     parts = []
+    usage = {}
     messages, record = _model_input(state, runtime, final=True)
     async for chunk in runtime.context["model"].astream(messages):
         if isinstance(chunk.content, str):
             parts.append(chunk.content)
+        for key in ("input_tokens", "output_tokens", "total_tokens"):
+            value = (chunk.usage_metadata or {}).get(key)
+            if value is not None:
+                usage[key] = usage.get(key, 0) + value
+    _log_model_usage(record, usage)
     answer = "".join(parts).strip() or "暂时无法给出可靠答复，请稍后再试。"
     return {"answer": answer, "messages": [AIMessage(content=answer)], "model_ctx": record,
-            "summary_layer2_budget": record["summary_layer2_budget"]}
+            "summary_layer2_budget": record["summary_layer2_budget"],
+            "tokens_used": state.get("tokens_used", 0) + usage.get("total_tokens", 0)}
 
 
 async def chitchat_reply(state: dict) -> dict:

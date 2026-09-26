@@ -91,7 +91,8 @@ def offline_transition_regressions():
     env.update(CHAT_MODEL="offline-test", CHAT_BASE_URL="http://127.0.0.1:9/v1",
                CHAT_API_KEY="offline-test", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
     command = [sys.executable, "-m", "pytest", "-q", "-p", "pytest_asyncio.plugin",
-               "tests/test_ch07_summarizer.py::test_token_threshold_and_append_only_batch",
+               "tests/test_ch07_summarizer.py::test_graph_zero_anchor_automatic_cascade",
+               "tests/test_ch07_summarizer.py::test_pending_resume_downgrades_only_audited_turns",
                "tests/test_ch07_summarizer.py::test_failure_keeps_anchor_and_retry_succeeds",
                "tests/test_ch07_summarizer.py::test_concurrent_tasks_commit_range_once",
                "--tb=short"]
@@ -99,8 +100,8 @@ def offline_transition_regressions():
                             text=True, encoding="utf-8", errors="replace", check=False)
     if result.returncode:
         raise AssertionError((result.stdout + result.stderr)[-2000:])
-    return {"scope": "real isolated-MySQL transitions with deterministic fake summary model",
-            "tests_passed": 3, "pytest_output": result.stdout.strip().splitlines()[-1]}
+    return {"scope": "zero-anchor Graph invoke/stream cascade and pending resume safety with isolated MySQL and fake models",
+            "tests_passed": 5, "pytest_output": result.stdout.strip().splitlines()[-1]}
 
 
 def labeled_summary_cases():
