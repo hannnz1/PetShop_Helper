@@ -15,6 +15,7 @@ dependencies = [
     "langchain-text-splitters>=1.1,<2",
     "langgraph>=1.2.12",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    "langfuse>=4,<5",
     "mcp>=1.24,<2",
     "milvus-lite==3.2.1",
     "openai>=3,<4",

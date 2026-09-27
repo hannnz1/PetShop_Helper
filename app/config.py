@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     mcp_tool_timeout: float = Field(default=10.0, gt=0)
     tool_max_retries: int = Field(default=2, ge=0, le=5)
     demo_ticket_delay_seconds: float = Field(default=0.0, ge=0)
+    langfuse_enabled: bool = False
+    langfuse_base_url: str = "http://127.0.0.1:3000"
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+    observability_admin_token: SecretStr | None = None
 
     @field_validator("chat_model", "chat_base_url", "chat_api_key", mode="before")
     @classmethod
@@ -61,7 +66,10 @@ class Settings(BaseSettings):
             raise ValueError("must not be blank")
         return value
 
-    @field_validator("siliconflow_api_key", "rerank_api_key")
+    @field_validator(
+        "siliconflow_api_key", "rerank_api_key", "langfuse_public_key",
+        "langfuse_secret_key", "observability_admin_token",
+    )
     @classmethod
     def reject_blank_embed_key(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and not value.get_secret_value().strip():

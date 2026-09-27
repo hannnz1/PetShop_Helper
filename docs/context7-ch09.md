@@ -10,3 +10,8 @@
 - [Langfuse 官方发布列表](https://github.com/langfuse/langfuse/releases) 在 2026-09-27 显示自托管 v4.46.0 为最近发布版；执行部署前再次核实对应 Compose 和镜像标签，不使用 `latest` 漂移版本。
 
 不要从旧教程照抄 `langfuse.callback` 路径或声称“编译时挂一次回调”必然覆盖当前全部调用；以后续 Context7 与实装版本试验为准。
+
+## Task 1 implementation check (2026-09-27)
+
+- Context7 `/langfuse/langfuse-python` confirms SDK v4 reads `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optional `LANGFUSE_BASE_URL`, with `CallbackHandler` in `langfuse.langchain`. The lock resolves `langfuse==4.15.6`.
+- Context7 `/langfuse/langfuse-docs` and `/websites/langfuse_self-hosting` confirm the six-service Compose topology and approximate minimum resources. The exact [v4.46.0 upstream Compose](https://github.com/langfuse/langfuse/blob/v4.46.0/docker-compose.yml) was fetched before local edits; its web port 3000 and MinIO port 9090 were public bindings, now restricted to loopback. Upstream defaults such as `postgres`, `mysalt`, `miniosecret`, `myredissecret`, and a zero encryption key were removed in favor of required ignored local values.
