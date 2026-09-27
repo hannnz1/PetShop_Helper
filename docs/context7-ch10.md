@@ -7,3 +7,4 @@
 后续 Transformers、PyTorch、ONNX Runtime、tokenizers、FastAPI 的具体实现必须按各任务再查 Context7 与锁定版本，不沿用课程旧代码的接口假设。
 
 - Task 4 经 Context7 查询官方 [Transformers Trainer 文档](https://huggingface.co/docs/transformers/main_classes/trainer)：当前接口为 `eval_strategy`、`save_strategy`、`Trainer` 的 `compute_metrics` 与回调；[PyTorch BCEWithLogitsLoss](https://pytorch.org/docs/stable/generated/torch.nn.BCEWithLogitsLoss.html) 要求多标签浮点目标；[scikit-learn F1](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.f1_score.html) 支持 multilabel micro 聚合。训练依赖放可选 `ml` 组，当前环境未安装，不因 30 条合成样本下载模型。
+- Task 5 经 Context7 查询官方 [PyTorch ONNX Export](https://pytorch.org/docs/stable/onnx.html)：`torch.onnx.export` 支持 `opset_version`、`dynamic_axes`、`dynamo=False`；[ONNX Runtime Python API](https://onnxruntime.ai/docs/api/python/api_summary.html)：`InferenceSession(..., providers=["CPUExecutionProvider"])` 与 `session.run(None, inputs)`。本环境无模型/重依赖，导出只完成离线逻辑验证。
