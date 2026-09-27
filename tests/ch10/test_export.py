@@ -12,8 +12,20 @@ def test_export_options_fix_opset_and_dynamic_batch_sequence():
 
 
 def test_complete_threshold_matrix_mismatch_fails():
-    assert verify_predictions([[0.7, 0.1], [0.2, 0.8]],
-                              [[0.7, 0.1], [0.2, 0.49]], 0.5) == 1
+    from app.core.taxonomy import NUM_CLASSES
+
+    assert verify_predictions([[0.7, 0.1] + [0.0] * (NUM_CLASSES - 2),
+                               [0.2, 0.8] + [0.0] * (NUM_CLASSES - 2)],
+                              [[0.7, 0.1] + [0.0] * (NUM_CLASSES - 2),
+                               [0.49, 0.2] + [0.0] * (NUM_CLASSES - 2)], 0.5) == 1
+
+
+def test_all_below_threshold_argmax_disagreement_fails():
+    from app.core.taxonomy import NUM_CLASSES
+
+    torch_scores = [[0.49, 0.48] + [0.0] * (NUM_CLASSES - 2)]
+    onnx_scores = [[0.48, 0.49] + [0.0] * (NUM_CLASSES - 2)]
+    assert verify_predictions(torch_scores, onnx_scores, 0.5) == 1
 
 
 def test_missing_model_writes_pending_report(tmp_path):

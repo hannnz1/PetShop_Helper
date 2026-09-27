@@ -91,7 +91,9 @@ def build_dataset(
     manifest = {
         "seed": seed,
         "taxonomy_hash": hashlib.sha256(terminology_table().encode("utf-8")).hexdigest(),
-        "corpus_hash": _hash_json([{ "text": row["text"], "labels": row["labels"]} for row in originals]),
+        "corpus_hash": _hash_json(originals),
+        "split_hashes": {name: _hash_json(rows) for name, rows in
+                         (("train", train), ("val", val), ("test", test))},
         "counts": {"train": len(train), "val": len(val), "test": len(test)},
         "class_counts_original": class_counts,
         "status": "ready" if ready else "pending_data",
@@ -104,8 +106,8 @@ def write_dataset(build: DatasetBuild, directory: Path) -> None:
     for name in ("train", "val", "test"):
         rows = getattr(build, name)
         (directory / f"{name}.jsonl").write_text(
-            "\n".join(json.dumps({"text": row["text"], "labels": row["labels"]},
-                                 ensure_ascii=False) for row in rows), encoding="utf-8",
+            "\n".join(json.dumps(row, ensure_ascii=False) for row in rows),
+            encoding="utf-8",
         )
     (directory / "manifest.json").write_text(
         json.dumps(build.manifest, ensure_ascii=False, indent=2), encoding="utf-8",

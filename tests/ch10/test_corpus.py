@@ -41,6 +41,22 @@ def test_synthetic_only_export_uses_reviewed_labels(tmp_path):
     assert (tmp_path / "audit.md").exists()
 
 
+def test_failed_prelabel_still_enters_masked_human_review(tmp_path):
+    import json
+    from scripts.ch10.build_corpus import CorpusReport, write_corpus
+    from scripts.ch10.review_corpus import apply_reviews
+
+    report = CorpusReport("partial", failures=(18,), failed_rows=(
+        {"id": 18, "text": "QQ号: [账号] 想退货", "origin": "pool",
+         "prelabel_status": "failed"},))
+    write_corpus(report, tmp_path)
+    rows = [json.loads(line) for line in (tmp_path / "corpus_labeled.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["review_id"] == "pool-18"
+    assert "pool-18" in (tmp_path / "audit.md").read_text(encoding="utf-8")
+    assert apply_reviews(rows, [{"review_id": "pool-18", "approved": True,
+                                 "labels": ["退换货"]}])[0]["labels"] == ["退换货"]
+
+
 @pytest.mark.asyncio
 async def test_simulation_batches_until_requested_count():
     from scripts.ch10.build_corpus import simulate_class
@@ -82,4 +98,5 @@ async def test_corpus_does_not_silently_promote_failed_prelabel(monkeypatch):
                                 target_per_class=1)
     assert result.status == "partial" and result.labeled == ()
     assert result.failures == (1,)
+    assert result.failed_rows[0]["id"] == 1
     get_settings.cache_clear()

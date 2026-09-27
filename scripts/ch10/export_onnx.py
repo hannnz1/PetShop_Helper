@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from app.core.taxonomy import LABEL2ID
+from scripts.ch10.build_dataset import _hash_json
+from scripts.ch10.inference_lib import apply_threshold
 
 
 @dataclass(frozen=True)
@@ -34,13 +36,11 @@ def export_options() -> dict:
 def verify_predictions(torch_probs, onnx_probs, threshold: float) -> int:
     if len(torch_probs) != len(onnx_probs):
         raise ValueError("prediction row count mismatch")
-    mismatches = 0
-    for left, right in zip(torch_probs, onnx_probs, strict=True):
-        if len(left) != len(right):
-            raise ValueError("prediction label count mismatch")
-        mismatches += any((float(a) >= threshold) != (float(b) >= threshold)
-                          for a, b in zip(left, right, strict=True))
-    return mismatches
+    import numpy as np
+
+    left = apply_threshold(np.asarray(torch_probs, dtype=float), threshold)
+    right = apply_threshold(np.asarray(onnx_probs, dtype=float), threshold)
+    return int(np.any(left != right, axis=1).sum())
 
 
 def _report(output_dir: Path, result: ExportReport) -> ExportReport:
@@ -56,7 +56,7 @@ def prepare_serving_bundle(model_dir: Path, output_dir: Path) -> None:
         shutil.copyfile(model_dir / filename, output_dir / filename)
 
 
-def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> ExportReport:
+def _export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> ExportReport:
     if not (model_dir / "threshold.json").exists():
         return _report(output_dir, ExportReport("pending_compute", reason="trained model missing"))
     if not test_path.exists() or not test_path.read_text(encoding="utf-8").strip():
@@ -75,6 +75,8 @@ def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> Exp
     threshold = float(metadata["threshold"])
     samples = [json.loads(line) for line in test_path.read_text(encoding="utf-8").splitlines()
                if line.strip()]
+    if metadata.get("split_hashes", {}).get("test") != _hash_json(samples):
+        return _report(output_dir, ExportReport("failed", reason="test split hash mismatch"))
     tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
     model = AutoModelForSequenceClassification.from_pretrained(model_dir, local_files_only=True)
     model.eval()
@@ -117,6 +119,14 @@ def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> Exp
     return _report(output_dir, ExportReport("passed" if mismatches == 0 else "failed",
                                             len(samples), mismatches,
                                             "" if mismatches == 0 else "thresholded label mismatch"))
+
+
+def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> ExportReport:
+    """Persist a failure report even when export or runtime loading raises."""
+    try:
+        return _export_and_verify(model_dir, test_path, output_dir)
+    except Exception as exc:
+        return _report(output_dir, ExportReport("failed", reason=type(exc).__name__))
 
 
 def main() -> None:

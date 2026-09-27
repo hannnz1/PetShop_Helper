@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.taxonomy import ID2LABEL, LABEL2ID, NUM_CLASSES, terminology_table
+from scripts.ch10.build_dataset import _hash_json
 
 
 BASE_MODEL = "hfl/chinese-roberta-wwm-ext"
@@ -76,6 +77,12 @@ def train_from_dataset(dataset_dir: Path, model_dir: Path) -> TrainReport:
         raise ValueError("taxonomy hash mismatch")
     train_rows = _read_jsonl(dataset_dir / "train.jsonl")
     val_rows = _read_jsonl(dataset_dir / "val.jsonl")
+    test_rows = _read_jsonl(dataset_dir / "test.jsonl")
+    for name, rows in (("train", train_rows), ("val", val_rows), ("test", test_rows)):
+        if manifest.get("split_hashes", {}).get(name) != _hash_json(rows):
+            raise ValueError(f"{name} split hash mismatch")
+        if any(row.get("reviewed") is not True for row in rows):
+            raise ValueError(f"{name} split has unreviewed row")
     if not train_rows or not val_rows:
         return TrainReport("pending_data", "train/validation split missing")
     try:
@@ -92,6 +99,7 @@ def train_from_dataset(dataset_dir: Path, model_dir: Path) -> TrainReport:
             self.model = model
             self.best_score = -1.0
             self.best_state = None
+            self.stale_epochs = 0
 
         def on_evaluate(self, args, state, control, metrics=None, **kwargs):
             score = (metrics or {}).get("eval_micro_f1", -1.0)
@@ -99,6 +107,11 @@ def train_from_dataset(dataset_dir: Path, model_dir: Path) -> TrainReport:
                 self.best_score = score
                 self.best_state = {key: value.detach().to("cpu", copy=True)
                                    for key, value in self.model.state_dict().items()}
+                self.stale_epochs = 0
+            else:
+                self.stale_epochs += 1
+                if self.stale_epochs >= 2:
+                    control.should_training_stop = True
 
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -135,6 +148,7 @@ def train_from_dataset(dataset_dir: Path, model_dir: Path) -> TrainReport:
     (model_dir / "threshold.json").write_text(json.dumps({
         "threshold": threshold.threshold, "val_micro_f1": threshold.micro_f1,
         "taxonomy_hash": taxonomy_hash, "dataset_hash": manifest["corpus_hash"],
+        "split_hashes": manifest["split_hashes"],
         "label_order": list(LABEL2ID), "base_model": BASE_MODEL,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     return TrainReport("trained")

@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import hashlib
 import ipaddress
 import json
 import random
@@ -45,6 +46,7 @@ class CorpusReport:
     labeled: tuple[dict, ...] = ()
     failures: tuple[int, ...] = ()
     missing: dict[str, int] | None = None
+    failed_rows: tuple[dict, ...] = ()
 
 
 def _local_url(value: str) -> bool:
@@ -107,10 +109,13 @@ async def build_corpus(
                      for row in raw_rows])
     labeled: list[dict] = []
     failures: list[int] = []
+    failed_rows: list[dict] = []
     for row in masked:
         result = await prelabel(row["text"])
         if not isinstance(result, LabelResult) or result.status != "labeled":
             failures.append(row["id"])
+            failed_rows.append({**row, "prelabel_status":
+                                result.status if isinstance(result, LabelResult) else "invalid_result"})
             continue
         labeled.append({**row, "labels": list(result.labels)})
     missing = missing_by_class(labeled, target=target_per_class)
@@ -131,7 +136,7 @@ async def build_corpus(
         labeled = dedupe(labeled)
         missing = missing_by_class(labeled, target=target_per_class)
     status = "partial" if failures else ("pending_data" if any(missing.values()) else "ready")
-    return CorpusReport(status, tuple(labeled), tuple(failures), missing)
+    return CorpusReport(status, tuple(labeled), tuple(failures), missing, tuple(failed_rows))
 
 
 def write_corpus(report: CorpusReport, directory: Path) -> None:
@@ -139,12 +144,23 @@ def write_corpus(report: CorpusReport, directory: Path) -> None:
     if report.status not in {"partial", "ready", "pending_data"}:
         raise ValueError("corpus is not ready for review export")
     directory.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for row in (*report.labeled, *report.failed_rows):
+        if row.get("id") is not None:
+            review_id = f"pool-{row['id']}"
+        else:
+            digest = hashlib.sha256((row["origin"] + "\0" + row["text"]).encode("utf-8")).hexdigest()[:16]
+            review_id = f"{row['origin']}-{digest}"
+        rows.append({**row, "review_id": review_id})
+    if len({row["review_id"] for row in rows}) != len(rows):
+        raise ValueError("duplicate review ID")
     (directory / "corpus_labeled.jsonl").write_text(
-        "\n".join(json.dumps(row, ensure_ascii=False) for row in report.labeled), encoding="utf-8",
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows), encoding="utf-8",
     )
-    audit = audit_sample(list(report.labeled))
+    audit = audit_sample(rows)
     (directory / "audit.md").write_text(
-        "\n".join(f"- [{','.join(row['labels'])}] {row['text']}" for row in audit),
+        "\n".join(f"- {row['review_id']} [{','.join(row.get('labels', [])) or '待人工标注'}] {row['text']}"
+                  for row in audit),
         encoding="utf-8",
     )
 

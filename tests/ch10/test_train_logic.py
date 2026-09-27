@@ -43,3 +43,18 @@ def test_training_refuses_taxonomy_hash_mismatch(tmp_path: Path):
     (tmp_path / "manifest.json").write_text(json.dumps({"status": "ready", "taxonomy_hash": "bad"}), encoding="utf-8")
     with pytest.raises(ValueError, match="taxonomy"):
         train_from_dataset(tmp_path, tmp_path / "model")
+
+
+def test_training_rejects_tampered_split(tmp_path: Path):
+    from scripts.ch10.build_dataset import build_dataset, write_dataset
+    from scripts.ch10.train import train_from_dataset
+
+    rows = [{"text": f"问题{i}", "labels": ["物流"], "reviewed": True} for i in range(10)]
+    build = build_dataset(rows)
+    write_dataset(build, tmp_path)
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    manifest["status"] = "ready"
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "train.jsonl").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="split|hash"):
+        train_from_dataset(tmp_path, tmp_path / "model")

@@ -10,6 +10,7 @@ _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _LONG_NUMBER = re.compile(r"(?<!\d)\d{10,}(?!\d)")
 _EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _SOCIAL = re.compile(r"(微信|weixin|wx|QQ)\s*(?:号|[:：])?\s*[A-Za-z][A-Za-z0-9_-]{5,}", re.I)
+_QQ_NUMBER = re.compile(r"(QQ\s*(?:号\s*)?[:：]?\s*)[1-9]\d{4,11}(?!\d)", re.I)
 _ORDER = re.compile(r"(订单(?:编号|号)?\s*[:：#]?\s*)[A-Za-z0-9][A-Za-z0-9_-]{4,}", re.I)
 
 
@@ -17,6 +18,7 @@ def desensitize(value: str) -> str:
     """Mask common private identifiers without changing product model names."""
     value = _EMAIL.sub("[邮箱]", value)
     value = _PHONE.sub("[手机号]", value)
+    value = _QQ_NUMBER.sub(r"\1[账号]", value)
     value = _LONG_NUMBER.sub("[单号]", value)
     value = _SOCIAL.sub(lambda match: f"{match.group(1)}[账号]", value)
     return _ORDER.sub(r"\1[单号]", value)

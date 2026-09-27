@@ -9,6 +9,10 @@ def test_desensitize_masks_identifiers_preserving_product_model():
     assert "MH-LP100" in masked
 
 
+def test_desensitize_masks_numeric_qq_before_audit_or_model():
+    assert "123456789" not in desensitize("QQ号: 123456789，咨询退货")
+
+
 def test_dedupe_keeps_first_source_and_drops_blank():
     rows = [{"text": " 退货 ", "origin": "pool"}, {"text": "退货", "origin": "simulated"},
             {"text": "  ", "origin": "pool"}]

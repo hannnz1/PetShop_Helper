@@ -55,3 +55,14 @@ def test_tiny_synthetic_holdouts_do_not_claim_training_readiness():
     result = build_dataset(rows)
     assert result.val and result.test
     assert result.manifest["status"] == "pending_data"
+
+
+def test_split_hashes_and_review_lineage_are_persisted(tmp_path):
+    import json
+    from scripts.ch10.build_dataset import build_dataset, write_dataset
+
+    result = build_dataset(_rows())
+    write_dataset(result, tmp_path)
+    persisted = json.loads((tmp_path / "train.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert persisted["reviewed"] is True
+    assert set(result.manifest["split_hashes"]) == {"train", "val", "test"}
