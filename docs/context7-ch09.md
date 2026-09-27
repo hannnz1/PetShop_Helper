@@ -15,3 +15,8 @@
 
 - Context7 `/langfuse/langfuse-python` confirms SDK v4 reads `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optional `LANGFUSE_BASE_URL`, with `CallbackHandler` in `langfuse.langchain`. The lock resolves `langfuse==4.15.6`.
 - Context7 `/langfuse/langfuse-docs` and `/websites/langfuse_self-hosting` confirm the six-service Compose topology and approximate minimum resources. The exact [v4.46.0 upstream Compose](https://github.com/langfuse/langfuse/blob/v4.46.0/docker-compose.yml) was fetched before local edits; its web port 3000 and MinIO port 9090 were public bindings, now restricted to loopback. Upstream defaults such as `postgres`, `mysalt`, `miniosecret`, `myredissecret`, and a zero encryption key were removed in favor of required ignored local values.
+
+## Task 2 implementation check (2026-09-27)
+
+- Context7 `/langfuse/langfuse-python` and the installed 4.15.6 signatures show `CallbackHandler(*, public_key=None, trace_context=None)`; credentials and `base_url` belong to `Langfuse(...)`, whose client is retrieved by public key by the handler. The SDK `mask` hook covers SDK-owned input/output/metadata but is not a blanket mask for third-party OpenTelemetry spans.
+- Context7 `/langfuse/langfuse-python` confirms `langfuse_session_id`, `langfuse_user_id`, and `langfuse_trace_name` in RunnableConfig metadata are interpreted as root trace attributes. Context7 `/langchain-ai/langgraph` confirms `ainvoke`/`astream` take RunnableConfig callbacks. A compiled Graph test exercised both paths with a failing callback and checked business results continue.

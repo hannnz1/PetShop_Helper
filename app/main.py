@@ -26,6 +26,7 @@ from app.core.summarizer import close_summary_tasks, configure_summary_model, sc
 from app.kb import milvus_client
 from app.graph.build import build_graph
 from app.graph.runtime import GraphRuntime
+from app.observability.tracing import close_tracing
 from app.graph.nodes import close_context_log, open_context_log, validate_startup_budget
 from app.tools import registry as tool_registry
 
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
                             if root_client is not None:
                                 root_client.close()
                     finally:
+                        close_tracing(config)
                         close_context_log(context_log)
 
     application = FastAPI(title="PetShop_Helper", version="0.1.0", lifespan=lifespan)

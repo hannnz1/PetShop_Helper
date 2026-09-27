@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator, Callable
 import logging
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -14,6 +15,7 @@ from app.core.context_layers import layer1_downgrade_boundary
 from app.db import repository
 from app.core.summarizer import schedule_summary
 from app.graph.state import new_turn
+from app.observability.tracing import make_turn_callbacks, turn_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,16 @@ class GraphRuntime:
         if conversation_id in self._active:
             raise ConversationBusy()
         self._active.add(conversation_id)
+
+    def _turn_config(self, user_id: str, conversation_id: int) -> dict:
+        """Allocate one ID for the entire Graph invocation or stream/resume."""
+        turn_id = str(uuid4())
+        settings = self.settings or get_settings()
+        return {
+            "configurable": {"thread_id": str(conversation_id)},
+            "metadata": turn_metadata(settings, user_id, conversation_id, turn_id),
+            "callbacks": make_turn_callbacks(settings, user_id, conversation_id, turn_id),
+        }
 
     @staticmethod
     def _pending_kind(snapshot: Any, conversation_id: int) -> str | None:
@@ -162,9 +174,10 @@ class GraphRuntime:
             if snapshot is None:
                 raise ConversationNotFound()
             prior_marker = await repository.last_message_id(resolved)
+            config = self._turn_config(user_id, resolved)
             result = await self.graph.ainvoke(
                 new_turn(user_id, resolved, message),
-                {"configurable": {"thread_id": str(resolved)}},
+                config,
                 context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
                          "settings": self.settings},
             )
@@ -212,9 +225,10 @@ class GraphRuntime:
 
         async def events() -> AsyncIterator[tuple[str, Any]]:
             try:
+                config = self._turn_config(user_id, resolved)
                 async for event in self.graph.astream(
                     new_turn(user_id, resolved, message),
-                    {"configurable": {"thread_id": str(resolved)}},
+                    config,
                     context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
                              "settings": self.settings},
                     stream_mode=["messages", "updates"],
@@ -251,9 +265,10 @@ class GraphRuntime:
 
         async def events() -> AsyncIterator[tuple[str, Any]]:
             try:
+                config = self._turn_config(user_id, resolved)
                 async for event in self.graph.astream(
                     Command(resume=resume_value),
-                    {"configurable": {"thread_id": str(resolved)}},
+                    config,
                     context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
                              "settings": self.settings},
                     stream_mode=["messages", "updates"],
