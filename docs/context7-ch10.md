@@ -5,3 +5,5 @@
 - Task 2 经 Context7 查询官方 [SQLAlchemy 2.0 文档](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)：`AsyncSession` 对 `select(...).limit(...)` 异步读取；本机锁定 `sqlalchemy 2.0.54`。低置信池只读并在本机脱敏。
 
 后续 Transformers、PyTorch、ONNX Runtime、tokenizers、FastAPI 的具体实现必须按各任务再查 Context7 与锁定版本，不沿用课程旧代码的接口假设。
+
+- Task 4 经 Context7 查询官方 [Transformers Trainer 文档](https://huggingface.co/docs/transformers/main_classes/trainer)：当前接口为 `eval_strategy`、`save_strategy`、`Trainer` 的 `compute_metrics` 与回调；[PyTorch BCEWithLogitsLoss](https://pytorch.org/docs/stable/generated/torch.nn.BCEWithLogitsLoss.html) 要求多标签浮点目标；[scikit-learn F1](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.f1_score.html) 支持 multilabel micro 聚合。训练依赖放可选 `ml` 组，当前环境未安装，不因 30 条合成样本下载模型。
