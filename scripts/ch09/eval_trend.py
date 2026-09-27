@@ -27,7 +27,7 @@ def upstream_unavailable_reason() -> str | None:
     settings = get_settings()
     if "glm-5.2" not in settings.chat_model.lower():
         return "glm-5.2 model not configured"
-    if settings.siliconflow_api_key is None or settings.rerank_api_key is None:
+    if settings.siliconflow_api_key is None:
         return "SiliconFlow embedding or rerank credential unavailable"
     parsed = urlparse(settings.milvus_uri)
     if parsed.scheme in ("http", "https", "tcp"):

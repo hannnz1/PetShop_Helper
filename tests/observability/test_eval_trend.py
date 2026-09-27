@@ -1,6 +1,7 @@
 """Chapter 4 evaluation ledger contracts, using labeled offline samples."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -20,6 +21,19 @@ def labeled_report(count=2, status="complete", retrieval_error_count=0):
             {"id": "A2", "bucket": "A_policy", "strategy": "vector", "covered": None},
         ]},
     }
+
+
+def test_live_preflight_accepts_siliconflow_key_for_rerank_fallback(tmp_path, monkeypatch):
+    from scripts.ch09 import eval_trend
+
+    milvus = tmp_path / "milvus.db"
+    milvus.touch()
+    settings = SimpleNamespace(chat_model="glm-5.2", siliconflow_api_key=SecretStr("key"),
+                               rerank_api_key=None, milvus_uri=str(milvus))
+    monkeypatch.setattr(eval_trend, "get_settings", lambda: settings)
+    assert eval_trend.upstream_unavailable_reason() is None
+    settings.siliconflow_api_key = None
+    assert "SiliconFlow" in eval_trend.upstream_unavailable_reason()
 
 
 def test_extract_preserves_denominators_and_missing_metric_is_pending():
