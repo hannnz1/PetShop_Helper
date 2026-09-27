@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from hashlib import sha256
 import logging
 import time
 from dataclasses import dataclass
@@ -120,6 +121,10 @@ async def execute_tool_call(
     execution_args = dict(args)
     if spec.inject_conversation:
         execution_args["conversation_id"] = conversation_id
+    if spec.inject_request_id:
+        execution_args["request_id"] = "graph-" + sha256(
+            f"{conversation_id}:{call_id}".encode("utf-8")
+        ).hexdigest()[:40]
     settings = get_settings()
     timeout = spec.timeout or (settings.mcp_tool_timeout if spec.source == "mcp"
                                else settings.tool_default_timeout)

@@ -59,27 +59,31 @@ async def create_refund(req: CreateRefundRequest) -> CreateRefundResponse:
     return CreateRefundResponse(refund_no=refund_no, status="待人工审核")
 
 
-class ResumeOrderRequest(BaseModel):
+class ResumeActionRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     user_id: str = Field(min_length=1, max_length=64)
     conversation_id: int = Field(gt=0)
-    order_id: str = Field(min_length=1, max_length=64)
+    order_id: str | None = Field(default=None, min_length=1, max_length=64)
+    confirmed: bool | None = None
 
 
 @router.post("/api/actions/resume")
-async def resume_order(req: ResumeOrderRequest, request: Request,
+async def resume_order(req: ResumeActionRequest, request: Request,
                        model: BaseChatModel = Depends(get_model)) -> StreamingResponse:
+    if (req.order_id is None) == (req.confirmed is None):
+        raise HTTPException(status_code=400, detail="order_id 与 confirmed 必须且只能传一个")
+    resume_value = req.order_id if req.order_id is not None else {"confirmed": req.confirmed}
     try:
         graph_stream = await request.app.state.graph.prepare_resume_turn(
-            req.user_id, req.conversation_id, req.order_id, model=model,
+            req.user_id, req.conversation_id, resume_value, model=model,
         )
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="会话不存在") from None
     except ConversationBusy:
         raise HTTPException(status_code=409, detail="会话正在处理上一项操作") from None
     except (ConversationPending, ResumeNotPending):
-        raise HTTPException(status_code=409, detail="当前会话不在等待选单") from None
+        raise HTTPException(status_code=409, detail="当前会话不在等待此操作") from None
     except GraphDivergence:
         raise HTTPException(status_code=503, detail="会话状态需恢复，请开启新对话") from None
     except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):

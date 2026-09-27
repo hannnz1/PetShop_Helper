@@ -10,7 +10,7 @@ from app.core.prompts import INTENT_PROMPT
 
 class IntentResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    intent: Literal["物流", "订单", "售后", "商品咨询", "退款退货", "投诉", "闲聊"]
+    intent: Literal["物流", "订单", "售后", "商品咨询", "退款退货", "投诉", "闲聊", "人工"]
 
 
 class IntentClassifier(Protocol):

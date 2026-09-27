@@ -287,7 +287,9 @@ def _agent_specs(state: dict, discovered: list) -> list:
         return [spec for spec in discovered if spec.name == "submit_refund"]
     if route == "business":
         return [spec for spec in discovered
-                if spec.name in {"query_order", "query_product"} or spec.source == "mcp"]
+                if spec.name in {"query_order", "query_product"}
+                or spec.source == "mcp"
+                or (spec.name == "create_ticket" and state.get("intent") == "人工")]
     return []
 
 
@@ -312,10 +314,26 @@ async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
 
 async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict:
     specs = {spec.name: spec for spec in _agent_specs(state, await registry.get_all_specs())}
+    calls = state["planned_tool_calls"]
+    ticket_calls = [call for call in calls if isinstance(call, dict)
+                    and call.get("name") == "create_ticket"]
+    ticket_decision = None
+    ticket_spec = specs.get("create_ticket")
+    if ticket_calls and ticket_spec is not None:
+        ticket_args = ticket_calls[0].get("args")
+        if (isinstance(ticket_args, dict)
+                and isinstance(ticket_args.get("description"), str)
+                and ticket_args["description"].strip()
+                and engine.validate_args(ticket_spec, ticket_args) is None):
+            ticket_decision = interrupt({
+                "type": "confirm_ticket", "conversation_id": state["conversation_id"],
+                "preview": {"ticket_type": ticket_args["ticket_type"],
+                            "description": ticket_args["description"]},
+            })
     tool_messages = []
     results = list(state.get("tool_results", []))
     actions = list(state.get("suggested_actions", []))
-    for call in state["planned_tool_calls"]:
+    for call in calls:
         if isinstance(call, dict) and call.get("name") == "submit_refund":
             call_id = call.get("id") if isinstance(call.get("id"), str) else "invalid-refund-call"
             args = call.get("args") if isinstance(call.get("args"), dict) else {}
@@ -345,7 +363,19 @@ async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict
             results.append({"tool_call_id": call_id, "name": "submit_refund",
                             "ok": permitted, "content": content})
             continue
-        run = await engine.execute_tool_call(call, state["conversation_id"], specs)
+        if call.get("name") == "create_ticket" and ticket_decision is not None:
+            if call is ticket_calls[0]:
+                confirmed = (isinstance(ticket_decision, dict)
+                             and ticket_decision.get("confirmed") is True)
+                run = await engine.execute_tool_call(
+                    call, state["conversation_id"], specs, confirmed=confirmed,
+                    deny_note=None if confirmed else "用户取消工单预览，本次不建单。不要再次发起，除非用户重新明确要求。",
+                )
+            else:
+                run = await engine.execute_tool_call(call, state["conversation_id"], {},
+                                                     deny_note="一次只处理一个建工单请求")
+        else:
+            run = await engine.execute_tool_call(call, state["conversation_id"], specs)
         tool_messages.append(run.tool_message)
         results.append({"tool_call_id": run.tool_call_id, "name": run.name,
                         "ok": run.ok, "content": str(run.tool_message.content)})

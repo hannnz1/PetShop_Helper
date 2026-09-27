@@ -9,7 +9,7 @@ from scripts.eval_intent import load_samples
 
 def test_marked_examples_cover_all_intents_without_duplicates():
     rows = load_samples()
-    assert len(rows) == 21
+    assert len(rows) == 23
     assert len({row["query"] for row in rows}) == len(rows)
 
 

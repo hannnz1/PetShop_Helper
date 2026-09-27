@@ -15,3 +15,9 @@
 - https://github.com/langchain-ai/langchain-mcp-adapters/blob/main/_autodocs/api-reference-client.md
 - https://github.com/langchain-ai/langchain-mcp-adapters/blob/main/_autodocs/configuration.md
 - https://github.com/python-jsonschema/jsonschema/blob/main/docs/validate.rst
+
+Task 6 再核对：Context7 `/langchain-ai/langgraph/1.0.8` 的 `interrupt()` 官方源码说明，`Command(resume=...)` 会从节点开头重跑，故 `agent_tools` 在 interrupt 前只计算预览，写入只发生在恢复后。`/websites/fastapi_tiangolo` 的请求体文档确认可选字段用 Pydantic 默认 `None`；`/websites/reference_langchain` 的 `InjectedToolArg` API 确认注入参数不暴露给模型。安装环境已用相同调用方式的 Chapter 6 interrupt 测试兼容验证。
+
+- https://github.com/langchain-ai/langgraph/blob/1.0.8/libs/langgraph/langgraph/types.py
+- https://fastapi.tiangolo.com/tutorial/body/
+- https://reference.langchain.com/python/langchain-core/tools/base/InjectedToolArg

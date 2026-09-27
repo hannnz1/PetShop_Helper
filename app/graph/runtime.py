@@ -31,11 +31,11 @@ class GraphDivergence(Exception):
 
 
 class ConversationPending(Exception):
-    """A select-order interrupt must be resumed before a new chat turn."""
+    """A user-confirmation interrupt must be resumed before a new chat turn."""
 
 
 class ResumeNotPending(Exception):
-    """This thread is not waiting for an order selection."""
+    """This thread is not waiting for the requested user action."""
 
 
 class GraphRuntime:
@@ -86,19 +86,22 @@ class GraphRuntime:
         self._active.add(conversation_id)
 
     @staticmethod
-    def _select_order_pending(snapshot: Any, conversation_id: int) -> bool:
+    def _pending_kind(snapshot: Any, conversation_id: int) -> str | None:
         interrupts = getattr(snapshot, "interrupts", ())
-        return (
-            tuple(snapshot.next) == ("fetch_order",)
-            and len(interrupts) == 1
-            and isinstance(interrupts[0].value, dict)
-            and interrupts[0].value.get("type") == "select_order"
-            and snapshot.values.get("conversation_id") == conversation_id
-        )
+        if (len(interrupts) != 1 or not isinstance(interrupts[0].value, dict)
+                or snapshot.values.get("conversation_id") != conversation_id):
+            return None
+        kind = interrupts[0].value.get("type")
+        expected_node = {"select_order": "fetch_order", "confirm_ticket": "agent_tools"}.get(kind)
+        return kind if expected_node and tuple(snapshot.next) == (expected_node,) else None
+
+    @staticmethod
+    def _select_order_pending(snapshot: Any, conversation_id: int) -> bool:
+        return GraphRuntime._pending_kind(snapshot, conversation_id) == "select_order"
 
     async def _check_audit(
         self, conversation_id: int, *, resume: bool = False,
-        expected_user_id: str | None = None,
+        expected_user_id: str | None = None, expected_kind: str | None = None,
     ) -> None:
         if not self.enforce_audit:
             return
@@ -106,7 +109,8 @@ class GraphRuntime:
         snapshot = await self.graph.aget_state(config)
         marker = (snapshot.values.get("trace") or {}).get("audit_message_id")
         latest = await repository.last_message_id(conversation_id)
-        pending = self._select_order_pending(snapshot, conversation_id)
+        pending_kind = self._pending_kind(snapshot, conversation_id)
+        pending = pending_kind is not None
         if (marker != latest or (snapshot.values and marker is None and not pending)
                 or (expected_user_id is not None and snapshot.values
                     and snapshot.values.get("user_id") != expected_user_id)):
@@ -116,6 +120,8 @@ class GraphRuntime:
         if snapshot.next:
             if pending:
                 if resume:
+                    if expected_kind != pending_kind:
+                        raise GraphDivergence(conversation_id)
                     return
                 raise ConversationPending(conversation_id)
             raise GraphDivergence(conversation_id)
@@ -220,16 +226,22 @@ class GraphRuntime:
         return events()
 
     async def prepare_resume_turn(
-        self, user_id: str, conversation_id: int, order_id: str,
+        self, user_id: str, conversation_id: int, resume_value: str | dict,
         *, model: BaseChatModel,
     ) -> AsyncIterator[tuple[str, Any]]:
-        """Authorize and verify a pending select-order frame before SSE headers."""
+        """Authorize and verify a pending action frame before SSE headers."""
         if self.graph is None:
             raise RuntimeError("graph runtime is not open")
         resolved = await self._conversation_id(user_id, conversation_id)
         self._claim(resolved)
         try:
-            await self._check_audit(resolved, resume=True, expected_user_id=user_id)
+            expected_kind = "select_order" if isinstance(resume_value, str) else "confirm_ticket"
+            if (expected_kind == "confirm_ticket"
+                    and (not isinstance(resume_value, dict)
+                         or type(resume_value.get("confirmed")) is not bool)):
+                raise ResumeNotPending(resolved)
+            await self._check_audit(resolved, resume=True, expected_user_id=user_id,
+                                    expected_kind=expected_kind)
             snapshot = await self._prepare_context_snapshot(resolved, user_id)
             if snapshot is None:
                 raise ConversationNotFound()
@@ -240,7 +252,7 @@ class GraphRuntime:
         async def events() -> AsyncIterator[tuple[str, Any]]:
             try:
                 async for event in self.graph.astream(
-                    Command(resume=order_id),
+                    Command(resume=resume_value),
                     {"configurable": {"thread_id": str(resolved)}},
                     context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
                              "settings": self.settings},

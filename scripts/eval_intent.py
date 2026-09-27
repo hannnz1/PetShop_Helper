@@ -28,7 +28,7 @@ def load_samples(path: Path = DATA) -> list[dict[str, str]]:
         seen.add(query)
     counts = Counter(row["intent"] for row in rows)
     if set(counts) != labels or min(counts.values()) < 2:
-        raise ValueError("all seven intents need at least two marked samples")
+        raise ValueError(f"all {len(labels)} intents need at least two marked samples")
     return rows
 
 

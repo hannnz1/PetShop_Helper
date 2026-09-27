@@ -24,6 +24,7 @@ class ToolSpec:
     mcp_server: str | None = None
     timeout: float | None = None
     inject_conversation: bool = False
+    inject_request_id: bool = False
     format_result: Callable[[dict], dict] | None = None
 
 
@@ -38,6 +39,7 @@ def permission_for(name: str) -> str:
 def spec_from_langchain_tool(
     tool: BaseTool, *, source: str, mcp_server: str | None = None,
     timeout: float | None = None, inject_conversation: bool = False,
+    inject_request_id: bool = False,
     format_result: Callable[[dict], dict] | None = None,
 ) -> ToolSpec:
     """Extract the schema shown to the model, excluding injected arguments."""
@@ -54,7 +56,8 @@ def spec_from_langchain_tool(
         name=tool.name, description=tool.description or "", json_schema=schema,
         tool=tool, permission=permission_for(tool.name), source=source,
         mcp_server=mcp_server, timeout=timeout,
-        inject_conversation=inject_conversation, format_result=format_result,
+        inject_conversation=inject_conversation, inject_request_id=inject_request_id,
+        format_result=format_result,
     )
 
 
