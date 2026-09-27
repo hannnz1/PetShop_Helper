@@ -94,6 +94,20 @@ eval-agent:
 	uv run --locked python scripts/eval_agent.py
 
 ifeq ($(OS),Windows_NT)
+eval-ch08-offline:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_ch08
+
+eval-ch08:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_ch08 --live
+else
+eval-ch08-offline:
+	uv run --locked python -m scripts.eval_ch08
+
+eval-ch08:
+	uv run --locked python -m scripts.eval_ch08 --live
+endif
+
+ifeq ($(OS),Windows_NT)
 eval-rag:
 	.\.venv\Scripts\python.exe -X utf8 -m scripts.eval_ch04
 

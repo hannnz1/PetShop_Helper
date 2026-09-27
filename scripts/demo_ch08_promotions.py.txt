@@ -1,0 +1,35 @@
+"""演示:复制为 app/tools/builtin/promotions.py 并重启应用，即自动注册活动工具。
+
+所有活动内容都是模拟数据，不代表平台真实优惠。
+"""
+
+import random
+from datetime import date, timedelta
+
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
+
+from app.tools import registry
+
+
+class PromotionInput(BaseModel):
+    keyword: str = Field(min_length=1, description="活动关键词或商品品类，例如猫粮")
+
+
+@tool(args_schema=PromotionInput)
+async def query_promotions(keyword: str) -> dict:
+    """查询模拟演示优惠活动；用户问优惠、促销、折扣时使用，不可当作真实平台活动。"""
+
+    rng = random.Random(f"promo:{keyword}")
+    return {
+        "keyword": keyword,
+        "demo_only": True,
+        "promotions": [
+            f"{keyword}品类满{rng.randint(99, 299)}减{rng.randint(10, 50)}",
+            f"演示新客折扣 {rng.choice(['9折', '8.5折', '95折'])}",
+        ],
+        "valid_until": (date.today() + timedelta(days=7)).isoformat(),
+    }
+
+
+registry.register(registry.spec_from_langchain_tool(query_promotions, source="builtin"))

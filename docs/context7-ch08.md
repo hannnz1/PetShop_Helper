@@ -21,3 +21,5 @@ Task 6 再核对：Context7 `/langchain-ai/langgraph/1.0.8` 的 `interrupt()` �
 - https://github.com/langchain-ai/langgraph/blob/1.0.8/libs/langgraph/langgraph/types.py
 - https://fastapi.tiangolo.com/tutorial/body/
 - https://reference.langchain.com/python/langchain-core/tools/base/InjectedToolArg
+
+Task 8 评估脚本使用 HTTPX。Context7 官方 `/encode/httpx` 核对 `AsyncClient`、`client.stream()` 异步上下文及逐行读取 SSE 的接口；应用实际使用 `response.aiter_lines()`。来源：https://github.com/encode/httpx/blob/master/docs/async.md 。

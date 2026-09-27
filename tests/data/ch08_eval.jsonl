@@ -1,0 +1,5 @@
+{"id":"ticket_missing","query":"帮我建个工单","expect":"追问描述且不建单"}
+{"id":"ticket_preview","query":"帮我建售后工单，猫砂盆漏电","expect":"工单预览中断"}
+{"id":"ticket_confirm","resume":{"confirmed":true},"expect":"只建一张工单并返回工单号"}
+{"id":"ticket_cancel","resume":{"confirmed":false},"expect":"不建单且记录权限拒绝"}
+{"id":"logistics","query":"我的订单 1001 的物流到哪了","expect":"订单加 MCP 物流并给出中文演示状态"}

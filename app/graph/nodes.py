@@ -287,7 +287,8 @@ def _agent_specs(state: dict, discovered: list) -> list:
         return [spec for spec in discovered if spec.name == "submit_refund"]
     if route == "business":
         return [spec for spec in discovered
-                if spec.name in {"query_order", "query_product"}
+                if (spec.source == "builtin" and spec.permission == "read"
+                    and spec.name not in {"query_faq", "submit_refund"})
                 or spec.source == "mcp"
                 or (spec.name == "create_ticket" and state.get("intent") == "人工")]
     return []

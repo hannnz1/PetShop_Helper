@@ -21,3 +21,5 @@
 {"query":"你好呀","intent":"闲聊"}
 {"query":"谢谢你的帮助","intent":"闲聊"}
 {"query":"今天天气怎么样？","intent":"闲聊"}
+{"query":"最近有什么优惠活动","intent":"活动"}
+{"query":"猫粮有促销折扣吗","intent":"活动"}
