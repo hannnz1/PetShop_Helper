@@ -12,6 +12,7 @@
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.action-form{display:grid;gap:8px;width:min(100%,420px);margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#f8faf8}.action-form label{font-size:12px;color:var(--muted)}.action-form textarea,.action-form select{width:100%;border:1px solid var(--line);border-radius:7px;background:white;padding:7px;color:var(--ink)}.action-form textarea{min-height:76px;resize:vertical}.action-form .row{display:flex;gap:8px}.action-note{font-size:12px;color:var(--muted);margin-top:8px}.action-note.error-text{color:#99492f}
 .action-form[hidden]{display:none}
 .order-options{display:grid;gap:8px;margin-top:12px}.order-choice{display:block;text-align:left;width:100%;border:1px solid #b6cbbb;border-radius:9px;background:#f5faf5;color:var(--ink);padding:9px 12px}.order-choice strong{display:block}.order-choice small{color:var(--muted)}
+.ticket-preview{width:min(100%,420px);border:1px solid #b6cbbb;border-radius:12px;background:#f5faf5;padding:14px;margin-top:12px}.ticket-preview h3{font-size:15px;margin:0 0 9px}.ticket-preview dl{margin:0}.ticket-preview dt{font-size:12px;color:var(--muted)}.ticket-preview dd{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}.ticket-preview .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.ticket-preview .action-note{margin:8px 0 0}
 .conversation-section{min-height:0;display:flex;flex:1;flex-direction:column;gap:10px}.conversation-heading{font-size:12px;font-weight:700;color:#536c5b}.conversation-list{overflow:auto;min-height:0;display:grid;align-content:start;gap:6px}.conversation-item{width:100%;border:1px solid transparent;background:transparent;border-radius:10px;text-align:left;padding:10px;color:var(--ink)}.conversation-item:hover,.conversation-item:focus-visible{background:#f7faf6}.conversation-item.active{background:#fff;border-color:#b6cbbb}.conversation-title{display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.conversation-meta{display:flex;justify-content:space-between;gap:6px;color:var(--muted);font-size:11px}.summary-mark{color:var(--green)}.more-conversations{border:0;background:transparent;color:var(--green);padding:5px;text-align:left;font-size:12px}.sidebar-toggle{display:none}
 @media(max-width:760px){.sidebar-toggle{display:block;border:0;background:none;color:var(--green);font-size:12px;white-space:nowrap}.sidebar{display:flex;position:fixed;z-index:5;inset:0 auto 0 0;width:min(310px,85vw);padding:22px;box-shadow:12px 0 30px #213c3226;transform:translateX(-110%);transition:transform .2s}.sidebar.open{transform:translateX(0)}.sidebar-backdrop{position:fixed;inset:0;background:#213c3266;z-index:4}.sidebar-backdrop[hidden]{display:none}.side-foot{display:none}.sidebar .side-note{display:none}.sidebar{gap:16px}.conversation-section{min-height:0}.mobile-new{display:none}.tabs{width:100%;justify-content:space-between}.tab{white-space:nowrap}.welcome{margin-top:4vh}}
 </style>
@@ -38,7 +39,7 @@ function readPending(id) {
   if (!id) return null;
   try {
     const value = JSON.parse(localStorage.getItem(pendingStorageKey(id)) || 'null');
-    return value?.kind === 'select_order' && value.conversation_id === id ? value : null;
+    return ['select_order', 'confirm_ticket'].includes(value?.kind) && value.conversation_id === id ? value : null;
   } catch { return null; }
 }
 function selectStoredConversation(id) {
@@ -85,7 +86,12 @@ async function loadConversations(more = false) {
 function restorePending() {
   const pending = readPending(conversationId);
   pendingOrder = Boolean(pending);
-  if (pending) { $('welcome').hidden = true; showOrderChoices(bubble('assistant'), pending, false); }
+  if (pending) {
+    $('welcome').hidden = true;
+    const answer = bubble('assistant');
+    if (pending.kind === 'select_order') showOrderChoices(answer, pending, false);
+    else showTicketConfirm(answer, pending, false);
+  }
   setBusy(false);
 }
 async function openConversation(id) {
@@ -228,7 +234,7 @@ function bubble(role, text) {
 }
 function setBusy(value) {
   busy = value; $('send').disabled = value || pendingOrder || historyLoading; $('message').disabled = value || pendingOrder || historyLoading; $('stop').hidden = !value;
-  $('status').textContent = value ? '小喵正在回复…' : historyLoading ? '正在加载历史…' : pendingOrder ? '请先选择订单' : '准备就绪';
+  $('status').textContent = value ? '小喵正在回复…' : historyLoading ? '正在加载历史…' : pendingOrder ? '请先完成当前确认' : '准备就绪';
   document.querySelectorAll('[data-question]').forEach(button => button.disabled = value || historyLoading);
 }
 function addFeedback(answer) {
@@ -408,6 +414,44 @@ function showOrderChoices(answer, value, persist = true) {
   }
   host.append(choices); scrollBottom();
 }
+function showTicketConfirm(answer, value, persist = true) {
+  if (value.kind !== 'confirm_ticket' || !value.preview || !Number.isSafeInteger(value.conversation_id)) return;
+  pendingOrder = true; selectStoredConversation(value.conversation_id);
+  if (persist) localStorage.setItem(pendingStorageKey(conversationId), JSON.stringify(value));
+  answer.classList.remove('typing'); answer.textContent = '请核对工单内容，确认后才会提交。';
+  const host = answer.actionContainer; host.replaceChildren();
+  const card = document.createElement('div'); card.className = 'ticket-preview';
+  const heading = document.createElement('h3'); heading.textContent = '工单预览';
+  const details = document.createElement('dl');
+  for (const [label, field] of [['工单类型', 'ticket_type'], ['问题描述', 'description']]) {
+    const name = document.createElement('dt'); name.textContent = label;
+    const content = document.createElement('dd'); content.textContent = String(value.preview[field] || '未填写');
+    details.append(name, content);
+  }
+  const row = document.createElement('div'); row.className = 'row';
+  const confirm = document.createElement('button'); confirm.type = 'button'; confirm.className = 'primary'; confirm.textContent = '确认提交';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'secondary'; cancel.textContent = '取消';
+  const note = document.createElement('p'); note.className = 'action-note';
+  for (const [button, decision] of [[confirm, true], [cancel, false]]) {
+    button.onclick = async () => {
+      if (busy) return;
+      confirm.disabled = true; cancel.disabled = true; pendingOrder = false; setBusy(false);
+      note.textContent = decision ? '已确认，正在提交…' : '已取消，正在记录选择…';
+      const actionConversationId = value.conversation_id;
+      const succeeded = await runConversation('/api/actions/resume',
+        {user_id: userId, conversation_id: actionConversationId, confirmed: decision},
+        decision ? '确认提交工单' : '取消建单');
+      if (succeeded && conversationId === actionConversationId) {
+        note.textContent = decision ? '确认已提交。' : '已取消，本次未建工单。';
+      }
+      if (!succeeded && conversationId === actionConversationId) {
+        pendingOrder = true; confirm.disabled = false; cancel.disabled = false;
+        note.textContent = '操作未完成，请重试。'; setBusy(false);
+      }
+    };
+  }
+  row.append(confirm, cancel); card.append(heading, details, row, note); host.append(card); scrollBottom();
+}
 async function runConversation(url, payload, userText) {
   if (busy || historyLoading) return false;
   const epoch = viewEpoch;
@@ -444,7 +488,10 @@ async function runConversation(url, payload, userText) {
       } else if (value.event === 'actions' && Array.isArray(value.items)) {
         answer.actionItems.push(...value.items);
       } else if (value.event === 'interrupt') {
-        interrupted = true; showOrderChoices(answer, value); loadConversations();
+        interrupted = true;
+        if (value.kind === 'select_order') showOrderChoices(answer, value);
+        else if (value.kind === 'confirm_ticket') showTicketConfirm(answer, value);
+        loadConversations();
       } else if (value.event === 'done' && Number.isSafeInteger(value.conversation_id) && value.conversation_id > 0) {
         selectStoredConversation(value.conversation_id);
         localStorage.removeItem(pendingStorageKey(conversationId));
