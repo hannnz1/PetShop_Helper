@@ -73,9 +73,25 @@ def test_trace_mask_redacts_configured_secrets_and_authorization_headers():
     mask = tracing.make_trace_mask(settings)
     payload = {"input": ["use model-secret", "mysql+asyncmy://root:db-secret@127.0.0.1/app"],
                "headers": {"Authorization": "Bearer private", "x-api-key": "other"}}
-    result = mask(payload)
+    result = mask(data=payload)
     assert result["input"] == ["use [REDACTED]", "[REDACTED]"]
     assert result["headers"] == {"Authorization": "[REDACTED]", "x-api-key": "[REDACTED]"}
+
+
+def test_safe_callback_forwards_langchain_name_keyword(monkeypatch):
+    from app.observability import tracing
+
+    seen = []
+    class Handler:
+        def on_chain_start(self, *args, **kwargs):
+            seen.append(kwargs["name"])
+
+    monkeypatch.setattr(tracing, "_new_handler", lambda **kwargs: Handler())
+    settings = _settings(langfuse_enabled=True, langfuse_public_key="pk",
+                         langfuse_secret_key="sk")
+    callback = tracing.make_turn_callbacks(settings, "alice", 7, "turn-1")[0]
+    callback.on_chain_start({}, {}, run_id="run", name="graph-node")
+    assert seen == ["graph-node"]
 
 
 @pytest.mark.asyncio

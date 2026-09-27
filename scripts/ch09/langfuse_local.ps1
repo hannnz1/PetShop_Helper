@@ -21,7 +21,8 @@ $dockerArgs = @('compose', '--env-file', $envFile, '-f', $composeFile)
 
 if ($Action -eq 'Start') {
     $contents = Get-Content -LiteralPath $envFile -Raw
-    if ($contents -match 'CHANGE_ME|mysalt|mysecret|myredissecret|miniosecret') {
+    $configuredValues = ($contents -split "`r?`n" | Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' }) -join "`n"
+    if ($configuredValues -match 'CHANGE_ME|mysalt|mysecret|myredissecret|miniosecret') {
         throw 'Replace all example/default secrets before starting Langfuse.'
     }
     foreach ($required in @('POSTGRES_PASSWORD', 'SALT', 'ENCRYPTION_KEY', 'NEXTAUTH_SECRET', 'CLICKHOUSE_PASSWORD', 'MINIO_ROOT_PASSWORD', 'REDIS_AUTH')) {
@@ -45,7 +46,7 @@ if ($Action -eq 'Start') {
         throw 'Docker needs at least four CPUs assigned before starting Langfuse.'
     }
 
-    foreach ($port in @(3000, 3030, 5432, 6379, 8123, 9000, 9090, 9091)) {
+    foreach ($port in @(3000, 3030, 15432, 6379, 8123, 9000, 9090, 9091)) {
         if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
             throw "Port $port is in use. Resolve the conflict without stopping unrelated services."
         }

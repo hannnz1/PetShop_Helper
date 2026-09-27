@@ -20,3 +20,7 @@
 
 - Context7 `/langfuse/langfuse-python` and the installed 4.15.6 signatures show `CallbackHandler(*, public_key=None, trace_context=None)`; credentials and `base_url` belong to `Langfuse(...)`, whose client is retrieved by public key by the handler. The SDK `mask` hook covers SDK-owned input/output/metadata but is not a blanket mask for third-party OpenTelemetry spans.
 - Context7 `/langfuse/langfuse-python` confirms `langfuse_session_id`, `langfuse_user_id`, and `langfuse_trace_name` in RunnableConfig metadata are interpreted as root trace attributes. Context7 `/langchain-ai/langgraph` confirms `ainvoke`/`astream` take RunnableConfig callbacks. A compiled Graph test exercised both paths with a failing callback and checked business results continue.
+
+## Task 6 live SDK correction (2026-09-27)
+
+- Context7 `/langfuse/langfuse-python` [MaskFunction protocol](https://github.com/langfuse/langfuse-python/blob/main/_autodocs/06-types-utilities.md) requires `def mask(*, data, **kwargs)`; installed SDK 4.15.6 called the old positional-only closure with `data=`, logged masking errors, and fell back. The live fake-model probe exposed this; a RED/GREEN test now uses the documented call form.

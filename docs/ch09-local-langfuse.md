@@ -2,6 +2,8 @@
 
 This deployment is based on the [official Langfuse v4.46.0 Compose file](https://github.com/langfuse/langfuse/blob/v4.46.0/docker-compose.yml). The web, worker, PostgreSQL, ClickHouse, Redis, and MinIO services belong to the separate `petshop-langfuse` Compose project. Its five persistent volumes are named under that project. All published ports bind to `127.0.0.1`; no trace is sent to Langfuse Cloud. The upstream `langfuse-web` and `langfuse-worker` image tags are fixed at `4.46.0`.
 
+The Langfuse PostgreSQL container uses port 5432 internally and binds to host `127.0.0.1:15432`, leaving an existing host service on 5432 untouched. The startup script checks the published host ports and ignores comments when checking the local environment file for example credentials.
+
 ## Initialize local credentials
 
 1. Copy `infra/langfuse/.env.example` to `infra/langfuse/.env.langfuse`. The latter is Git ignored. Replace every `CHANGE_ME` value with a different long random value. In PowerShell, generate one with `[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))`; `ENCRYPTION_KEY` must be exactly 64 hexadecimal characters. Never commit or paste the real file into an issue or log.

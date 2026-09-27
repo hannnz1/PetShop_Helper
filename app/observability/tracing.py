@@ -67,7 +67,7 @@ def make_trace_mask(settings: Settings) -> Callable[[Any], Any]:
     values += [settings.database_url, settings.test_database_url]
     secrets = sorted({value for value in values if value}, key=len, reverse=True)
 
-    def mask(value: Any) -> Any:
+    def redact(value: Any) -> Any:
         if isinstance(value, str):
             for secret in secrets:
                 value = value.replace(secret, "[REDACTED]")
@@ -76,12 +76,15 @@ def make_trace_mask(settings: Settings) -> Callable[[Any], Any]:
         if isinstance(value, dict):
             return {key: "[REDACTED]" if str(key).lower() in {
                 "authorization", "proxy-authorization", "x-api-key",
-            } else mask(item) for key, item in value.items()}
+            } else redact(item) for key, item in value.items()}
         if isinstance(value, list):
-            return [mask(item) for item in value]
+            return [redact(item) for item in value]
         if isinstance(value, tuple):
-            return tuple(mask(item) for item in value)
+            return tuple(redact(item) for item in value)
         return value
+
+    def mask(*, data: Any, **kwargs: Any) -> Any:
+        return redact(data)
 
     return mask
 
@@ -126,12 +129,12 @@ class _SafeCallbackHandler(BaseCallbackHandler):
     def __init__(self, delegate: BaseCallbackHandler) -> None:
         self._delegate = delegate
 
-    def _forward(self, name: str, *args, **kwargs):
+    def _forward(self, event_name: str, *args, **kwargs):
         try:
-            return getattr(self._delegate, name)(*args, **kwargs)
+            return getattr(self._delegate, event_name)(*args, **kwargs)
         except Exception as exc:
             # SDK error text can contain request details or credentials.
-            logger.warning("Langfuse callback %s failed (%s)", name, type(exc).__name__)
+            logger.warning("Langfuse callback %s failed (%s)", event_name, type(exc).__name__)
             return None
 
 
