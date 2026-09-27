@@ -1,6 +1,6 @@
 import json
 
-from scripts.ch10.export_onnx import export_options, export_and_verify, verify_predictions
+from scripts.ch10.export_onnx import export_options, export_and_verify, verify_predictions, prepare_serving_bundle
 
 
 def test_export_options_fix_opset_and_dynamic_batch_sequence():
@@ -21,3 +21,14 @@ def test_missing_model_writes_pending_report(tmp_path):
     assert report.status == "pending_compute"
     saved = json.loads((tmp_path / "out" / "export_report.json").read_text(encoding="utf-8"))
     assert saved["status"] == "pending_compute"
+
+
+def test_serving_bundle_copies_threshold_and_tokenizer(tmp_path):
+    model = tmp_path / "model"
+    model.mkdir()
+    (model / "threshold.json").write_text("{}", encoding="utf-8")
+    (model / "tokenizer.json").write_text("{}", encoding="utf-8")
+    target = tmp_path / "onnx"
+    prepare_serving_bundle(model, target)
+    assert (target / "threshold.json").exists()
+    assert (target / "tokenizer.json").exists()

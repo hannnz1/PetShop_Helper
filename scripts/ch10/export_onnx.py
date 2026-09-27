@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -47,6 +48,12 @@ def _report(output_dir: Path, result: ExportReport) -> ExportReport:
     (output_dir / "export_report.json").write_text(
         json.dumps(asdict(result), ensure_ascii=False, indent=2), encoding="utf-8")
     return result
+
+
+def prepare_serving_bundle(model_dir: Path, output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for filename in ("threshold.json", "tokenizer.json"):
+        shutil.copyfile(model_dir / filename, output_dir / filename)
 
 
 def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> ExportReport:
@@ -105,6 +112,8 @@ def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> Exp
                                         for name, tensor in inputs.items()})[0]
         onnx_probs.extend((1 / (1 + np.exp(-ort_logits))).tolist())
     mismatches = verify_predictions(torch_probs, onnx_probs, threshold)
+    if mismatches == 0:
+        prepare_serving_bundle(model_dir, output_dir)
     return _report(output_dir, ExportReport("passed" if mismatches == 0 else "failed",
                                             len(samples), mismatches,
                                             "" if mismatches == 0 else "thresholded label mismatch"))
