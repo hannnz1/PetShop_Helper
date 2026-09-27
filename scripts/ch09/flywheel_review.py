@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 
-from app.flywheel.review import list_review_questions, review_question
+from app.flywheel.review import list_review_questions, publish_approved, review_question
 
 
 async def main() -> None:
@@ -21,10 +21,18 @@ async def main() -> None:
     decision.add_argument("--category")
     decision.add_argument("--approved-answer")
     decision.add_argument("--merge-target-id", type=int)
+    publication = sub.add_parser("publish")
+    publication.add_argument("canonical_id", type=int)
+    publication.add_argument("--request-id", required=True)
     args = parser.parse_args()
     if args.command == "list":
         result = await list_review_questions(offset=args.offset, limit=args.limit)
         print(json.dumps(result, ensure_ascii=False))
+    elif args.command == "publish":
+        result = await publish_approved(args.canonical_id, args.request_id)
+        print(json.dumps({"canonical_id": result.canonical_id,
+                          "knowledge_chunk_id": result.knowledge_chunk_id,
+                          "status": result.status}, ensure_ascii=False))
     else:
         result = await review_question(
             args.canonical_id, args.action, args.request_id, reason=args.reason,

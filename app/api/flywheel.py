@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.db.flywheel import record_unresolved_feedback
-from app.flywheel.review import list_review_questions, review_question
+from app.flywheel.review import list_review_questions, publish_approved, review_question
 
 
 router = APIRouter()
@@ -70,3 +70,19 @@ async def decide_question(canonical_id: int, body: ReviewDecisionRequest) -> dic
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"canonical_id": result.canonical_id, "status": result.status,
             "merged_into_id": result.merged_into_id}
+
+
+class PublishRequest(BaseModel):
+    request_id: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/api/review/questions/{canonical_id}/publish", dependencies=[Depends(require_review_token)])
+async def publish_question(canonical_id: int, body: PublishRequest) -> dict:
+    try:
+        result = await publish_approved(canonical_id, body.request_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Canonical question not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return {"canonical_id": result.canonical_id, "knowledge_chunk_id": result.knowledge_chunk_id,
+            "status": result.status}

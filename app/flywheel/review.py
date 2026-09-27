@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 import app.db.base as db
-from app.db.models import CanonicalOccurrence, CanonicalQuestion, FlywheelReviewAction
+from app.db.models import CanonicalOccurrence, CanonicalQuestion, FlywheelReviewAction, KnowledgeChunk
 from app.flywheel.privacy import mask_sensitive
+from app.kb.documents import Chunk
+from app.kb.dualwrite import write_manual_report
 
 
 @dataclass(frozen=True)
@@ -14,6 +16,69 @@ class ReviewResult:
     canonical_id: int
     status: str
     merged_into_id: int | None = None
+
+
+@dataclass(frozen=True)
+class PublishResult:
+    canonical_id: int
+    knowledge_chunk_id: int
+    status: str
+
+
+async def _link_published_chunk(canonical_id: int, chunk_id: int, request_id: str) -> None:
+    async with db.async_session.begin() as session:
+        row = await session.scalar(select(CanonicalQuestion).where(
+            CanonicalQuestion.id == canonical_id,
+        ).with_for_update())
+        if row is None or row.status not in {"approved", "approved_pending_vector"}:
+            raise ValueError("canonical question is not approved")
+        if row.knowledge_chunk_id is not None and row.knowledge_chunk_id != chunk_id:
+            raise ValueError("published chunk identity changed")
+        prior = await session.scalar(select(FlywheelReviewAction).where(
+            FlywheelReviewAction.request_id == request_id,
+        ))
+        if prior is not None and (prior.canonical_id != canonical_id or prior.action != "publish"):
+            raise ValueError("request_id conflicts with prior decision")
+        row.knowledge_chunk_id = chunk_id
+        row.status = "approved_pending_vector"
+        if prior is None:
+            session.add(FlywheelReviewAction(
+                canonical_id=canonical_id, request_id=request_id, action="publish",
+            ))
+
+
+async def publish_approved(canonical_id: int, request_id: str) -> PublishResult:
+    """Publish approved human text to MySQL; vectorization runs separately."""
+    if not request_id or len(request_id) > 64:
+        raise ValueError("invalid request_id")
+    async with db.async_session() as session:
+        row = await session.get(CanonicalQuestion, canonical_id)
+        if row is None:
+            raise LookupError("canonical question not found")
+        if row.status not in {"approved", "approved_pending_vector"} or not row.approved_answer or not row.category:
+            raise ValueError("canonical question is not approved")
+        question, answer, category = row.canonical_question, row.approved_answer, row.category
+        linked_id = row.knowledge_chunk_id
+    if linked_id is None:
+        ids, _ = await write_manual_report([Chunk(
+            category=category, questions=question, answer=answer,
+            section_path=f"知识飞轮 / {category}", content_type="faq",
+        )])
+        linked_id = ids[0]
+        await _link_published_chunk(canonical_id, linked_id, request_id)
+    else:
+        async with db.async_session() as session:
+            existing = await session.scalar(select(FlywheelReviewAction).where(
+                FlywheelReviewAction.request_id == request_id,
+            ))
+            if existing is not None and (existing.canonical_id != canonical_id or existing.action != "publish"):
+                raise ValueError("request_id conflicts with prior decision")
+    async with db.async_session() as session:
+        chunk_status = await session.scalar(select(KnowledgeChunk.vectorize_status).where(
+            KnowledgeChunk.id == linked_id,
+        ))
+    return PublishResult(canonical_id, linked_id,
+                         "vectorized" if chunk_status == "done" else "approved_pending_vector")
 
 
 async def list_review_questions(*, offset: int = 0, limit: int = 20) -> dict:
