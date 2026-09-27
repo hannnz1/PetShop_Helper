@@ -57,6 +57,18 @@ async def apply_flywheel_schema(engine: AsyncEngine) -> None:
                     "ALTER TABLE canonical_questions ADD COLUMN canonical_key CHAR(64) NULL, "
                     "ADD UNIQUE KEY uq_canonical_key (canonical_key)"
                 ))
+            merged_exists = bool(await connection.scalar(text(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'canonical_questions' "
+                "AND COLUMN_NAME = 'merged_into_id'"
+            )))
+            if not merged_exists:
+                await connection.execute(text(
+                    "ALTER TABLE canonical_questions ADD COLUMN merged_into_id BIGINT UNSIGNED NULL, "
+                    "ADD KEY idx_canonical_merged_into (merged_into_id), "
+                    "ADD CONSTRAINT fk_canonical_merged_into FOREIGN KEY (merged_into_id) "
+                    "REFERENCES canonical_questions (id) ON DELETE SET NULL"
+                ))
 
 
 async def main() -> None:

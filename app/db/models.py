@@ -304,6 +304,9 @@ class CanonicalQuestion(Base):
     )
     approved_answer: Mapped[str | None] = mapped_column(Text)
     category: Mapped[str | None] = mapped_column(String(64))
+    merged_into_id: Mapped[int | None] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("canonical_questions.id", name="fk_canonical_merged_into", ondelete="SET NULL"),
+    )
     knowledge_chunk_id: Mapped[int | None] = mapped_column(
         BIGINT(unsigned=True), ForeignKey("knowledge_chunks.id", name="fk_canonical_knowledge_chunk", ondelete="SET NULL"),
     )

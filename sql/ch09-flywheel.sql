@@ -11,6 +11,7 @@ CREATE TABLE canonical_questions (
   status ENUM('pending_review','deferred','rejected','approved','approved_pending_vector') NOT NULL DEFAULT 'pending_review',
   approved_answer TEXT NULL,
   category VARCHAR(64) NULL,
+  merged_into_id BIGINT UNSIGNED NULL,
   knowledge_chunk_id BIGINT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -18,8 +19,11 @@ CREATE TABLE canonical_questions (
   UNIQUE KEY uq_canonical_key (canonical_key),
   KEY idx_canonical_status (status),
   KEY idx_canonical_knowledge_chunk (knowledge_chunk_id),
+  KEY idx_canonical_merged_into (merged_into_id),
   CONSTRAINT fk_canonical_knowledge_chunk FOREIGN KEY (knowledge_chunk_id)
-    REFERENCES knowledge_chunks (id) ON DELETE SET NULL
+    REFERENCES knowledge_chunks (id) ON DELETE SET NULL,
+  CONSTRAINT fk_canonical_merged_into FOREIGN KEY (merged_into_id)
+    REFERENCES canonical_questions (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE canonical_occurrences (

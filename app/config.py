@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
     observability_admin_token: SecretStr | None = None
+    knowledge_review_token: SecretStr | None = None
 
     @field_validator("chat_model", "chat_base_url", "chat_api_key", mode="before")
     @classmethod
@@ -69,7 +70,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "siliconflow_api_key", "rerank_api_key", "langfuse_public_key",
-        "langfuse_secret_key", "observability_admin_token",
+        "langfuse_secret_key", "observability_admin_token", "knowledge_review_token",
     )
     @classmethod
     def reject_blank_embed_key(cls, value: SecretStr | None) -> SecretStr | None:
