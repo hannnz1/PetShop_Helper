@@ -27,6 +27,9 @@ def extract_summary(report: dict, strategy: str) -> dict:
         for key in ("recall_at_5", "mrr"):
             add(f"{key}:{bucket}", values.get(key), count, retrieval_valid)
         add(f"evidence_coverage:{bucket}", evidence.get(bucket), count, retrieval_valid)
+        if bucket == "D_absent":
+            # Chapter 4 evaluates refusal here, not answer coverage.
+            continue
         coverage = (generation.get("answer_coverage") or {}).get(strategy) or {}
         completed = sum(row.get("bucket") == bucket and row.get("covered") is not None
                         for row in records)

@@ -48,6 +48,30 @@ def test_extract_preserves_denominators_and_missing_metric_is_pending():
     assert extract_summary({"meta": {"status": "complete"}, "retrieval": {}}, "vector")["status"] == "pending_upstream"
 
 
+def test_complete_refusal_bucket_uses_refusal_rate_without_answer_coverage():
+    from app.observability.eval_trend import extract_summary
+
+    report = labeled_report()
+    report["retrieval"]["hybrid_rerank"] = {
+        "A_policy": {"count": 2, "recall_at_5": .5, "mrr": .25},
+        "D_absent": {"count": 1, "recall_at_5": 1.0, "mrr": 1.0},
+    }
+    report["evidence_coverage"]["hybrid_rerank"] = {"A_policy": .75, "D_absent": 1.0}
+    report["generation"]["answer_coverage"] = {"hybrid_rerank": {"A_policy": .5}}
+    report["generation"]["faithfulness"] = 1.0
+    report["generation"]["refusal_rate"] = 1.0
+    report["generation"]["records"] = [
+        {"id": "A1", "bucket": "A_policy", "strategy": "hybrid_rerank", "covered": 1, "faithful": True},
+        {"id": "A2", "bucket": "A_policy", "strategy": "hybrid_rerank", "covered": 1, "faithful": True},
+        {"id": "D1", "bucket": "D_absent", "strategy": "hybrid_rerank", "refused": True},
+    ]
+    summary = extract_summary(report, "hybrid_rerank")
+    assert summary["status"] == "passed"
+    assert "answer_coverage:D_absent" not in summary["metrics"]
+    assert summary["metrics"]["refusal_rate"] == {"value": 1.0, "sample_count": 1}
+    assert summary["denominators"]["refusal_rate"] == 1
+
+
 @pytest.mark.asyncio
 async def test_ledger_is_immutable_and_denominator_changes_are_incomparable(db_session_factory, db_clean):
     from app.db.observability import comparable_trend, record_eval_run
