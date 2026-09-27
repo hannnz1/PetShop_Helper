@@ -270,6 +270,7 @@ class LowConfidenceQuestion(Base):
     __table_args__ = (
         Index("idx_low_confidence_conversation", "conversation_id"),
         Index("idx_low_confidence_source", "source"),
+        Index("uq_low_confidence_source_ref", "source_ref", unique=True),
     )
 
     id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
@@ -282,6 +283,69 @@ class LowConfidenceQuestion(Base):
         ENUM("retrieval_low_conf", "self_check", "user_feedback")
     )
     reason: Mapped[str | None] = mapped_column(Text)
+    source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class CanonicalQuestion(Base):
+    __tablename__ = "canonical_questions"
+    __table_args__ = (
+        Index("idx_canonical_status", "status"),
+        Index("idx_canonical_knowledge_chunk", "knowledge_chunk_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    canonical_question: Mapped[str] = mapped_column(String(512))
+    draft_answer: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        ENUM("pending_review", "deferred", "rejected", "approved", "approved_pending_vector"),
+        server_default=text("'pending_review'"),
+    )
+    approved_answer: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(64))
+    knowledge_chunk_id: Mapped[int | None] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("knowledge_chunks.id", name="fk_canonical_knowledge_chunk", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+        server_onupdate=FetchedValue(),
+    )
+
+
+class CanonicalOccurrence(Base):
+    __tablename__ = "canonical_occurrences"
+    __table_args__ = (
+        Index("uq_canonical_occurrence_raw", "raw_question_id", unique=True),
+        Index("idx_canonical_occurrences_canonical", "canonical_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    canonical_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("canonical_questions.id", name="fk_canonical_occurrence_canonical"),
+    )
+    raw_question_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("low_confidence_questions.id", name="fk_canonical_occurrence_raw"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class FlywheelReviewAction(Base):
+    __tablename__ = "flywheel_review_actions"
+    __table_args__ = (
+        Index("uq_flywheel_review_request", "request_id", unique=True),
+        Index("idx_flywheel_review_canonical", "canonical_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    canonical_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True), ForeignKey("canonical_questions.id", name="fk_flywheel_review_canonical"),
+    )
+    request_id: Mapped[str] = mapped_column(String(64))
+    action: Mapped[str] = mapped_column(ENUM("reject", "defer", "merge", "approve", "publish"))
+    reason: Mapped[str | None] = mapped_column(Text)
+    approved_answer: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 

@@ -18,6 +18,7 @@ from app.api.rageval import router as rageval_router
 from app.api.actions import router as actions_router
 from app.api.conversations import router as conversations_router
 from app.api.observability import router as observability_router
+from app.api.flywheel import router as flywheel_router
 from app.config import Settings, get_settings
 from app.core.jobs import JobRunner
 from app.core.llm import get_chat_model
@@ -93,6 +94,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
 
     application = FastAPI(title="PetShop_Helper", version="0.1.0", lifespan=lifespan)
     application.include_router(chat_router)
+    application.include_router(flywheel_router)
     application.include_router(agent_router)
     application.include_router(extract_router)
     application.include_router(kb_router)
