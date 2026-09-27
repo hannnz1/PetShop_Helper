@@ -277,9 +277,11 @@ class GraphRuntime:
                 outcome = "failed"
                 raise
             finally:
-                if collector is not None:
-                    await self._settle_usage(collector, intent, outcome)
-                self._active.remove(resolved)
+                try:
+                    if collector is not None:
+                        await self._settle_usage(collector, intent, outcome)
+                finally:
+                    self._active.remove(resolved)
 
         return events()
 
@@ -339,8 +341,10 @@ class GraphRuntime:
                 outcome = "failed"
                 raise
             finally:
-                if collector is not None:
-                    await self._settle_usage(collector, intent, outcome)
-                self._active.remove(resolved)
+                try:
+                    if collector is not None:
+                        await self._settle_usage(collector, intent, outcome)
+                finally:
+                    self._active.remove(resolved)
 
         return events()

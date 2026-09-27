@@ -1,5 +1,7 @@
 """Real model usage is settled once per Graph turn without storing text."""
 
+import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -12,6 +14,57 @@ from sqlalchemy import select, text
 from app.observability.usage import UsageCollector
 from app.db.observability import save_usage_events
 from app.db.models import ModelUsageEvent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resume", [False, True])
+async def test_cancelled_usage_settlement_releases_stream_claim(resume):
+    from app.graph.runtime import GraphRuntime
+
+    entered_settlement = asyncio.Event()
+
+    class FinishedGraph:
+        async def aget_state(self, config):
+            return SimpleNamespace(values={"intent": "refund"})
+
+        async def astream(self, value, config, *, context, stream_mode):
+            yield ("updates", {"final_answer": {"answer": "ok"}})
+
+    async def resolved(*_):
+        return 101
+
+    async def nothing(*_, **__):
+        return None
+
+    async def snapshot(*_):
+        return object()
+
+    async def settlement(*_):
+        entered_settlement.set()
+        await asyncio.Event().wait()
+
+    runtime = GraphRuntime("unused.sqlite", lambda _: None, enforce_audit=False)
+    runtime.graph = FinishedGraph()
+    runtime._conversation_id = resolved
+    runtime._check_audit = nothing
+    runtime._prepare_context_snapshot = snapshot
+    runtime._settle_usage = settlement
+    if resume:
+        stream = await runtime.prepare_resume_turn("user", 101, "1001", model=object())
+    else:
+        stream = await runtime.prepare_stream_turn("user", "prompt", 101, model=object())
+
+    async def consume():
+        return [event async for event in stream]
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(entered_settlement.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert 101 not in runtime._active
+    runtime._claim(101)
+    assert 101 in runtime._active
 
 
 def _result(usage, model="offline-test"):
