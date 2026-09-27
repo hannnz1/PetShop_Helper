@@ -17,6 +17,7 @@ from app.api.admin import router as admin_router
 from app.api.rageval import router as rageval_router
 from app.api.actions import router as actions_router
 from app.api.conversations import router as conversations_router
+from app.api.observability import router as observability_router
 from app.config import Settings, get_settings
 from app.core.jobs import JobRunner
 from app.core.llm import get_chat_model
@@ -100,6 +101,7 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
     application.include_router(rageval_router)
     application.include_router(actions_router)
     application.include_router(conversations_router)
+    application.include_router(observability_router)
     application.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
     @application.get("/", include_in_schema=False)

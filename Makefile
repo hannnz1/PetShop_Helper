@@ -1,4 +1,15 @@
-.PHONY: dev test eval eval-agent eval-rag eval-intent eval-ch05 migrate-ch05 judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down mcp-up mcp-down
+.PHONY: dev test eval eval-agent eval-rag eval-intent eval-ch05 migrate-ch05 judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down mcp-up mcp-down usage-ch09
+
+USAGE_FORMAT ?= table
+USAGE_ARGS = $(if $(USAGE_FROM),--from $(USAGE_FROM)) $(if $(USAGE_TO),--to $(USAGE_TO)) --format $(USAGE_FORMAT)
+
+ifeq ($(OS),Windows_NT)
+usage-ch09:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.ch09.usage_report $(USAGE_ARGS)
+else
+usage-ch09:
+	uv run --locked python -m scripts.ch09.usage_report $(USAGE_ARGS)
+endif
 
 ifeq ($(OS),Windows_NT)
 mcp-up:
