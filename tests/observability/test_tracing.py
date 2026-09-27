@@ -1,7 +1,10 @@
 """A Graph turn keeps one safe, locally scoped trace across each entry point."""
 
+import logging
+
 import pytest
 from langgraph.graph import START, StateGraph
+from pydantic import SecretStr
 from typing import TypedDict
 
 from app.config import Settings
@@ -26,6 +29,19 @@ def test_disabled_missing_keys_and_cloud_never_construct_callback(monkeypatch):
     cloud = _settings(langfuse_enabled=True, langfuse_base_url="https://cloud.langfuse.com",
                       langfuse_public_key="pk", langfuse_secret_key="sk")
     assert tracing.make_turn_callbacks(cloud, "alice", 7, "turn-1") == []
+
+
+@pytest.mark.parametrize("field", ["langfuse_public_key", "langfuse_secret_key"])
+def test_blank_extracted_key_never_constructs_client(monkeypatch, field):
+    from app.observability import tracing
+
+    constructed = []
+    monkeypatch.setattr(tracing, "_new_handler", lambda **kwargs: constructed.append(kwargs) or object())
+    valid = _settings(langfuse_enabled=True, langfuse_public_key="pk",
+                      langfuse_secret_key="sk")
+    unchecked = valid.model_copy(update={field: SecretStr("  ")})
+    assert tracing.make_turn_callbacks(unchecked, "alice", 7, "turn-1") == []
+    assert constructed == []
 
 
 def test_local_callback_uses_pseudonym_and_never_puts_credentials_in_metadata(monkeypatch):
@@ -63,7 +79,7 @@ def test_trace_mask_redacts_configured_secrets_and_authorization_headers():
 
 
 @pytest.mark.asyncio
-async def test_invoke_stream_and_resume_attach_one_trace(monkeypatch):
+async def test_invoke_stream_and_resume_attach_one_trace(monkeypatch, caplog):
     monkeypatch.setenv("CHAT_MODEL", "test-model")
     monkeypatch.setenv("CHAT_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("CHAT_API_KEY", "test-key")
@@ -105,16 +121,22 @@ async def test_invoke_stream_and_resume_attach_one_trace(monkeypatch):
     runtime._conversation_id = conversation
     runtime._prepare_context_snapshot = snapshot
     runtime._check_audit = audit
-    await runtime.ainvoke_turn("alice", "one", 7, model=object())
-    stream = await runtime.prepare_stream_turn("alice", "two", 7, model=object())
-    assert [event async for event in stream] == [("updates", {"done": True})]
-    resume = await runtime.prepare_resume_turn("alice", 7, "1001", model=object())
-    assert [event async for event in resume] == [("updates", {"done": True})]
+    with caplog.at_level(logging.INFO, logger="app.graph.runtime"):
+        await runtime.ainvoke_turn("alice", "one", 7, model=object())
+        stream = await runtime.prepare_stream_turn("alice", "two", 7, model=object())
+        assert [event async for event in stream] == [("updates", {"done": True})]
+        resume = await runtime.prepare_resume_turn("alice", 7, "1001", model=object())
+        assert [event async for event in resume] == [("updates", {"done": True})]
     configs = runtime.graph.configs
     assert len(configs) == 3
     ids = [config["metadata"]["turn_id"] for config in configs]
     assert len(set(ids)) == 3
     assert callback_turn_ids == ids
+    turn_logs = [record.getMessage() for record in caplog.records
+                 if record.name == "app.graph.runtime" and "Graph turn started" in record.getMessage()]
+    assert turn_logs == [f"Graph turn started turn_id={turn_id} conversation_id=7"
+                         for turn_id in ids]
+    assert all("alice" not in message and "one" not in message for message in turn_logs)
     assert all(config["configurable"]["thread_id"] == "7" for config in configs)
     assert all(len(config["callbacks"]) == 1 for config in configs)
     assert all(config["metadata"]["langfuse_session_id"] == "7" for config in configs)

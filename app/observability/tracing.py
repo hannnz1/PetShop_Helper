@@ -160,12 +160,17 @@ def make_turn_callbacks(settings: Settings, user_id: str, conversation_id: int,
     if public is None or secret is None:
         logger.warning("Langfuse enabled without both credentials; tracing skipped")
         return []
+    public_key = public.get_secret_value()
+    secret_key = secret.get_secret_value()
+    if not public_key.strip() or not secret_key.strip():
+        logger.warning("Langfuse enabled with blank credentials; tracing skipped")
+        return []
     if not _self_hosted_url(settings.langfuse_base_url):
         logger.warning("Langfuse URL is not an allowed local/private endpoint; tracing skipped")
         return []
     try:
-        handler = _new_handler(public_key=public.get_secret_value(),
-                               secret_key=secret.get_secret_value(),
+        handler = _new_handler(public_key=public_key,
+                               secret_key=secret_key,
                                base_url=settings.langfuse_base_url,
                                mask=make_trace_mask(settings))
     except Exception as exc:

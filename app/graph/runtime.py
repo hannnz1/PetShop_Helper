@@ -90,6 +90,7 @@ class GraphRuntime:
     def _turn_config(self, user_id: str, conversation_id: int) -> dict:
         """Allocate one ID for the entire Graph invocation or stream/resume."""
         turn_id = str(uuid4())
+        logger.info("Graph turn started turn_id=%s conversation_id=%s", turn_id, conversation_id)
         settings = self.settings or get_settings()
         return {
             "configurable": {"thread_id": str(conversation_id)},
