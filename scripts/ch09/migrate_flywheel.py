@@ -43,6 +43,20 @@ async def apply_flywheel_schema(engine: AsyncEngine) -> None:
                 if match.group(1) in tables:
                     continue
             await connection.execute(text(statement))
+        canonical_exists = "canonical_questions" in tables or any(
+            "CREATE TABLE canonical_questions" in item for item in _statements()
+        )
+        if canonical_exists:
+            key_exists = bool(await connection.scalar(text(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'canonical_questions' "
+                "AND COLUMN_NAME = 'canonical_key'"
+            )))
+            if not key_exists:
+                await connection.execute(text(
+                    "ALTER TABLE canonical_questions ADD COLUMN canonical_key CHAR(64) NULL, "
+                    "ADD UNIQUE KEY uq_canonical_key (canonical_key)"
+                ))
 
 
 async def main() -> None:

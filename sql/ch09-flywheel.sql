@@ -6,6 +6,7 @@ ALTER TABLE low_confidence_questions
 CREATE TABLE canonical_questions (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   canonical_question VARCHAR(512) NOT NULL,
+  canonical_key CHAR(64) NULL,
   draft_answer TEXT NULL,
   status ENUM('pending_review','deferred','rejected','approved','approved_pending_vector') NOT NULL DEFAULT 'pending_review',
   approved_answer TEXT NULL,
@@ -14,6 +15,7 @@ CREATE TABLE canonical_questions (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_canonical_key (canonical_key),
   KEY idx_canonical_status (status),
   KEY idx_canonical_knowledge_chunk (knowledge_chunk_id),
   CONSTRAINT fk_canonical_knowledge_chunk FOREIGN KEY (knowledge_chunk_id)

@@ -1,0 +1,7 @@
+[
+  {"question": "猫粮开封后还能退吗", "canonical": "开封猫粮可以退货吗？", "kind": "same_question"},
+  {"question": "开封的猫粮能退货吗", "canonical": "开封猫粮可以退货吗？", "kind": "same_question"},
+  {"question": "未开封猫粮能退吗", "canonical": "未开封猫粮可以退货吗？", "kind": "different_policy"},
+  {"question": "订单 A123456，电话 13812345678，猫粮能退吗", "canonical": "猫粮可以退货吗？", "kind": "pii"},
+  {"question": "假候选 ID 999999", "canonical": "无效匹配须拒绝", "kind": "invalid_candidate"}
+]

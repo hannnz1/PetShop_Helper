@@ -296,6 +296,7 @@ class CanonicalQuestion(Base):
 
     id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
     canonical_question: Mapped[str] = mapped_column(String(512))
+    canonical_key: Mapped[str | None] = mapped_column(String(64), unique=True)
     draft_answer: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(
         ENUM("pending_review", "deferred", "rejected", "approved", "approved_pending_vector"),
