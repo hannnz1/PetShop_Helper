@@ -121,7 +121,7 @@ class GraphRuntime:
             if pending:
                 if resume:
                     if expected_kind != pending_kind:
-                        raise GraphDivergence(conversation_id)
+                        raise ResumeNotPending(conversation_id)
                     return
                 raise ConversationPending(conversation_id)
             raise GraphDivergence(conversation_id)

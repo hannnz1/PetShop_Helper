@@ -88,3 +88,17 @@ async def test_unavailable_local_server_is_rejected_quickly(monkeypatch):
     with pytest.raises(Exception):
         await mcp_client._get_tools_of(server_name="logistics")
     assert time.monotonic() - started < 1.5
+
+
+async def test_remote_mcp_url_cannot_inherit_local_server_approval(monkeypatch):
+    monkeypatch.setattr(mcp_client, "_connections", lambda: {
+        "logistics": {"transport": "streamable_http", "url": "https://example.com/mcp"},
+    })
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("remote endpoint reached the MCP adapter")
+
+    monkeypatch.setattr(mcp_client, "MultiServerMCPClient", FakeClient)
+    with pytest.raises(ValueError, match="local"):
+        await mcp_client._get_tools_of(server_name="logistics")

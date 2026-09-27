@@ -50,17 +50,31 @@ async def _count_tickets(conversation_id: int) -> int:
             Ticket.conversation_id == conversation_id)) or 0)
 
 
-async def _last_ticket_audit(conversation_id: int) -> str | None:
+async def _ticket_number(conversation_id: int) -> str | None:
+    from sqlalchemy import select
+
+    from app.db.base import async_session
+    from app.db.models import Ticket
+
+    async with async_session() as session:
+        return await session.scalar(select(Ticket.ticket_no).where(
+            Ticket.conversation_id == conversation_id).limit(1))
+
+
+async def _last_tool_audit(conversation_id: int, name: str) -> tuple[str, str | None] | None:
     from sqlalchemy import select
 
     from app.db.base import async_session
     from app.db.models import ToolAuditLog
 
     async with async_session() as session:
-        return await session.scalar(select(ToolAuditLog.status).where(
+        row = (await session.execute(select(
+            ToolAuditLog.status, ToolAuditLog.result_summary,
+        ).where(
             ToolAuditLog.conversation_id == conversation_id,
-            ToolAuditLog.tool_name == "create_ticket",
-        ).order_by(ToolAuditLog.id.desc()).limit(1))
+            ToolAuditLog.tool_name == name,
+        ).order_by(ToolAuditLog.id.desc()).limit(1))).first()
+    return (row.status, row.result_summary) if row else None
 
 
 def _interrupt(events: list[dict], kind: str) -> dict | None:
@@ -68,9 +82,27 @@ def _interrupt(events: list[dict], kind: str) -> dict | None:
                  and event.get("kind") == kind), None)
 
 
+def _confirmed_ticket_passed(count: int, ticket_no: str | None, answer: str,
+                             audit: tuple[str, str | None] | None) -> bool:
+    return bool(count == 1 and ticket_no and ticket_no in answer
+                and audit and audit[0] == "成功")
+
+
+def _logistics_passed(tools: set[str | None], answer: str,
+                      audit: tuple[str, str | None] | None) -> bool:
+    if not {"query_order", "query_logistics"} <= tools or not audit or audit[0] != "成功":
+        return False
+    try:
+        payload = json.loads(audit[1]) if audit[1] else {}
+    except json.JSONDecodeError:
+        return False
+    status = payload.get("status") if isinstance(payload, dict) else None
+    return status in {"已揽件", "运输中", "派送中", "已签收"} and status in answer
+
+
 async def evaluate_live(base_url: str) -> dict:
     results = []
-    async with httpx.AsyncClient(base_url=base_url, timeout=90.0) as client:
+    async with httpx.AsyncClient(base_url=base_url, timeout=90.0, trust_env=False) as client:
         user_id = f"ch08-eval-{uuid4().hex[:12]}"
         events, answer = await _sse(client, "/api/chat", {
             "user_id": user_id, "conversation_id": None, "message": "帮我建个工单",
@@ -95,7 +127,11 @@ async def evaluate_live(base_url: str) -> dict:
             events, answer = await _sse(client, "/api/actions/resume", {
                 "user_id": user_id, "conversation_id": cid, "confirmed": True,
             })
-            confirm_ok = await _count_tickets(cid) == 1 and "工单" in answer
+            ticket_no = await _ticket_number(cid)
+            ticket_audit = await _last_tool_audit(cid, "create_ticket")
+            confirm_ok = _confirmed_ticket_passed(
+                await _count_tickets(cid), ticket_no, answer, ticket_audit,
+            )
         else:
             confirm_ok = False
         results.append({"id": "ticket_confirm", "passed": confirm_ok})
@@ -112,7 +148,8 @@ async def evaluate_live(base_url: str) -> dict:
                 "user_id": cancel_user, "conversation_id": cancel_cid, "confirmed": False,
             })
             cancel_ok = (await _count_tickets(cancel_cid) == 0
-                         and await _last_ticket_audit(cancel_cid) == "权限拒绝")
+                         and (await _last_tool_audit(cancel_cid, "create_ticket") or (None,))[0]
+                         == "权限拒绝")
         else:
             cancel_ok = False
         results.append({"id": "ticket_cancel", "passed": cancel_ok})
@@ -122,10 +159,10 @@ async def evaluate_live(base_url: str) -> dict:
             "message": "我的订单 1001 的物流到哪了",
         })
         tools = {e.get("name") for e in events if e.get("event") == "tool"}
-        results.append({"id": "logistics", "passed": (
-            {"query_order", "query_logistics"} <= tools
-            and any(word in answer for word in ("运输", "派送", "物流", "快递"))
-        )})
+        logistics_cid = next((e.get("conversation_id") for e in events
+                              if e.get("event") == "done"), None)
+        audit = await _last_tool_audit(logistics_cid, "query_logistics") if logistics_cid else None
+        results.append({"id": "logistics", "passed": _logistics_passed(tools, answer, audit)})
     return {"status": "completed", "results": results,
             "passed": sum(item["passed"] for item in results), "total": len(results)}
 

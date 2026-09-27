@@ -18,11 +18,13 @@ def _translate(values: dict[str, str], code: str | None) -> str | None:
 
 
 def _format_logistics(value: dict) -> dict:
+    public_trace = [item for item in value.get("trace", [])
+                    if isinstance(item, str) and "内部状态码" not in item]
     return {
         "tracking_no": value.get("tracking_no"),
         "status": _translate({"PICKED_UP": "已揽件", "IN_TRANSIT": "运输中",
                               "DELIVERING": "派送中", "DELIVERED": "已签收"}, value.get("status_code")),
-        "current_city": value.get("current_city"), "trace": value.get("trace"),
+        "current_city": value.get("current_city"), "trace": public_trace,
     }
 
 
@@ -54,26 +56,32 @@ FORMATTERS = {
 
 def _connections() -> dict:
     settings = get_settings()
+    timeout = settings.mcp_tool_timeout
     return {
         "logistics": {"transport": "streamable_http", "url": settings.mcp_logistics_url,
-                      "timeout": 2.0, "sse_read_timeout": 2.0},
+                      "timeout": timeout, "sse_read_timeout": timeout},
         "aftersales": {"transport": "streamable_http", "url": settings.mcp_aftersales_url,
-                       "timeout": 2.0, "sse_read_timeout": 2.0},
+                       "timeout": timeout, "sse_read_timeout": timeout},
     }
 
 
 async def _get_tools_of(*, server_name: str):
     connections = _connections()
+    if server_name not in registry.APPROVED_MCP_SERVERS or server_name not in connections:
+        raise ValueError("MCP server is not locally approved")
     endpoint = urlsplit(connections[server_name]["url"])
-    if endpoint.hostname in {"127.0.0.1", "localhost", "::1"}:
-        try:
-            _reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(endpoint.hostname, endpoint.port or 80), timeout=0.3,
-            )
-        except (OSError, TimeoutError) as exc:
-            raise ConnectionError(f"local MCP server {server_name} is unavailable") from exc
-        writer.close()
-        await writer.wait_closed()
+    if (endpoint.scheme != "http" or endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or endpoint.port is None or endpoint.path != "/mcp" or endpoint.username
+            or endpoint.password or endpoint.query or endpoint.fragment):
+        raise ValueError("MCP endpoint must be an approved local HTTP /mcp service")
+    try:
+        _reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(endpoint.hostname, endpoint.port), timeout=0.3,
+        )
+    except (OSError, TimeoutError) as exc:
+        raise ConnectionError(f"local MCP server {server_name} is unavailable") from exc
+    writer.close()
+    await writer.wait_closed()
     client = MultiServerMCPClient(connections, handle_tool_errors=False)
     return await client.get_tools(server_name=server_name)
 

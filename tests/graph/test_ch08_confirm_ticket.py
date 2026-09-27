@@ -118,7 +118,7 @@ async def test_runtime_rejects_new_turn_and_wrong_resume_then_accepts_confirmati
     wired, tmp_path, db_session_factory, db_clean,
 ):
     from app.db import repository
-    from app.graph.runtime import ConversationPending, GraphDivergence, GraphRuntime
+    from app.graph.runtime import ConversationPending, ResumeNotPending, GraphRuntime
 
     cid = await repository.create_conversation("u1")
     model = TicketModel()
@@ -129,7 +129,7 @@ async def test_runtime_rejects_new_turn_and_wrong_resume_then_accepts_confirmati
         assert first["__interrupt__"][0].value["type"] == "confirm_ticket"
         with pytest.raises(ConversationPending):
             await runtime.ainvoke_turn("u1", "换个话题", cid, model=model)
-        with pytest.raises(GraphDivergence):
+        with pytest.raises(ResumeNotPending):
             await runtime.prepare_resume_turn("u1", cid, "1001", model=model)
         stream = await runtime.prepare_resume_turn("u1", cid, {"confirmed": False},
                                                    model=model)

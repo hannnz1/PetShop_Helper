@@ -1,6 +1,7 @@
 """Programmatic agent endpoint contract and failure classification."""
 
 import pytest
+from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
@@ -34,6 +35,23 @@ def test_agent_returns_tool_trace(tmp_path):
         "tool_results": [{"tool_call_id": "c1", "name": "query_logistics", "ok": True, "content": '{"status":"运输中"}'}],
         "suggested_actions": [],
     }
+
+
+def test_agent_returns_ticket_confirmation_interrupt(tmp_path):
+    async def run(*args, **kwargs):
+        return {"__interrupt__": [SimpleNamespace(value={
+            "type": "confirm_ticket", "conversation_id": 12,
+            "preview": {"ticket_type": "售后", "description": "猫砂盆漏电"},
+        })]}
+
+    with _client(tmp_path) as client:
+        client.app.state.graph.ainvoke_turn = run
+        response = client.post("/api/agent", json={"user_id": "u1", "message": "帮我建工单"})
+    assert response.status_code == 200
+    assert response.json()["conversation_id"] == 12
+    assert response.json()["suggested_actions"] == [{
+        "type": "confirm_ticket", "preview": {"ticket_type": "售后", "description": "猫砂盆漏电"},
+    }]
 
 
 @pytest.mark.parametrize("failure,code,detail", [

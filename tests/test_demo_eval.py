@@ -35,6 +35,7 @@ def test_live_cli_clients_ignore_proxy_environment(monkeypatch, module):
     monkeypatch.setattr(eval_extract, "require_live_config", lambda: None)
     monkeypatch.setattr(eval_extract, "SAMPLES", type("P", (), {"read_text": lambda *a, **k: "[]"})())
     monkeypatch.setattr(eval_prompts, "require_live_config", lambda: None)
+    monkeypatch.setattr(demo_chat, "require_live_config", lambda: None)
     monkeypatch.setattr(eval_prompts, "CASES", type("P", (), {"read_text": lambda *a, **k: '{"cases": []}'})())
     monkeypatch.setattr(demo_chat, "run_demo", lambda *args: None)
     monkeypatch.setattr(eval_extract.httpx, "Client", FakeClient)

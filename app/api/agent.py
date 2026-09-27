@@ -28,7 +28,7 @@ async def run_agent(req: AgentRequest, request: Request,
     except ConversationBusy:
         raise HTTPException(status_code=409, detail="会话正在处理上一条消息") from None
     except ConversationPending:
-        raise HTTPException(status_code=409, detail="请先完成当前订单选择") from None
+        raise HTTPException(status_code=409, detail="请先完成当前确认") from None
     except GraphDivergence:
         raise HTTPException(status_code=503, detail="会话状态需恢复，请开启新对话") from None
     except agent.ContextBudgetExceeded:
@@ -43,10 +43,17 @@ async def run_agent(req: AgentRequest, request: Request,
     interrupts = result.get("__interrupt__")
     if interrupts:
         payload = interrupts[0].value
+        kind = payload.get("type")
+        if kind == "select_order":
+            pending_action = {"type": kind, "orders": payload["orders"]}
+        elif kind == "confirm_ticket":
+            pending_action = {"type": kind, "preview": payload["preview"]}
+        else:
+            raise HTTPException(status_code=503, detail="会话等待的操作类型暂不受支持")
         return AgentResponse(
             conversation_id=payload["conversation_id"], answer="",
             tool_calls=[], tool_results=[],
-            suggested_actions=[{"type": "select_order", "orders": payload["orders"]}],
+            suggested_actions=[pending_action],
         )
 
     return AgentResponse(

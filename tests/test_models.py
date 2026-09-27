@@ -17,6 +17,7 @@ def test_mappings_match_key_mysql_ddl_properties():
         "knowledge_chunks", "qa_extraction_staging",
         "low_confidence_questions", "faith_cases",
         "sample_orders", "refund_requests", "conversation_summaries",
+        "tool_audit_logs",
     }
     for table_name in ("conversations", "messages", "faq"):
         table = Base.metadata.tables[table_name]

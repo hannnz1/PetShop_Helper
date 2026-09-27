@@ -17,7 +17,19 @@ from app.db import repository
 from app.tools.registry import ToolSpec
 
 logger = logging.getLogger(__name__)
-_TRANSIENT = (TimeoutError, ConnectionError, httpx.NetworkError, httpx.TimeoutException)
+def _transient_kind(exc: Exception) -> str | None:
+    """MCP task groups wrap transport errors in ExceptionGroup."""
+
+    if isinstance(exc, ExceptionGroup):
+        kinds = [_transient_kind(child) for child in exc.exceptions]
+        if not kinds or any(kind is None for kind in kinds):
+            return None
+        return "timeout" if all(kind == "timeout" for kind in kinds) else "network"
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        return "timeout"
+    if isinstance(exc, (ConnectionError, httpx.NetworkError)):
+        return "network"
+    return None
 
 
 @dataclass
@@ -138,17 +150,19 @@ async def execute_tool_call(
             await _audit(conversation_id, call_id, name, spec, args, content, run.status,
                          None, attempt, run.duration_ms)
             return run
-        except _TRANSIENT as exc:
-            if attempt < max_retries:
-                await asyncio.sleep(0.2 * (attempt + 1))
-                continue
-            timed_out = isinstance(exc, (TimeoutError, httpx.TimeoutException))
-            status = "超时" if timed_out else "失败"
-            run = result(False, status, f"工具暂时不可用:{'执行超时' if timed_out else type(exc).__name__}", attempt)
-            await _audit(conversation_id, call_id, name, spec, args, None, status,
-                         f"{type(exc).__name__}: {exc}", attempt, run.duration_ms)
-            return run
         except Exception as exc:
+            transient = _transient_kind(exc)
+            if transient is not None:
+                if attempt < max_retries:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                    continue
+                status = "超时" if transient == "timeout" else "失败"
+                run = result(False, status,
+                             f"工具暂时不可用:{'执行超时' if transient == 'timeout' else type(exc).__name__}",
+                             attempt)
+                await _audit(conversation_id, call_id, name, spec, args, None, status,
+                             f"{type(exc).__name__}: {exc}", attempt, run.duration_ms)
+                return run
             logger.exception("tool execution failed: name=%s", name)
             run = result(False, "失败", f"工具暂时不可用:{type(exc).__name__}", attempt)
             await _audit(conversation_id, call_id, name, spec, args, None, run.status,

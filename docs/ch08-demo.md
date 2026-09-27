@@ -4,7 +4,7 @@
 
 ## 启动
 
-在 PowerShell 中切到本目录。先确认应用 MySQL schema 已执行 `sql/ch08-ddl.sql`，再启动：
+在 PowerShell 中切到本目录。若在独立工作树运行，先从项目原目录复制本机已配置的 `.env` 到工作树根目录（不要把密钥提交到 Git）；确认应用 MySQL schema 已执行 `sql/ch08-ddl.sql`，再启动：
 
 ```powershell
 make mcp-up

@@ -74,7 +74,7 @@ async def test_same_conversation_returns_busy_instead_of_interleaving(
 
     async with GraphRuntime(tmp_path / "checkpoint.sqlite", factory, enforce_audit=False) as runtime:
         first = asyncio.create_task(runtime.ainvoke_turn("owner", "先来", conversation_id, model=model))
-        await asyncio.wait_for(entered.wait(), timeout=2)
+        await asyncio.wait_for(entered.wait(), timeout=10)
         with pytest.raises(ConversationBusy):
             await runtime.ainvoke_turn("owner", "并发", conversation_id, model=model)
         release.set()

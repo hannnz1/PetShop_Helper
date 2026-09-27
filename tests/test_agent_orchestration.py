@@ -53,7 +53,7 @@ async def test_first_turn_without_tool_is_persisted(db_session_factory, db_clean
 @pytest.mark.asyncio
 async def test_tool_result_converges_on_unbound_model_and_hides_preamble(db_session_factory, db_clean):
     planned = AIMessage(content="订单已查到", tool_calls=[
-        {"name": "query_logistics", "args": {"order_id": "1001"}, "id": "call-1"}
+        {"name": "query_order", "args": {"order_id": "1001"}, "id": "call-1"}
     ])
     model = FakeModel([planned, AIMessage(content="演示记录显示物流运输中")])
     result = await agent.run_agent_turn("u1", "订单1001到哪了", None, model=model)

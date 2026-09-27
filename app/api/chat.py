@@ -91,7 +91,10 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     except ConversationNotFound:
         yield _error("会话不存在")
         return
-    except (ConversationBusy, ConversationPending, ResumeNotPending):
+    except ConversationBusy:
+        yield _error("会话正在处理")
+        return
+    except (ConversationPending, ResumeNotPending):
         yield _error("会话正在等待上一项操作")
         return
     except GraphDivergence:
@@ -140,7 +143,7 @@ async def chat(req: ChatRequest, request: Request,
     except ConversationBusy:
         raise HTTPException(status_code=409, detail="会话正在处理上一条消息") from None
     except ConversationPending:
-        raise HTTPException(status_code=409, detail="请先完成当前订单选择") from None
+        raise HTTPException(status_code=409, detail="请先完成当前确认") from None
     except GraphDivergence:
         raise HTTPException(status_code=503, detail="会话状态需恢复，请开启新对话") from None
     except (ToolInfrastructureError, SQLAlchemyError, ConnectionError, OSError):

@@ -95,13 +95,11 @@ async def test_each_model_call_logs_exact_messages_and_recalculates_tool_exchang
 
 @pytest.mark.asyncio
 async def test_tool_step_rejects_aggregate_results_over_cap(monkeypatch):
-    monkeypatch.setattr(nodes, "get_chat_tools", lambda route: [])
-
-    async def fake_execute(call, conversation_id, allowed_names):
+    async def fake_execute(call, conversation_id, specs):
         return SimpleNamespace(tool_message=ToolMessage("x" * 3000, tool_call_id=call["id"]),
                                tool_call_id=call["id"], name="query_order", ok=True)
 
-    monkeypatch.setattr(nodes, "execute_tool_call", fake_execute)
+    monkeypatch.setattr(nodes.engine, "execute_tool_call", fake_execute)
     with pytest.raises(ContextBudgetExceeded):
         await nodes.agent_tools({"route": "business", "conversation_id": 7,
                                  "planned_tool_calls": [{"name": "query_order", "id": "a"},
