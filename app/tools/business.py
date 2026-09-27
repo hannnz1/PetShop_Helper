@@ -1,6 +1,7 @@
 """Mock business lookups and semantic FAQ lookup."""
 
 import random
+import hashlib
 from typing import Annotated, Literal
 
 from langchain_core.tools import InjectedToolArg, tool
@@ -43,7 +44,7 @@ def _mock_order_state(order_id: str) -> tuple[int, str]:
 
 @tool(args_schema=OrderInput)
 async def query_order(order_id: str) -> dict:
-    """查询订单状态、金额、下单时间和商品名。用户询问具体订单时使用。"""
+    """查询演示订单信息和物流单号；查轨迹时把 tracking_no 交给 query_logistics。"""
 
     phase, _ = _mock_order_state(order_id)
     rng = random.Random(f"order:{order_id}")
@@ -53,6 +54,8 @@ async def query_order(order_id: str) -> dict:
         "amount": rng.randint(50, 2000),
         "created_at": f"2026-07-{rng.randint(1, 12):02d} 10:00",
         "product": rng.choice(["智能猫砂盆", "猫粮 5kg", "猫爬架", "自动饮水机"]),
+        "tracking_no": "SF" + str(int.from_bytes(
+            hashlib.sha256(order_id.encode("utf-8")).digest()[:6], "big") % 10**12).zfill(12),
     }
 
 

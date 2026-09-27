@@ -21,8 +21,8 @@ from app.db import repository
 from app.db.repository import ContextSnapshot
 from app.graph.routing import route_by_intent
 from app.tools.business import query_faq
-from app.tools.infra import execute_tool_call
 from app.tools.registry import get_chat_tools
+from app.tools import engine, registry
 
 
 _ORDER_RE = re.compile(r"(?<!\d)(\d{4,})(?!\d)")
@@ -65,21 +65,25 @@ def _verified_order(state: dict) -> str:
     return ""
 
 
-def _tool_schema_text(route: str) -> str:
-    schemas = [{"name": tool.name, "description": tool.description,
-                "schema": tool.tool_call_schema.model_json_schema()}
-               for tool in get_chat_tools(route)]
+def _tool_schema_text(route: str, tool_specs=None) -> str:
+    if tool_specs is None:
+        schemas = [{"name": tool.name, "description": tool.description,
+                    "schema": tool.tool_call_schema.model_json_schema()}
+                   for tool in get_chat_tools(route)]
+    else:
+        schemas = [{"name": spec.name, "description": spec.description,
+                    "schema": spec.json_schema} for spec in tool_specs]
     return json.dumps(schemas, ensure_ascii=False, sort_keys=True)
 
 
-def _budget(state: dict, snapshot, *, final: bool = False, settings=None):
+def _budget(state: dict, snapshot, *, final: bool = False, settings=None, tool_specs=None):
     settings = settings or get_settings()
     summary, _omitted = bounded_summary(snapshot, settings)
     evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
     fixed = FixedCosts.measure(
         settings,
         system_tools=[SystemMessage(content=_system_text(state, final)),
-                      SystemMessage(content=_tool_schema_text(state.get("route", "")) if not final else "")],
+                      SystemMessage(content=_tool_schema_text(state.get("route", ""), tool_specs) if not final else "")],
         retrieval_evidence=[HumanMessage(content=evidence)] if evidence else [],
         summary=[HumanMessage(content=summary)] if summary else [],
         safety=250,
@@ -102,19 +106,21 @@ def validate_startup_budget(settings) -> None:
             validate_context_budget(settings, fixed)
 
 
-def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False):
+def _model_input(state: dict, runtime: Runtime[dict], *, final: bool = False, tool_specs=None):
     # GraphRuntime always supplies the authoritative snapshot. An ad-hoc
     # unpersisted graph invocation has no committed visible history yet.
     snapshot = runtime.context.get("snapshot") or ContextSnapshot(
         state.get("conversation_id", 0), 0, 0, (), ())
     settings = runtime.context.get("settings") or get_settings()
-    budget = runtime.context.get("budget") or _budget(state, snapshot, final=final, settings=settings)
+    budget = runtime.context.get("budget") or _budget(
+        state, snapshot, final=final, settings=settings, tool_specs=tool_specs,
+    )
     evidence = "\n".join(item for item in (state.get("evidence", ""), _verified_order(state)) if item)
     view = build_model_context(snapshot, state["messages"], state["query"],
                                evidence, _system_text(state, final), budget, settings=settings)
     window = min(settings.model_context_window,
                  settings.token_budget if "token_budget" in settings.model_fields_set else settings.model_context_window)
-    schema_tokens = (estimate_tokens([SystemMessage(content=_tool_schema_text(state["route"]))],
+    schema_tokens = (estimate_tokens([SystemMessage(content=_tool_schema_text(state["route"], tool_specs))],
                                      chars_per_token=settings.cjk_chars_per_token)
                      if not final else 0)
     if (view.token_count + schema_tokens
@@ -271,10 +277,25 @@ def _fit_messages(state: dict, system_text: str) -> list:
     return [*system, *kept, *current]
 
 
+def _agent_specs(state: dict, discovered: list) -> list:
+    """Keep fixed workflow routes narrow while business gains dynamic queries."""
+
+    route = state.get("route")
+    if route == "knowledge":
+        return [spec for spec in discovered if spec.name == "query_order"]
+    if route == "refund":
+        return [spec for spec in discovered if spec.name == "submit_refund"]
+    if route == "business":
+        return [spec for spec in discovered
+                if spec.name in {"query_order", "query_product"} or spec.source == "mcp"]
+    return []
+
+
 async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
-    tools = get_chat_tools(state["route"])
+    specs = _agent_specs(state, await registry.get_all_specs())
+    tools = [spec.tool for spec in specs]
     model = runtime.context["model"]
-    messages, record = _model_input(state, runtime)
+    messages, record = _model_input(state, runtime, tool_specs=specs)
     planned = await model.bind_tools(tools).ainvoke(messages)
     calls = list(planned.tool_calls or [])
     usage = planned.usage_metadata or {}
@@ -290,7 +311,7 @@ async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
 
 
 async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict:
-    allowed = {tool.name for tool in get_chat_tools(state["route"])}
+    specs = {spec.name: spec for spec in _agent_specs(state, await registry.get_all_specs())}
     tool_messages = []
     results = list(state.get("tool_results", []))
     actions = list(state.get("suggested_actions", []))
@@ -324,9 +345,7 @@ async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict
             results.append({"tool_call_id": call_id, "name": "submit_refund",
                             "ok": permitted, "content": content})
             continue
-        run = await execute_tool_call(
-            call, state["conversation_id"], allowed_names=allowed,
-        )
+        run = await engine.execute_tool_call(call, state["conversation_id"], specs)
         tool_messages.append(run.tool_message)
         results.append({"tool_call_id": run.tool_call_id, "name": run.name,
                         "ok": run.ok, "content": str(run.tool_message.content)})

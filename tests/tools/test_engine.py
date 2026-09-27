@@ -139,3 +139,17 @@ async def test_formatter_removes_internal_fields_and_audit_failure_is_nonblockin
     monkeypatch.setattr(engine.repository, "insert_tool_audit", audit_failure)
     again = await engine.execute_tool_call(call("query_logistics"), 1, {"query_logistics": tool_spec})
     assert again.ok
+
+
+async def test_mcp_content_blocks_are_unwrapped_before_local_formatter(audits):
+    async def result(_):
+        return [{"type": "text", "text": '{"tracking_no":"SF1","status_code":"IN_TRANSIT","carrier_code":"private"}',
+                 "id": "random-content-id"}]
+
+    tool_spec = spec(result, name="query_logistics", source="mcp",
+                     formatter=lambda value: {"tracking_no": value["tracking_no"],
+                                              "status": "运输中"})
+    run = await engine.execute_tool_call(call("query_logistics"), 1, {"query_logistics": tool_spec})
+    assert run.ok
+    assert '"status": "运输中"' in run.tool_message.content
+    assert "random-content-id" not in run.tool_message.content

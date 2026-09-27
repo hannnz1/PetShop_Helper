@@ -9,6 +9,7 @@ def test_builtin_tools_register_without_legacy_logistics():
     assert {spec.name for spec in registry.builtin_specs()} == {
         "query_order", "query_product", "query_faq", "create_ticket", "submit_refund",
     }
+    assert "query_logistics" not in {tool.name for tool in registry.get_chat_tools("business")}
 
 
 def test_every_builtin_has_description_and_json_schema():

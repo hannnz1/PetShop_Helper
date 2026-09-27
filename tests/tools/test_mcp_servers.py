@@ -79,3 +79,32 @@ async def test_logistics_mock_is_stable_over_real_mcp_http(mcp_servers):
     assert first_payload == second_payload
     assert first_payload["tracking_no"] == "SF123"
     assert "status_code" in first_payload
+
+
+async def test_registry_and_engine_use_real_logistics_mcp(mcp_servers, monkeypatch):
+    from app.tools import engine, mcp_client, registry
+    from app.tools.business import query_order
+
+    monkeypatch.setattr(mcp_client, "_connections", lambda: {
+        "logistics": {"transport": "streamable_http", "url": "http://127.0.0.1:18101/mcp"},
+        "aftersales": {"transport": "streamable_http", "url": "http://127.0.0.1:18102/mcp"},
+    })
+    audits = []
+
+    async def audit(**fields):
+        audits.append(fields)
+
+    monkeypatch.setattr(engine.repository, "insert_tool_audit", audit)
+    order = await query_order.ainvoke({"order_id": "1001"})
+    specs = {spec.name: spec for spec in await registry.get_all_specs()}
+    assert specs["query_logistics"].source == "mcp"
+    run = await engine.execute_tool_call(
+        {"name": "query_logistics", "args": {"tracking_no": order["tracking_no"]}, "id": "live-mcp"},
+        7, specs,
+    )
+    assert run.ok and run.status == "成功"
+    payload = json.loads(run.tool_message.content)
+    assert payload["tracking_no"] == order["tracking_no"]
+    assert payload["status"] in {"已揽件", "运输中", "派送中", "已签收"}
+    assert "carrier_code" not in payload
+    assert audits[-1]["tool_source"] == "mcp"

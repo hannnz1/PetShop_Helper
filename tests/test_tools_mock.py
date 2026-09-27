@@ -14,7 +14,7 @@ from app.tools.business import query_logistics, query_order, query_product
             query_order,
             "order_id",
             "1001",
-            {"order_id", "status", "amount", "created_at", "product"},
+            {"order_id", "status", "amount", "created_at", "product", "tracking_no"},
         ),
         (
             query_product,
@@ -53,6 +53,13 @@ async def test_query_order_values_and_different_order_ids():
     assert first["created_at"].startswith("2026-07-")
     assert first["product"] in {"智能猫砂盆", "猫粮 5kg", "猫爬架", "自动饮水机"}
     assert second["order_id"] == "2002"
+
+
+async def test_query_order_provides_stable_tracking_number_for_mcp_lookup():
+    first = await query_order.ainvoke({"order_id": "1001"})
+    again = await query_order.ainvoke({"order_id": "1001"})
+    assert first["tracking_no"].startswith("SF")
+    assert first["tracking_no"] == again["tracking_no"]
 
 
 async def test_query_product_values():

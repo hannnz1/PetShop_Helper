@@ -40,6 +40,10 @@ def validate_args(spec: ToolSpec, args: dict) -> str | None:
 
 
 def _format_result(spec: ToolSpec, result: object) -> str:
+    if (isinstance(result, list) and result
+            and all(isinstance(block, dict) and block.get("type") == "text"
+                    and isinstance(block.get("text"), str) for block in result)):
+        result = "\n".join(block["text"] for block in result)
     if isinstance(result, str):
         try:
             result = json.loads(result)

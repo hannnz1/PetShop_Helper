@@ -44,13 +44,29 @@ async def _no_log(*args, **kwargs):
 async def test_second_tool_decision_sees_first_result_and_final_answer_is_separate(monkeypatch):
     from app.graph.build import build_graph
     from app.graph import nodes
+    from app.tools import registry
+    from app.tools.business import query_order
+    from langchain_core.tools import tool
 
     monkeypatch.setattr(nodes.repository, "append_turn_messages", _no_log)
+    monkeypatch.setattr(nodes.engine.repository, "insert_tool_audit", _no_log)
+
+    @tool
+    async def query_logistics(tracking_no: str) -> dict:
+        """查询演示物流轨迹。"""
+        return {"tracking_no": tracking_no, "status": "运输中"}
+
+    async def discover():
+        return [*registry.builtin_specs(), registry.spec_from_langchain_tool(
+            query_logistics, source="mcp", mcp_server="logistics")]
+
+    monkeypatch.setattr(nodes.registry, "get_all_specs", discover)
+    tracking_no = (await query_order.ainvoke({"order_id": "1001"}))["tracking_no"]
     model = Model([
         AIMessage(content="先查订单", tool_calls=[
             {"name": "query_order", "args": {"order_id": "1001"}, "id": "order-1"}]),
         AIMessage(content="再查物流", tool_calls=[
-            {"name": "query_logistics", "args": {"order_id": "1001"}, "id": "logistics-2"}]),
+            {"name": "query_logistics", "args": {"tracking_no": tracking_no}, "id": "logistics-2"}]),
         AIMessage(content="不再调用工具"),
     ])
     graph = build_graph()
