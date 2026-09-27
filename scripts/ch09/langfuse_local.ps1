@@ -46,8 +46,22 @@ if ($Action -eq 'Start') {
         throw 'Docker needs at least four CPUs assigned before starting Langfuse.'
     }
 
+    $ownedPorts = [System.Collections.Generic.HashSet[int]]::new()
+    $runningServices = @(& docker @dockerArgs ps --format json)
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the Langfuse Compose project.' }
+    foreach ($line in $runningServices) {
+        if (-not $line) { continue }
+        $service = $line | ConvertFrom-Json
+        if ($service.State -ne 'running') { continue }
+        foreach ($published in $service.Publishers) {
+            if ($published.URL -eq '127.0.0.1' -and $published.PublishedPort -gt 0) {
+                [void]$ownedPorts.Add([int]$published.PublishedPort)
+            }
+        }
+    }
     foreach ($port in @(3000, 3030, 15432, 6379, 8123, 9000, 9090, 9091)) {
-        if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+        if ((Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) -and
+                -not $ownedPorts.Contains($port)) {
             throw "Port $port is in use. Resolve the conflict without stopping unrelated services."
         }
     }
