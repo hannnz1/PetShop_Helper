@@ -12,3 +12,9 @@ This deployment is based on the [official Langfuse v4.46.0 Compose file](https:/
 `./scripts/ch09/langfuse_local.ps1 -Action Status` shows the isolated services. `./scripts/ch09/langfuse_local.ps1 -Action Stop` runs `docker compose down` and retains every named volume. Do not use `down -v` or delete existing MySQL, Milvus, or MCP containers. This task validates the configuration and disabled application path; the actual start and trace acceptance belong to the final integration task.
 
 The official v4.46.0 source uses `clickhouse/clickhouse-server:25.12`, `redis:7`, `postgres:17`, and an unversioned Chainguard MinIO image. The Langfuse web/worker tags are pinned here. Verify the dependency image tags again before an integration startup, since upstream dependency tags can change independently.
+
+## Model usage and tool audit migration
+
+Apply `sql/ch09-observability.sql` once to the **application** MySQL schema after the Chapter 8 schema. It adds nullable `tool_audit_logs.turn_id` and an index on `(conversation_id, turn_id)`, then creates `model_usage_events` keyed by the LangChain model run ID. Existing tool rows keep a null turn ID; new Graph tool rows carry the same turn ID as the local trace and usage event. The SQL file is a one-time migration, so do not apply it twice. For a fresh schema, apply Chapter 2–8 DDL first and this file last. The isolated pytest fixture does this only in `mewhelp_test`.
+
+`CHAT_STREAM_USAGE=false` remains the default. Set it to `true` only when the selected OpenAI-compatible upstream supports streamed usage metadata. A provider that omits metadata produces `unavailable` usage rows with null token counts. The usage table stores IDs, intent, model, counts, status and time; it has no prompt, reply, tool argument or credential columns.

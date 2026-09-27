@@ -21,8 +21,9 @@ _CH05_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch05-ddl.sql"
 _CH06_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch06-ddl.sql"
 _CH07_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch07-ddl.sql"
 _CH08_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch08-ddl.sql"
+_CH09_DDL = Path(__file__).resolve().parent.parent / "sql" / "ch09-observability.sql"
 _TABLES = (
-    "tool_audit_logs", "conversation_summaries", "refund_requests", "sample_orders", "faith_cases",
+    "model_usage_events", "tool_audit_logs", "conversation_summaries", "refund_requests", "sample_orders", "faith_cases",
     "low_confidence_questions",
     "messages", "tickets", "conversations", "faq",
     "qa_extraction_staging", "knowledge_chunks",
@@ -88,7 +89,7 @@ def _create_table_stmts() -> list[str]:
     """Create chapter schemas from their authoritative files in the test DB."""
 
     statements = ddl_statements()
-    for ddl in (_CH03_DDL, _CH04_DDL, _CH05_DDL, _CH06_DDL, _CH07_DDL, _CH08_DDL):
+    for ddl in (_CH03_DDL, _CH04_DDL, _CH05_DDL, _CH06_DDL, _CH07_DDL, _CH08_DDL, _CH09_DDL):
         lines = [
             line for line in ddl.read_text(encoding="utf-8").splitlines()
             if not line.lstrip().startswith("--")

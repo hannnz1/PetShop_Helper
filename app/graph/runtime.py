@@ -16,6 +16,8 @@ from app.db import repository
 from app.core.summarizer import schedule_summary
 from app.graph.state import new_turn
 from app.observability.tracing import make_turn_callbacks, turn_metadata
+from app.observability.usage import UsageCollector
+from app.db.observability import save_usage_events
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,20 @@ class GraphRuntime:
         }
 
     @staticmethod
+    def _with_usage(config: dict, conversation_id: int) -> UsageCollector:
+        collector = UsageCollector(config["metadata"]["turn_id"], conversation_id)
+        config["callbacks"].append(collector)
+        return collector
+
+    @staticmethod
+    async def _settle_usage(collector: UsageCollector, intent: str,
+                            outcome: str) -> None:
+        try:
+            await save_usage_events(collector.finalize(intent, outcome=outcome))
+        except Exception as exc:
+            logger.warning("Usage persistence failed (%s)", type(exc).__name__)
+
+    @staticmethod
     def _pending_kind(snapshot: Any, conversation_id: int) -> str | None:
         interrupts = getattr(snapshot, "interrupts", ())
         if (len(interrupts) != 1 or not isinstance(interrupts[0].value, dict)
@@ -176,11 +192,21 @@ class GraphRuntime:
                 raise ConversationNotFound()
             prior_marker = await repository.last_message_id(resolved)
             config = self._turn_config(user_id, resolved)
-            result = await self.graph.ainvoke(
-                new_turn(user_id, resolved, message),
-                config,
-                context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
-                         "settings": self.settings},
+            collector = self._with_usage(config, resolved)
+            try:
+                result = await self.graph.ainvoke(
+                    new_turn(user_id, resolved, message),
+                    config,
+                    context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
+                             "settings": self.settings, "turn_id": collector.turn_id},
+                )
+            except BaseException:
+                await self._settle_usage(collector, "unknown", "failed")
+                raise
+            interrupted = "__interrupt__" in result
+            await self._settle_usage(
+                collector, result.get("intent") or "unknown",
+                "interrupted" if interrupted else "completed",
             )
             final_marker = (result.get("trace") or {}).get("audit_message_id")
             if final_marker is not None and final_marker > (prior_marker or 0):
@@ -225,17 +251,34 @@ class GraphRuntime:
             raise
 
         async def events() -> AsyncIterator[tuple[str, Any]]:
+            collector = None
+            intent = "unknown"
+            outcome = "interrupted"
+            saw_interrupt = False
             try:
                 config = self._turn_config(user_id, resolved)
+                collector = self._with_usage(config, resolved)
                 async for event in self.graph.astream(
                     new_turn(user_id, resolved, message),
                     config,
                     context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
-                             "settings": self.settings},
+                             "settings": self.settings, "turn_id": collector.turn_id},
                     stream_mode=["messages", "updates"],
                 ):
+                    if event[0] == "updates" and isinstance(event[1], dict):
+                        saw_interrupt |= "__interrupt__" in event[1]
+                        for update in event[1].values():
+                            if isinstance(update, dict) and update.get("intent"):
+                                intent = update["intent"]
                     yield event
+                if not saw_interrupt:
+                    outcome = "completed"
+            except Exception:
+                outcome = "failed"
+                raise
             finally:
+                if collector is not None:
+                    await self._settle_usage(collector, intent, outcome)
                 self._active.remove(resolved)
 
         return events()
@@ -260,22 +303,44 @@ class GraphRuntime:
             snapshot = await self._prepare_context_snapshot(resolved, user_id)
             if snapshot is None:
                 raise ConversationNotFound()
+            pending_intent = "unknown"
+            if hasattr(self.graph, "aget_state"):
+                pending = await self.graph.aget_state(
+                    {"configurable": {"thread_id": str(resolved)}})
+                pending_intent = pending.values.get("intent") or "unknown"
         except BaseException:
             self._active.remove(resolved)
             raise
 
         async def events() -> AsyncIterator[tuple[str, Any]]:
+            collector = None
+            intent = pending_intent
+            outcome = "interrupted"
+            saw_interrupt = False
             try:
                 config = self._turn_config(user_id, resolved)
+                collector = self._with_usage(config, resolved)
                 async for event in self.graph.astream(
                     Command(resume=resume_value),
                     config,
                     context={"model": model, "classifier": self.classifier, "snapshot": snapshot,
-                             "settings": self.settings},
+                             "settings": self.settings, "turn_id": collector.turn_id},
                     stream_mode=["messages", "updates"],
                 ):
+                    if event[0] == "updates" and isinstance(event[1], dict):
+                        saw_interrupt |= "__interrupt__" in event[1]
+                        for update in event[1].values():
+                            if isinstance(update, dict) and update.get("intent"):
+                                intent = update["intent"]
                     yield event
+                if not saw_interrupt:
+                    outcome = "completed"
+            except Exception:
+                outcome = "failed"
+                raise
             finally:
+                if collector is not None:
+                    await self._settle_usage(collector, intent, outcome)
                 self._active.remove(resolved)
 
         return events()

@@ -1109,12 +1109,13 @@ async def insert_tool_audit(
     error_message: str | None,
     retry_count: int,
     duration_ms: int | None,
+    turn_id: str | None = None,
 ) -> None:
     """Persist one audit row; the caller decides how to handle DB failure."""
 
     async with db.async_session.begin() as session:
         session.add(ToolAuditLog(
-            conversation_id=conversation_id, tool_call_id=tool_call_id,
+            conversation_id=conversation_id, turn_id=turn_id, tool_call_id=tool_call_id,
             tool_name=tool_name, tool_source=tool_source, mcp_server=mcp_server,
             arguments=arguments, result_summary=result_summary, status=status,
             error_message=error_message, retry_count=retry_count, duration_ms=duration_ms,

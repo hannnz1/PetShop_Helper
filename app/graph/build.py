@@ -22,6 +22,7 @@ class GraphContext(TypedDict, total=False):
     snapshot: ContextSnapshot
     budget: ContextBudget
     settings: Settings
+    turn_id: str
 
 
 def _route_agent(state: ConversationState, runtime: Runtime[GraphContext]) -> str:

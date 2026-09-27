@@ -138,7 +138,9 @@ async def test_invoke_stream_and_resume_attach_one_trace(monkeypatch, caplog):
                          for turn_id in ids]
     assert all("alice" not in message and "one" not in message for message in turn_logs)
     assert all(config["configurable"]["thread_id"] == "7" for config in configs)
-    assert all(len(config["callbacks"]) == 1 for config in configs)
+    assert all(len(config["callbacks"]) == 2 for config in configs)
+    assert all(config["callbacks"][1].turn_id == config["metadata"]["turn_id"]
+               for config in configs)
     assert all(config["metadata"]["langfuse_session_id"] == "7" for config in configs)
 
 

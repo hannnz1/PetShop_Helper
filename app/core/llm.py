@@ -20,7 +20,7 @@ def get_chat_model(
         max_retries=0,
         max_tokens=config.chat_max_tokens,
         streaming=streaming,
-        stream_usage=False,
+        stream_usage=config.chat_stream_usage,
         use_responses_api=False,
         **({"temperature": temperature} if temperature is not None else {}),
     )

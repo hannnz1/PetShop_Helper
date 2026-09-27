@@ -71,6 +71,7 @@ async def _audit(
     conversation_id: int, call_id: str, name: str, spec: ToolSpec | None,
     args: dict | None, content: str | None, status: str, error: str | None,
     retries: int, duration_ms: int,
+    turn_id: str | None = None,
 ) -> None:
     try:
         await repository.insert_tool_audit(
@@ -80,6 +81,7 @@ async def _audit(
             arguments=args, result_summary=content[:500] if content else None,
             status=status, error_message=error[:512] if error else None,
             retry_count=retries, duration_ms=duration_ms,
+            turn_id=turn_id,
         )
     except Exception:  # Audit is deliberately best effort.
         logger.exception("tool audit failed: name=%s status=%s", name, status)
@@ -88,6 +90,7 @@ async def _audit(
 async def execute_tool_call(
     tool_call: dict, conversation_id: int, specs: dict[str, ToolSpec],
     *, confirmed: bool = False, deny_note: str | None = None,
+    turn_id: str | None = None,
 ) -> ToolRun:
     started = time.monotonic()
     call = tool_call if isinstance(tool_call, dict) else {}
@@ -110,7 +113,7 @@ async def execute_tool_call(
     if spec is None:
         run = result(False, "失败", f"工具执行失败:未知工具 {name}")
         await _audit(conversation_id, call_id, name, None, args, None, run.status,
-                     "未知工具", 0, run.duration_ms)
+                     "未知工具", 0, run.duration_ms, turn_id)
         return run
 
     if args is None:
@@ -120,14 +123,14 @@ async def execute_tool_call(
     if error:
         run = result(False, "校验拦下", f"参数校验未通过:{error}。请修正参数或向用户追问。")
         await _audit(conversation_id, call_id, name, spec, args, None, run.status,
-                     error, 0, run.duration_ms)
+                     error, 0, run.duration_ms, turn_id)
         return run
 
     if spec.permission == "write" and not confirmed:
         note = deny_note or "未收到用户确认"
         run = result(False, "权限拒绝", f"写操作未执行:{note}")
         await _audit(conversation_id, call_id, name, spec, args, None, run.status,
-                     note, 0, run.duration_ms)
+                     note, 0, run.duration_ms, turn_id)
         return run
 
     execution_args = dict(args)
@@ -148,7 +151,7 @@ async def execute_tool_call(
             content = _format_result(spec, output)
             run = result(True, "成功", content, attempt)
             await _audit(conversation_id, call_id, name, spec, args, content, run.status,
-                         None, attempt, run.duration_ms)
+                         None, attempt, run.duration_ms, turn_id)
             return run
         except Exception as exc:
             transient = _transient_kind(exc)
@@ -161,12 +164,12 @@ async def execute_tool_call(
                              f"工具暂时不可用:{'执行超时' if transient == 'timeout' else type(exc).__name__}",
                              attempt)
                 await _audit(conversation_id, call_id, name, spec, args, None, status,
-                             f"{type(exc).__name__}: {exc}", attempt, run.duration_ms)
+                             f"{type(exc).__name__}: {exc}", attempt, run.duration_ms, turn_id)
                 return run
             logger.exception("tool execution failed: name=%s", name)
             run = result(False, "失败", f"工具暂时不可用:{type(exc).__name__}", attempt)
             await _audit(conversation_id, call_id, name, spec, args, None, run.status,
-                         f"{type(exc).__name__}: {exc}", attempt, run.duration_ms)
+                         f"{type(exc).__name__}: {exc}", attempt, run.duration_ms, turn_id)
             return run
 
     raise AssertionError("unreachable")

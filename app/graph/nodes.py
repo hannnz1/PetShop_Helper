@@ -314,6 +314,8 @@ async def agent_llm(state: dict, runtime: Runtime[dict]) -> dict:
 
 
 async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict:
+    turn_id = (runtime.context or {}).get("turn_id") if runtime else None
+    turn_kwargs = {"turn_id": turn_id} if turn_id else {}
     specs = {spec.name: spec for spec in _agent_specs(state, await registry.get_all_specs())}
     calls = state["planned_tool_calls"]
     ticket_calls = [call for call in calls if isinstance(call, dict)
@@ -371,12 +373,15 @@ async def agent_tools(state: dict, runtime: Runtime[dict] | None = None) -> dict
                 run = await engine.execute_tool_call(
                     call, state["conversation_id"], specs, confirmed=confirmed,
                     deny_note=None if confirmed else "用户取消工单预览，本次不建单。不要再次发起，除非用户重新明确要求。",
+                    **turn_kwargs,
                 )
             else:
                 run = await engine.execute_tool_call(call, state["conversation_id"], {},
-                                                     deny_note="一次只处理一个建工单请求")
+                                                     deny_note="一次只处理一个建工单请求",
+                                                     **turn_kwargs)
         else:
-            run = await engine.execute_tool_call(call, state["conversation_id"], specs)
+            run = await engine.execute_tool_call(call, state["conversation_id"], specs,
+                                                 **turn_kwargs)
         tool_messages.append(run.tool_message)
         results.append({"tool_call_id": run.tool_call_id, "name": run.name,
                         "ok": run.ok, "content": str(run.tool_message.content)})

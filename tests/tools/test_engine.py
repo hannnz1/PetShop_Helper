@@ -49,6 +49,12 @@ async def test_unknown_tool_is_audited_as_failure(audits):
     assert audits[-1]["status"] == "失败"
 
 
+async def test_tool_audit_carries_graph_turn_id(audits):
+    await engine.execute_tool_call(call("missing"), 101, {}, turn_id="turn-123")
+    assert audits[-1]["conversation_id"] == 101
+    assert audits[-1]["turn_id"] == "turn-123"
+
+
 async def test_schema_blocks_missing_type_range_and_model_injected_field(audits):
     async def should_not_run(_):
         raise AssertionError("invalid arguments reached tool")

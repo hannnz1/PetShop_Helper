@@ -150,12 +150,14 @@ class ToolAuditLog(Base):
     __tablename__ = "tool_audit_logs"
     __table_args__ = (
         Index("idx_conversation_id", "conversation_id"),
+        Index("idx_tool_audit_turn", "conversation_id", "turn_id"),
         Index("idx_tool_name", "tool_name"),
         Index("idx_status", "status"),
     )
 
     id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
     conversation_id: Mapped[int | None] = mapped_column(BIGINT(unsigned=True), nullable=True)
+    turn_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     tool_call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tool_name: Mapped[str] = mapped_column(String(128))
     tool_source: Mapped[str] = mapped_column(ENUM("builtin", "mcp"))
@@ -166,6 +168,26 @@ class ToolAuditLog(Base):
     error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
     retry_count: Mapped[int] = mapped_column(TINYINT(unsigned=True), server_default=text("0"))
     duration_ms: Mapped[int | None] = mapped_column(INTEGER(unsigned=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class ModelUsageEvent(Base):
+    """One actual or unavailable usage observation per LangChain model run."""
+
+    __tablename__ = "model_usage_events"
+    __table_args__ = (Index("idx_usage_turn", "conversation_id", "turn_id"),
+                      Index("idx_usage_daily", "created_at", "intent", "model_name"))
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(BIGINT(unsigned=True))
+    turn_id: Mapped[str] = mapped_column(String(36))
+    intent: Mapped[str] = mapped_column(String(64))
+    model_name: Mapped[str] = mapped_column(String(128))
+    input_tokens: Mapped[int | None] = mapped_column(INTEGER(unsigned=True), nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(INTEGER(unsigned=True), nullable=True)
+    usage_status: Mapped[str] = mapped_column(ENUM("available", "unavailable"))
+    turn_status: Mapped[str] = mapped_column(ENUM("completed", "failed", "interrupted"))
+    is_estimated: Mapped[bool] = mapped_column(TINYINT(unsigned=False), server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 

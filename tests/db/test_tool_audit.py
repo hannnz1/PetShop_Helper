@@ -33,3 +33,15 @@ async def test_insert_tool_audit_records_every_outcome(db_session_factory, db_cl
         rows = (await session.execute(select(ToolAuditLog))).scalars().all()
     assert {row.status for row in rows} == set(statuses)
     assert all(row.conversation_id == 101 for row in rows)
+
+
+async def test_insert_tool_audit_links_turn(db_session_factory, db_clean):
+    await repository.insert_tool_audit(
+        conversation_id=101, turn_id="turn-123", tool_call_id="tc-1",
+        tool_name="query_order", tool_source="builtin", mcp_server=None,
+        arguments=None, result_summary=None, status="成功", error_message=None,
+        retry_count=0, duration_ms=1,
+    )
+    async with db_session_factory() as session:
+        row = (await session.execute(select(ToolAuditLog))).scalars().one()
+    assert row.conversation_id == 101 and row.turn_id == "turn-123"

@@ -39,6 +39,13 @@ def test_factory_passes_streaming_flag() -> None:
     assert get_chat_model(streaming=False, settings=settings).streaming is False
 
 
+def test_stream_usage_requires_explicit_opt_in() -> None:
+    settings = Settings(_env_file=None, chat_model="test-chat-model",
+                        chat_base_url="https://chat.example.test/v1",
+                        chat_api_key=SecretStr("test-only-key"), chat_stream_usage=True)
+    assert get_chat_model(streaming=True, settings=settings).stream_usage is True
+
+
 def test_factory_allows_deterministic_judge_without_changing_default() -> None:
     settings = Settings(
         _env_file=None,
