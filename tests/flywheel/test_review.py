@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 from sqlalchemy import text
 
 
@@ -41,6 +42,21 @@ async def test_review_transition_and_merge_target(db_session_factory, db_clean):
 
 
 @pytest.mark.asyncio
+async def test_concurrent_cross_question_request_id_conflict_is_domain_error(db_session_factory, db_clean):
+    from app.flywheel.review import review_question
+
+    first = await _question(db_session_factory)
+    second = await _question(db_session_factory, "另一个问题")
+    results = await asyncio.gather(
+        review_question(first, "defer", "shared-key", reason="稍后"),
+        review_question(second, "defer", "shared-key", reason="稍后"),
+        return_exceptions=True,
+    )
+    assert sum(not isinstance(result, Exception) for result in results) == 1
+    assert sum(isinstance(result, ValueError) for result in results) == 1
+
+
+@pytest.mark.asyncio
 async def test_review_http_bearer_configured_and_missing(db_session_factory, db_clean, monkeypatch):
     from httpx import ASGITransport, AsyncClient
     from app.config import get_settings
@@ -59,4 +75,27 @@ async def test_review_http_bearer_configured_and_missing(db_session_factory, db_
         ok = await client.get("/api/review/questions", headers={"Authorization": "Bearer review-test-token"})
         assert ok.status_code == 200
         assert ok.json()["items"][0]["canonical_question"] == "猫粮能退吗"
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_review_api_approve_then_publish(db_session_factory, db_clean, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("KNOWLEDGE_REVIEW_TOKEN", "review-test-token")
+    get_settings.cache_clear()
+    canonical_id = await _question(db_session_factory)
+    headers = {"Authorization": "Bearer review-test-token"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        decision = await client.post(f"/api/review/questions/{canonical_id}/decision", headers=headers,
+                                     json={"action": "approve", "request_id": "api-approve-1", "category": "售后",
+                                           "approved_answer": "请联系售后核实商品状态。"})
+        assert decision.status_code == 200, decision.text
+        publication = await client.post(f"/api/review/questions/{canonical_id}/publish", headers=headers,
+                                        json={"request_id": "api-publish-1"})
+        assert publication.status_code == 200, publication.text
+        assert publication.json()["status"] == "approved_pending_vector"
+        assert publication.json()["knowledge_chunk_id"] > 0
     get_settings.cache_clear()

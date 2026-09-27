@@ -118,14 +118,24 @@ async def canonicalize_batch(limit: int, model, *, allow_external_real_text: boo
                     continue
                 target = None
                 if suggestion.matched_question_id is not None:
-                    target = await session.get(CanonicalQuestion, suggestion.matched_question_id)
+                    target = await session.scalar(select(CanonicalQuestion).where(
+                        CanonicalQuestion.id == suggestion.matched_question_id,
+                    ).with_for_update())
+                    if target is None or target.status not in {"pending_review", "deferred"}:
+                        pending += 1
+                        continue
                 if target is None:
-                    # Matching a fresh model-generated canonical form is deterministic.
-                    active = (await session.scalars(select(CanonicalQuestion).where(
-                        CanonicalQuestion.status.in_(("pending_review", "deferred"))
-                    ).order_by(CanonicalQuestion.id.desc()).limit(30))).all()
-                    target = next((row for row in active if normalize_question(row.canonical_question)
-                                   == normalize_question(suggestion.canonical_question)), None)
+                    # The unique key must be resolved across the full table, even if
+                    # the matching question was not in the bounded prompt candidates.
+                    key = hashlib.sha256(normalize_question(suggestion.canonical_question).encode("utf-8")).hexdigest()
+                    target = await session.scalar(select(CanonicalQuestion).where(
+                        CanonicalQuestion.canonical_key == key,
+                    ).with_for_update())
+                    if target is not None and target.status not in {"pending_review", "deferred"}:
+                        # A closed question can receive a fresh review cycle.
+                        target.canonical_key = None
+                        await session.flush()
+                        target = None
                 was_new = target is None
                 if target is None:
                     key = hashlib.sha256(normalize_question(suggestion.canonical_question).encode("utf-8")).hexdigest()

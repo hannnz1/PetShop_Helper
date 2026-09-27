@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 import app.db.base as db
 from app.db.models import CanonicalOccurrence, CanonicalQuestion, FlywheelReviewAction, KnowledgeChunk
@@ -41,24 +42,39 @@ async def _link_published_chunk(canonical_id: int, chunk_id: int, request_id: st
             raise ValueError("request_id conflicts with prior decision")
         row.knowledge_chunk_id = chunk_id
         row.status = "approved_pending_vector"
-        if prior is None:
-            session.add(FlywheelReviewAction(
-                canonical_id=canonical_id, request_id=request_id, action="publish",
+
+
+async def _reserve_publish(canonical_id: int, request_id: str) -> tuple[str, str, str, int | None]:
+    """Reserve the idempotency key before any irreversible knowledge insert."""
+    try:
+        async with db.async_session.begin() as session:
+            row = await session.scalar(select(CanonicalQuestion).where(
+                CanonicalQuestion.id == canonical_id,
+            ).with_for_update())
+            if row is None:
+                raise LookupError("canonical question not found")
+            if row.status not in {"approved", "approved_pending_vector"} or not row.approved_answer or not row.category:
+                raise ValueError("canonical question is not approved")
+            prior = await session.scalar(select(FlywheelReviewAction).where(
+                FlywheelReviewAction.request_id == request_id,
             ))
+            if prior is not None and (prior.canonical_id != canonical_id or prior.action != "publish"):
+                raise ValueError("request_id conflicts with prior decision")
+            if prior is None:
+                session.add(FlywheelReviewAction(
+                    canonical_id=canonical_id, request_id=request_id, action="publish",
+                ))
+                await session.flush()
+            return row.canonical_question, row.approved_answer, row.category, row.knowledge_chunk_id
+    except IntegrityError:
+        raise ValueError("request_id conflicts with prior decision") from None
 
 
 async def publish_approved(canonical_id: int, request_id: str) -> PublishResult:
     """Publish approved human text to MySQL; vectorization runs separately."""
     if not request_id or len(request_id) > 64:
         raise ValueError("invalid request_id")
-    async with db.async_session() as session:
-        row = await session.get(CanonicalQuestion, canonical_id)
-        if row is None:
-            raise LookupError("canonical question not found")
-        if row.status not in {"approved", "approved_pending_vector"} or not row.approved_answer or not row.category:
-            raise ValueError("canonical question is not approved")
-        question, answer, category = row.canonical_question, row.approved_answer, row.category
-        linked_id = row.knowledge_chunk_id
+    question, answer, category, linked_id = await _reserve_publish(canonical_id, request_id)
     if linked_id is None:
         ids, _ = await write_manual_report([Chunk(
             category=category, questions=question, answer=answer,
@@ -66,13 +82,6 @@ async def publish_approved(canonical_id: int, request_id: str) -> PublishResult:
         )])
         linked_id = ids[0]
         await _link_published_chunk(canonical_id, linked_id, request_id)
-    else:
-        async with db.async_session() as session:
-            existing = await session.scalar(select(FlywheelReviewAction).where(
-                FlywheelReviewAction.request_id == request_id,
-            ))
-            if existing is not None and (existing.canonical_id != canonical_id or existing.action != "publish"):
-                raise ValueError("request_id conflicts with prior decision")
     async with db.async_session() as session:
         chunk_status = await session.scalar(select(KnowledgeChunk.vectorize_status).where(
             KnowledgeChunk.id == linked_id,
@@ -103,7 +112,7 @@ async def list_review_questions(*, offset: int = 0, limit: int = 20) -> dict:
         return {"total": total or 0, "items": items}
 
 
-async def review_question(
+async def _review_question_transaction(
     canonical_id: int, action: str, request_id: str, *, reason: str | None = None,
     category: str | None = None, approved_answer: str | None = None,
     merge_target_id: int | None = None,
@@ -127,6 +136,11 @@ async def review_question(
     audit_reason = f"merge:{merge_target_id}" if action == "merge" else reason
 
     async with db.async_session.begin() as session:
+        row = await session.scalar(select(CanonicalQuestion).where(
+            CanonicalQuestion.id == canonical_id,
+        ).with_for_update())
+        if row is None:
+            raise LookupError("canonical question not found")
         existing = await session.scalar(select(FlywheelReviewAction).where(
             FlywheelReviewAction.request_id == request_id,
         ))
@@ -136,16 +150,7 @@ async def review_question(
                 canonical_id, action, audit_reason, category, approved_answer,
             ):
                 raise ValueError("request_id conflicts with prior decision")
-            row = await session.get(CanonicalQuestion, canonical_id)
-            if row is None:
-                raise LookupError("canonical question not found")
             return ReviewResult(row.id, row.status, row.merged_into_id)
-
-        row = await session.scalar(select(CanonicalQuestion).where(
-            CanonicalQuestion.id == canonical_id,
-        ).with_for_update())
-        if row is None:
-            raise LookupError("canonical question not found")
         if row.status not in {"pending_review", "deferred"}:
             raise ValueError("invalid state transition")
         if action == "merge":
@@ -172,3 +177,18 @@ async def review_question(
             reason=audit_reason, category=category, approved_answer=approved_answer,
         ))
         return ReviewResult(row.id, row.status, row.merged_into_id)
+
+
+async def review_question(
+    canonical_id: int, action: str, request_id: str, *, reason: str | None = None,
+    category: str | None = None, approved_answer: str | None = None,
+    merge_target_id: int | None = None,
+) -> ReviewResult:
+    try:
+        return await _review_question_transaction(
+            canonical_id, action, request_id, reason=reason, category=category,
+            approved_answer=approved_answer, merge_target_id=merge_target_id,
+        )
+    except IntegrityError:
+        # Different canonical rows can race on the same global request ID.
+        raise ValueError("request_id conflicts with prior decision") from None

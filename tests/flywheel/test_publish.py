@@ -55,3 +55,42 @@ async def test_publish_recovers_after_knowledge_insert_before_link(db_session_fa
     assert recovered.knowledge_chunk_id > 0
     async with db_session_factory() as session:
         assert await session.scalar(text("SELECT COUNT(*) FROM knowledge_chunks")) == 1
+
+
+@pytest.mark.asyncio
+async def test_publish_reports_vectorized_only_after_chunk_done(db_session_factory, db_clean):
+    from app.flywheel.review import publish_approved
+
+    canonical_id = await _canonical(db_session_factory, approved=True)
+    pending = await publish_approved(canonical_id, "pub-done")
+    assert pending.status == "approved_pending_vector"
+    async with db_session_factory.begin() as session:
+        await session.execute(text(
+            "UPDATE knowledge_chunks SET vectorize_status='done', vector_id=:vid WHERE id=:id"
+        ), {"vid": str(pending.knowledge_chunk_id), "id": pending.knowledge_chunk_id})
+    done = await publish_approved(canonical_id, "pub-done")
+    assert done.status == "vectorized"
+
+
+@pytest.mark.asyncio
+async def test_conflicting_request_id_cannot_insert_knowledge(db_session_factory, db_clean):
+    from app.flywheel.review import publish_approved, review_question
+
+    other = await _canonical(db_session_factory)
+    await review_question(other, "defer", "reserved-key", reason="稍后")
+    approved = await _canonical(db_session_factory, approved=True)
+    with pytest.raises(ValueError):
+        await publish_approved(approved, "reserved-key")
+    async with db_session_factory() as session:
+        assert await session.scalar(text("SELECT COUNT(*) FROM knowledge_chunks")) == 0
+
+
+@pytest.mark.asyncio
+async def test_new_publish_request_id_is_audited(db_session_factory, db_clean):
+    from app.flywheel.review import publish_approved
+
+    approved = await _canonical(db_session_factory, approved=True)
+    await publish_approved(approved, "publish-key-1")
+    await publish_approved(approved, "publish-key-2")
+    async with db_session_factory() as session:
+        assert await session.scalar(text("SELECT COUNT(*) FROM flywheel_review_actions WHERE action='publish'")) == 2
