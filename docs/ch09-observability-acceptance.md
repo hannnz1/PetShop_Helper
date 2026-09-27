@@ -14,7 +14,7 @@ The disposable fake-model probe and checkpoint are in the Git-ignored plan works
 
 ## Failure isolation
 
-`.\scripts\ch09\langfuse_local.ps1 -Action Stop` stopped only the `petshop-langfuse` Compose project and retained all five named volumes. With `LANGFUSE_ENABLED=true` and the server stopped, a fake-model Graph invoke still returned `Local acceptance answer`. A second probe posted to the actual `/api/chat` SSE route using the same `GraphRuntime` fake-model graph. It returned HTTP 200, `text/event-stream`, a delta frame, an `event: done` frame, and terminal `data: [DONE]`, with no SSE error; the Langfuse exporter logged a timeout after the response. Starting the stack again restored the original project and volumes. `tests/observability/test_tracing.py` also exercises callback exceptions, disabled tracing, missing credentials, and Cloud URL rejection.
+`.\scripts\ch09\langfuse_local.ps1 -Action Stop` stopped only the `petshop-langfuse` Compose project and retained all five named volumes. With `LANGFUSE_ENABLED=true` and the server stopped, a fake-model Graph invoke still returned `Local acceptance answer`. A second probe posted to the actual `/api/chat` SSE route using the same `GraphRuntime` fake-model graph. It returned HTTP 200, `text/event-stream`, a delta frame, a `data:` frame whose JSON has `"event":"done"`, and terminal `data: [DONE]`, with no SSE error; the Langfuse exporter logged a timeout after the response. Starting the stack again restored the original project and volumes. `tests/observability/test_tracing.py` also exercises callback exceptions, disabled tracing, missing credentials, and Cloud URL rejection.
 
 ## Usage and evaluation paths
 
