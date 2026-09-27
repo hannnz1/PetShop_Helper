@@ -191,6 +191,27 @@ class ModelUsageEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 
+class EvalRun(Base):
+    """Immutable summary of one Chapter 4 evaluation run and strategy."""
+
+    __tablename__ = "eval_runs"
+    __table_args__ = (Index("idx_eval_comparable", "dataset_hash", "strategy", "started_at"),)
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset_hash: Mapped[str] = mapped_column(String(64))
+    strategy: Mapped[str] = mapped_column(String(32))
+    git_sha: Mapped[str] = mapped_column(String(40))
+    model_name: Mapped[str] = mapped_column(String(128))
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    ended_at: Mapped[datetime] = mapped_column(DateTime)
+    sample_count: Mapped[int] = mapped_column(INTEGER(unsigned=True))
+    status: Mapped[str] = mapped_column(String(32))
+    metrics: Mapped[dict] = mapped_column(JSON)
+    denominators: Mapped[dict] = mapped_column(JSON)
+    report_path: Mapped[str] = mapped_column(String(512))
+    reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+
 class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"
     __table_args__ = (

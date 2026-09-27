@@ -38,3 +38,11 @@ async def usage(
     if start > end:
         raise HTTPException(status_code=422, detail="from must be on or before to")
     return await observability.usage_by_day(start, end)
+
+
+@router.get("/eval-trend", dependencies=[Depends(require_admin)])
+async def eval_trend(
+    dataset_hash: Annotated[str, Query(pattern=r"^[0-9a-f]{64}$")],
+    strategy: Annotated[str, Query(pattern=r"^(vector|bm25|hybrid|hybrid_rerank)$")],
+) -> list[dict]:
+    return await observability.comparable_trend(dataset_hash, strategy)
