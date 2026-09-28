@@ -194,3 +194,9 @@
 - 产出：确认GitHub CLI登录hannnz1；已创建https://github.com/hannnz1/PetShop_Helper，私有；提交前核查492个工作区文件、1194个历史blob，检查11个实际配置密钥值及常见Token/私钥特征，无命中、无数据库/模型权重/超大文件。39项配置、导航、验收与依赖环境检查通过（9.96秒）。
 - 拒绝/纠偏：用户选择新建私有仓库，不改公开MewHelp；不上传.env/缓存/训练产物，不把推送称为真实质量验收完成。
 - 翻车/返工：无代码返工；此前提权Git识别问题使用明确git-dir/work-tree处理。下一步保存补齐改动并推送新仓库main，远程SHA/私有性将再次核对。
+
+## 私有GitHub上传完成（2026-09-28）
+- 用户关键原话：`新建私有仓库 PetShop_Helper（推荐）`。
+- 产出：开发快照e1121e4已推送至https://github.com/hannnz1/PetShop_Helper的main；GitHub API回读提交SHA与本地一致，visibility=PRIVATE、默认分支main。保留205条原历史，并新增补齐提交；工作区干净。此段完成记录另作文档提交。
+- 拒绝/纠偏：未改MewHelp仓库，未执行强推，未上传实际.env、数据库与训练权重；本机主目录整合、Docker恢复、真实模型验收仍未完成。
+- 翻车/返工：无；推送使用已有GitHub CLI凭据且仅本次Git命令指定credential helper，无全局凭据配置改动。
