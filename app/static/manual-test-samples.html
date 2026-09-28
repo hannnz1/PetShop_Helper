@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>逐章演示 · PetShop Helper</title><link rel="stylesheet" href="/static/operations.css"></head><body><div id="adminNav"></div><main><h1>逐章演示</h1><p>业务订单、物流、退款申请为演示数据；聊天、嵌入与重排会调用 .env 指定上游。真实模型验收未完成时，不以页面可用代表回答质量通过。</p>
+<section><h2>1 · 纯对话与提取</h2><p>在同一会话先说“我养了一只三岁的猫”，再问“我的猫几岁了？”；第二轮应使用历史。用 /api/extract 发送“订单 MH20260701123 的猫爬架散架了，我要退款”，检查订单号、诉求和方案字段。SSE 应持续收到事件。</p></section>
+<section><h2>2 · 业务工具</h2><p>“订单1001的物流到哪了？”检查工具轨迹；订单/物流为样例，不据此安排实际售后。</p></section>
+<section><h2>3–4 · 知识与检索</h2><p>从知识库工作台已有资料选一道问题，核对引用与原文；问库外问题应拒绝编造。四策略完整报告必须无调用错误，partial 不能当全量通过。</p><a href="/kb">知识库</a> · <a href="/rag-eval">四策略报告</a></section>
+<section><h2>5 · 意图分流</h2><p>依次测试闲聊、知识问题和订单问题；检查轨迹中走向对应路径，业务循环达到上限时应安全结束。</p></section>
+<section><h2>6 · 退款确认</h2><p>“我想申请退款”；缺订单时选择自己的样例订单，确认前不得新增退款申请。取消后不提交；重新打开会话检查中断状态恢复。不调用真实退款服务。</p></section>
+<section><h2>7 · 长对话</h2><p>连续多轮后在侧栏切换旧会话；检查历史完整、模型输入预算受控、摘要任务不阻塞流式回复。摘要内容需人工核对。</p></section>
+<section><h2>8 · 工具执行</h2><p>测试 MCP 物流查询、工单预览与取消；创建只能在用户明确点击后执行。模拟超时应有失败审计，不得伪报成功。</p></section>
+<section><h2>9 · 反馈与知识回流</h2><p>点击已完成回复的未解决按钮，切换会话后再反馈旧消息，核对归属；审核队列中批准正式答案，再发布和向量化。失败重试不应重复入库。用量缺失时应显示不可用。</p><a href="/review">审核队列</a> · <a href="/observability">观测与用量</a></section>
+<section><h2>10 · 分类闭环</h2><p>先看验收页：数据不足、训练未完成、版本过期均不可当通过。真实 8110 就绪后运行分类批次，重复运行应 empty；多标签统计与独立问题数口径不同。</p><a href="/topics">问题主题</a> · <a href="/acceptance">九项验收</a></section>
+</main><script src="/static/admin.js"></script><script>mountAdminNav('manual-test-samples');</script></body></html>

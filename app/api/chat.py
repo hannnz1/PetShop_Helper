@@ -39,6 +39,7 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
     """Translate one prepared graph stream for chat and resume endpoints."""
     completed = False
     completed_conversation_id = None
+    completed_assistant_message_id = None
     completed_layer2_budget = None
     interrupted = False
     interrupt_event = None
@@ -87,6 +88,9 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
                 elif node == "log_turn":
                     completed = True
                     completed_conversation_id = update["conversation_id"]
+                    marker = (update.get("trace") or {}).get("audit_message_id")
+                    if type(marker) is int and marker > 0:
+                        completed_assistant_message_id = marker
                     completed_layer2_budget = (update.get("trace") or {}).get("summary_layer2_budget")
     except ConversationNotFound:
         yield _error("会话不存在")
@@ -120,7 +124,10 @@ async def graph_event_stream(graph_stream, user_id: str) -> AsyncIterator[str]:
         yield _sse(interrupt_event)
         return
     if completed:
-        yield _sse({"event": "done", "conversation_id": completed_conversation_id})
+        completion = {"event": "done", "conversation_id": completed_conversation_id}
+        if completed_assistant_message_id is not None:
+            completion["assistant_message_id"] = completed_assistant_message_id
+        yield _sse(completion)
         yield "data: [DONE]\n\n"
         if completed_layer2_budget is not None:
             schedule_summary(completed_conversation_id,

@@ -20,7 +20,7 @@ from app.core.prompts import GRAPH_AGENT_SYSTEM, GRAPH_FINAL_SYSTEM
 from app.db import repository
 from app.db.repository import ContextSnapshot
 from app.graph.routing import route_by_intent
-from app.tools.business import query_faq
+from app.core.faq_pipeline import run_faq_pipeline
 from app.tools.registry import get_chat_tools
 from app.tools import engine, registry
 
@@ -442,7 +442,8 @@ async def log_turn(state: dict) -> dict:
         conversation_id, state["query"], state.get("tool_results", []), state["answer"],
     )
     return {"conversation_id": conversation_id,
-            "trace": {"intent": state.get("intent"), "route": state.get("route"),
+            "trace": {**(state.get("trace", {}) if state.get("route") == "knowledge" else {}),
+                      "intent": state.get("intent"), "route": state.get("route"),
                       "summary_layer2_budget": state.get("summary_layer2_budget", 0),
                       "steps": state.get("steps", 0), "tokens_used": state.get("tokens_used", 0),
                       "audit_message_id": marker}}
@@ -471,13 +472,14 @@ async def forced_rag(state: dict) -> dict:
     """Always retrieve first; malformed or failed evidence cannot enter Agent."""
     query = state.get("resolved_query") or state["query"]
     try:
-        payload = await query_faq.ainvoke({"keyword": query})
+        payload = await run_faq_pipeline(query, gate="calibrated")
     except Exception as exc:  # noqa: BLE001 - retrieval failure is a refusal
         payload = {"sufficient": False, "source": "self_check",
                    "reason": f"知识检索失败: {type(exc).__name__}"}
 
     if _strong_evidence(payload):
         return {
+            "trace": payload.get("trace", {}),
             "sufficient": True, "evidence": payload["evidence"],
             "citations": payload["citations"], "reason": "",
         }
@@ -490,7 +492,8 @@ async def forced_rag(state: dict) -> dict:
         reason = "知识库证据格式不完整或不足"
     await repository.insert_low_confidence(state["conversation_id"], query, source, reason)
     return {"sufficient": False, "evidence": "", "citations": [],
-            "source": source, "reason": reason}
+            "source": source, "reason": reason,
+            "trace": payload.get("trace", {}) if isinstance(payload, dict) else {}}
 
 
 def confidence_gate(state: dict) -> str:

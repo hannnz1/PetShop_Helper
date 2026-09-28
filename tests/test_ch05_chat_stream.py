@@ -18,7 +18,7 @@ def _install_stream(client, producer):
 
 def test_stream_filters_internal_chunks_and_sends_actions(tmp_path):
     settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1",
-                        chat_api_key="test", graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
+                        chat_api_key="test", token_budget=32768, graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
     with TestClient(create_app(settings=settings, model=object())) as client:
         async def stream(*args, **kwargs):
             yield "messages", (AIMessageChunk(content="隐秘分类"), {"langgraph_node": "classify_intent_node"})
@@ -43,7 +43,7 @@ def test_stream_filters_internal_chunks_and_sends_actions(tmp_path):
 
 def test_stream_rejects_owner_and_busy_before_http_starts(tmp_path):
     settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1",
-                        chat_api_key="test", graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
+                        chat_api_key="test", token_budget=32768, graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
     with TestClient(create_app(settings=settings, model=object())) as client:
         async def missing(*args, **kwargs):
             raise ConversationNotFound()
@@ -67,7 +67,7 @@ def test_stream_rejects_owner_and_busy_before_http_starts(tmp_path):
 
 def test_multistep_tool_status_is_not_repeated(tmp_path):
     settings = Settings(_env_file=None, chat_model="test", chat_base_url="https://example.test/v1",
-                        chat_api_key="test", graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
+                        chat_api_key="test", token_budget=32768, graph_checkpoint_path=str(tmp_path / "graph.sqlite"))
     with TestClient(create_app(settings=settings, model=object())) as client:
         async def stream(*args, **kwargs):
             yield "updates", {"agent_tools": {"tool_results": [{"tool_call_id": "c1", "name": "query_order"}]}}

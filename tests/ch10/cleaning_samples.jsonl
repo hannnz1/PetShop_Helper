@@ -1,0 +1,5 @@
+{"id":"typo","text":"猫粮退欵咋弄","expected":"猫粮退款怎么处理","must_keep":["猫粮","退款"]}
+{"id":"dialect","text":"这猫窝咋个退嘛","expected":"这个猫窝怎么退货","must_keep":["猫窝","退货"]}
+{"id":"model","text":"MH-CAM1咋连网","expected":"MH-CAM1怎么联网","must_keep":["MH-CAM1","联网"]}
+{"id":"multi","text":"想退货，还问运费谁付","expected":"想退货，运费由谁承担","must_keep":["退货","运费"]}
+{"id":"unchanged","text":"猫粮有哪些口味？","expected":"猫粮有哪些口味？","must_keep":["猫粮","口味"]}

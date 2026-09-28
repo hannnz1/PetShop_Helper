@@ -16,3 +16,5 @@ data/ch05/*.sqlite*
 log/
 ch06-browser-*/
 /data/ch09/eval-runs/
+/data/ch10/
+/data/alignment-entry/

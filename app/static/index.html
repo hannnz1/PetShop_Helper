@@ -115,6 +115,7 @@ async function openConversation(id) {
         else if (item.role === 'assistant') {
           const answer = bubble('assistant'); answer.classList.remove('typing');
           answer.innerHTML = renderMarkdown(item.content);
+          addFeedback(answer, {user_id: requestedUser, conversation_id: id, assistant_message_id: item.id});
         }
       }
       after = page.next_cursor;
@@ -237,7 +238,10 @@ function setBusy(value) {
   $('status').textContent = value ? '小喵正在回复…' : historyLoading ? '正在加载历史…' : pendingOrder ? '请先完成当前确认' : '准备就绪';
   document.querySelectorAll('[data-question]').forEach(button => button.disabled = value || historyLoading);
 }
-function addFeedback(answer) {
+function addFeedback(answer, identity) {
+  if (!identity || !Number.isSafeInteger(identity.assistant_message_id) || identity.assistant_message_id <= 0) return;
+  if (answer.parentElement.querySelector('.feedback')) return;
+  const target = Object.freeze({...identity});
   const row = document.createElement('div'); row.className = 'feedback';
   const label = document.createElement('span'); label.textContent = '这段回答有帮助吗？'; row.append(label);
   const note = document.createElement('span'); note.className = 'feedback-note';
@@ -245,11 +249,27 @@ function addFeedback(answer) {
     const button = document.createElement('button'); button.type = 'button'; button.textContent = icon;
     button.setAttribute('aria-label', value === 'up' ? '有帮助' : '没帮助');
     button.setAttribute('aria-pressed', 'false');
-    button.onclick = () => {
+    button.onclick = async () => {
+      const choices = row.querySelectorAll('button');
+      for (const choice of choices) choice.disabled = true;
+      note.textContent = value === 'down' ? '正在提交…' : '';
+      try {
+        if (value === 'down') {
+          const response = await fetch('/api/feedback/unresolved', {method: 'POST',
+            headers: {'Content-Type': 'application/json'}, body: JSON.stringify(target)});
+          if (!response.ok) throw Error(await responseError(response));
+          const result = await response.json();
+          if (!Number.isSafeInteger(result.id) || result.id <= 0) throw Error('反馈未确认，请重试。');
+        }
+      } catch (error) {
+        for (const choice of choices) choice.disabled = false;
+        note.textContent = error.message || '提交失败，请重试。';
+        return;
+      }
       for (const choice of row.querySelectorAll('button')) {
         choice.disabled = true; choice.setAttribute('aria-pressed', String(choice === button));
       }
-      note.textContent = '已反馈';
+      note.textContent = value === 'down' ? '已提交，感谢反馈' : '已在本页标记有帮助';
     };
     row.append(button);
   }
@@ -458,6 +478,8 @@ async function runConversation(url, payload, userText) {
   $('welcome').hidden = true;
   if (userText) bubble('user', userText);
   const answer = bubble('assistant');
+  let feedbackIdentity = null;
+  const requestUser = payload.user_id;
   let content = '', done = false, interrupted = false, buffer = '';
   setBusy(true); const requestController = new AbortController(); controller = requestController;
   try {
@@ -493,6 +515,8 @@ async function runConversation(url, payload, userText) {
         else if (value.kind === 'confirm_ticket') showTicketConfirm(answer, value);
         loadConversations();
       } else if (value.event === 'done' && Number.isSafeInteger(value.conversation_id) && value.conversation_id > 0) {
+        feedbackIdentity = {user_id: requestUser, conversation_id: value.conversation_id,
+          assistant_message_id: value.assistant_message_id};
         selectStoredConversation(value.conversation_id);
         localStorage.removeItem(pendingStorageKey(conversationId));
         renderActions(answer);
@@ -510,7 +534,7 @@ async function runConversation(url, payload, userText) {
     }
     if (!done && !interrupted) throw Error('连接已中断，回复未完成，请重试。');
     if (!content && !interrupted) throw Error('模型未返回文本，请重试。');
-    if (!interrupted) addFeedback(answer);
+    if (!interrupted) addFeedback(answer, feedbackIdentity);
     return true;
   } catch (error) {
     if (epoch !== viewEpoch) return false;

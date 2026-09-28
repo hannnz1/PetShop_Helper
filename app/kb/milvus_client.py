@@ -1,13 +1,24 @@
 """Knowledge vectors: legacy Lite access plus isolated Chapter 4 hybrid collections."""
 
 import json
+import os
 from pathlib import Path
 from threading import Lock
 
-from pymilvus import (
-    AnnSearchRequest, CollectionSchema, DataType, FieldSchema, Function,
-    FunctionType, MilvusClient, RRFRanker,
-)
+# PyMilvus 3.0.2 calls load_dotenv() at import time. Only our Settings (or
+# an explicit Uvicorn --env-file) may select application configuration.
+_previous_dotenv_disabled = os.environ.get("PYTHON_DOTENV_DISABLED")
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+try:
+    from pymilvus import (
+        AnnSearchRequest, CollectionSchema, DataType, FieldSchema, Function,
+        FunctionType, MilvusClient, RRFRanker,
+    )
+finally:
+    if _previous_dotenv_disabled is None:
+        os.environ.pop("PYTHON_DOTENV_DISABLED", None)
+    else:
+        os.environ["PYTHON_DOTENV_DISABLED"] = _previous_dotenv_disabled
 
 from app.config import get_settings
 

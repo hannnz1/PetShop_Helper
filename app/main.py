@@ -18,6 +18,8 @@ from app.api.rageval import router as rageval_router
 from app.api.actions import router as actions_router
 from app.api.conversations import router as conversations_router
 from app.api.observability import router as observability_router
+from app.api.topics import router as topics_router
+from app.api.acceptance import router as acceptance_router
 from app.api.flywheel import router as flywheel_router
 from app.config import Settings, get_settings
 from app.core.jobs import JobRunner
@@ -104,6 +106,8 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
     application.include_router(actions_router)
     application.include_router(conversations_router)
     application.include_router(observability_router)
+    application.include_router(topics_router)
+    application.include_router(acceptance_router)
     application.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
     @application.get("/", include_in_schema=False)
@@ -125,6 +129,42 @@ def create_app(settings: Settings | None = None, model: BaseChatModel | None = N
     @application.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @application.get('/review', include_in_schema=False)
+    def review_page() -> FileResponse:
+        return FileResponse(_STATIC / 'review.html')
+
+    @application.get('/observability', include_in_schema=False)
+    def observability_page() -> FileResponse:
+        return FileResponse(_STATIC / 'observability.html')
+
+    @application.get('/topics', include_in_schema=False)
+    def topics_page() -> FileResponse:
+        return FileResponse(_STATIC / 'topics.html')
+
+    @application.get('/topics/questions', include_in_schema=False)
+    def topic_questions_page() -> FileResponse:
+        return FileResponse(_STATIC / 'topic-questions.html')
+
+    @application.get('/acceptance', include_in_schema=False)
+    def acceptance_page() -> FileResponse:
+        return FileResponse(_STATIC / 'acceptance.html')
+
+    @application.get('/acceptance/data', include_in_schema=False)
+    def acceptance_data_page() -> FileResponse:
+        return FileResponse(_STATIC / 'acceptance-data.html')
+
+    @application.get('/acceptance/evaluation', include_in_schema=False)
+    def acceptance_eval_page() -> FileResponse:
+        return FileResponse(_STATIC / 'acceptance-eval.html')
+
+    @application.get('/acceptance/errors', include_in_schema=False)
+    def acceptance_errors_page() -> FileResponse:
+        return FileResponse(_STATIC / 'acceptance-errors.html')
+
+    @application.get('/manual-test-samples', include_in_schema=False)
+    def manual_samples_page() -> FileResponse:
+        return FileResponse(_STATIC / 'manual-test-samples.html')
 
     return application
 

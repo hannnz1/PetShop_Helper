@@ -1,6 +1,32 @@
 .PHONY: dev test eval eval-agent eval-rag eval-intent eval-ch05 migrate-ch05 judge-check seed seed-conv kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval eval-mining milvus-up milvus-down mcp-up mcp-down usage-ch09 eval-ch09
 
 USAGE_FORMAT ?= table
+.PHONY: classify-pool migrate-topics classifier-smoke
+ifeq ($(OS),Windows_NT)
+classifier-smoke:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.ch10.smoke_service
+classify-pool:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.ch10.classify_pool
+migrate-topics:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.ch10.migrate_topics
+else
+classifier-smoke:
+	uv run --locked python -m scripts.ch10.smoke_service
+classify-pool:
+	uv run --locked python -m scripts.ch10.classify_pool
+migrate-topics:
+	uv run --locked python -m scripts.ch10.migrate_topics
+endif
+.PHONY: calibrate-confidence
+
+ifeq ($(OS),Windows_NT)
+calibrate-confidence:
+	.\.venv\Scripts\python.exe -X utf8 -m scripts.ch09.calibrate_confidence --live --out data/ch09/reports/confidence_calibration.json
+else
+calibrate-confidence:
+	uv run --locked python -m scripts.ch09.calibrate_confidence --live --out data/ch09/reports/confidence_calibration.json
+endif
+
 USAGE_ARGS = $(if $(USAGE_FROM),--from $(USAGE_FROM)) $(if $(USAGE_TO),--to $(USAGE_TO)) --format $(USAGE_FORMAT)
 
 ifeq ($(OS),Windows_NT)

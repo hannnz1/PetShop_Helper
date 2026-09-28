@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
 from app.db import observability
+from app.observability.dashboard import build_overview
 
 
 router = APIRouter(prefix="/api/observability", tags=["observability"])
@@ -46,3 +47,17 @@ async def eval_trend(
     strategy: Annotated[str, Query(pattern=r"^(vector|bm25|hybrid|hybrid_rerank)$")],
 ) -> list[dict]:
     return await observability.comparable_trend(dataset_hash, strategy)
+
+
+@router.get('/overview', dependencies=[Depends(require_admin)])
+async def overview(
+    request: Request,
+    start: Annotated[date, Query(alias='from')],
+    end: Annotated[date, Query(alias='to')],
+    dataset_hash: Annotated[str | None, Query(pattern=r'^[0-9a-f]{64}$')] = None,
+    strategy: Annotated[str, Query(pattern=r'^(vector|bm25|hybrid|hybrid_rerank)$')] = 'hybrid_rerank',
+) -> dict:
+    if start > end:
+        raise HTTPException(status_code=422, detail='from must be on or before to')
+    return await build_overview(start, end, dataset_hash, strategy,
+                                settings=getattr(request.app.state, 'settings', None))

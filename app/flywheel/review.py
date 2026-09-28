@@ -6,10 +6,58 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 import app.db.base as db
-from app.db.models import CanonicalOccurrence, CanonicalQuestion, FlywheelReviewAction, KnowledgeChunk
+from app.db.models import CanonicalOccurrence, CanonicalQuestion, FlywheelReviewAction, KnowledgeChunk, LowConfidenceQuestion
 from app.flywheel.privacy import mask_sensitive
 from app.kb.documents import Chunk
 from app.kb.dualwrite import write_manual_report
+from app.kb.vectorization_service import vectorize_pending_knowledge
+
+
+async def get_review_detail(canonical_id: int) -> dict | None:
+    async with db.async_session() as session:
+        row = await session.get(CanonicalQuestion, canonical_id)
+        if row is None:
+            return None
+        chunk = await session.get(KnowledgeChunk, row.knowledge_chunk_id) if row.knowledge_chunk_id else None
+        occurrences = (await session.scalars(select(LowConfidenceQuestion).join(
+            CanonicalOccurrence, CanonicalOccurrence.raw_question_id == LowConfidenceQuestion.id,
+        ).where(CanonicalOccurrence.canonical_id == canonical_id)
+          .order_by(LowConfidenceQuestion.id).limit(101))).all()
+        actions = (await session.scalars(select(FlywheelReviewAction).where(
+            FlywheelReviewAction.canonical_id == canonical_id,
+        ).order_by(FlywheelReviewAction.id.desc()).limit(101))).all()
+        return {
+            'id': row.id, 'canonical_question': mask_sensitive(row.canonical_question),
+            'draft_answer': mask_sensitive(row.draft_answer or ''),
+            'approved_answer': mask_sensitive(row.approved_answer or ''),
+            'category': mask_sensitive(row.category or ''), 'status': row.status,
+            'merged_into_id': row.merged_into_id, 'knowledge_chunk_id': row.knowledge_chunk_id,
+            'vector_status': chunk.vectorize_status if chunk else None,
+            'publication_status': ('vectorized' if chunk.vectorize_status == 'done' else 'approved_pending_vector')
+                                  if chunk else 'not_published',
+            'sources': [{'id': item.id, 'source': item.source,
+                         'question': mask_sensitive(item.raw_question),
+                         'reason': mask_sensitive(item.reason or '')} for item in occurrences[:100]],
+            'sources_truncated': len(occurrences) > 100,
+            'actions': [{'action': action.action, 'reason': mask_sensitive(action.reason or ''),
+                         'category': mask_sensitive(action.category or ''),
+                         'approved_answer': mask_sensitive(action.approved_answer or ''),
+                         'created_at': action.created_at.isoformat()} for action in actions[:100]],
+            'actions_truncated': len(actions) > 100,
+        }
+
+
+async def retry_review_vectorization(canonical_id: int, request_id: str) -> dict:
+    detail = await get_review_detail(canonical_id)
+    if detail is None:
+        raise LookupError('canonical question not found')
+    if detail['status'] not in {'approved', 'approved_pending_vector'} or not detail['knowledge_chunk_id']:
+        raise ValueError('publish a human-approved answer before vectorizing')
+    # Reuse the existing idempotent publication audit; never create model drafts.
+    await publish_approved(canonical_id, request_id)
+    count = await vectorize_pending_knowledge()
+    return {'scope': 'all_pending_knowledge', 'vectorized': count,
+            'detail': await get_review_detail(canonical_id)}
 
 
 @dataclass(frozen=True)

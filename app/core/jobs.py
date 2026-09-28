@@ -18,6 +18,7 @@ class JobSpec:
     name: str
     target: str
     heavy: bool = False
+    permission: str | None = None
 
 
 # Register a target only after its Makefile recipe and referenced script exist.
@@ -29,6 +30,9 @@ JOB_SPECS = {
         JobSpec("kb-mine", "kb-mine", heavy=True),
         JobSpec("eval-mining", "eval-mining"),
         JobSpec("eval-rag", "eval-rag", heavy=True),
+        JobSpec("calibrate-confidence", "calibrate-confidence", heavy=True, permission="observability"),
+        JobSpec("classify-pool", "classify-pool", permission="review"),
+        JobSpec("classifier-smoke", "classifier-smoke", permission="observability"),
     )
 }
 

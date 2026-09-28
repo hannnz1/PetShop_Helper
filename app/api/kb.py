@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.core import retrieval
+from app.core.jobs import JOB_SPECS
+from app.kb.vectorization_service import vectorize_pending_knowledge
 from app.db import repository
 from app.kb import documents, dualwrite, milvus_client, sources
 from scripts.build_kb import source_chunks
@@ -79,7 +81,9 @@ async def overview(request: Request) -> dict:
     return {
         "mysql": mysql, "milvus": milvus, "consistent": consistent,
         "staging": staging, "sources": _source_inventory(),
-        "jobs": runner.list() if runner is not None else [],
+        "jobs": [item for item in runner.list()
+                 if item['name'] in JOB_SPECS and JOB_SPECS[item['name']].permission is None]
+                if runner is not None else [],
     }
 
 
@@ -189,9 +193,7 @@ async def _ingest_locked(request: SourceRequest, chunks: list[documents.Chunk]) 
 
 
 async def _vectorize_pending() -> int:
-    client = milvus_client.get_runtime_client()
-    milvus_client.ensure_collection(client)
-    return await dualwrite.vectorize_pending(client)
+    return await vectorize_pending_knowledge()
 
 
 @router.post("/vectorize")

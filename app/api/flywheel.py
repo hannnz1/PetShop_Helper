@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.config import get_settings
 from app.db.flywheel import record_unresolved_feedback
 from app.flywheel.review import list_review_questions, publish_approved, review_question
+from app.flywheel.review import get_review_detail, retry_review_vectorization
 
 
 router = APIRouter()
@@ -74,6 +75,32 @@ async def decide_question(canonical_id: int, body: ReviewDecisionRequest) -> dic
 
 class PublishRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=64)
+
+
+class VectorizeRequest(PublishRequest):
+    confirm_all_pending: bool = False
+
+
+@router.get('/api/review/questions/{canonical_id}', dependencies=[Depends(require_review_token)])
+async def review_detail(canonical_id: int) -> dict:
+    detail = await get_review_detail(canonical_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail='Canonical question not found')
+    return detail
+
+
+@router.post('/api/review/questions/{canonical_id}/vectorize', dependencies=[Depends(require_review_token)])
+async def retry_vectors(canonical_id: int, body: VectorizeRequest) -> dict:
+    if not body.confirm_all_pending:
+        raise HTTPException(status_code=400, detail='Confirm vectorization of all pending knowledge')
+    try:
+        return await retry_review_vectorization(canonical_id, body.request_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail='Canonical question not found') from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        raise HTTPException(status_code=502, detail='Vectorization unavailable; approval retained, retry later') from None
 
 
 @router.post("/api/review/questions/{canonical_id}/publish", dependencies=[Depends(require_review_token)])

@@ -1,0 +1,44 @@
+{
+  "scope": "mewhelp_alignment_ui_test",
+  "synthetic_model_and_vectors": true,
+  "feedback": [
+    {
+      "conversation_id": 1,
+      "raw_question": "隔离验收：猫粮包装破损怎么办？",
+      "source_ref": "assistant:2"
+    }
+  ],
+  "reviews": [
+    {
+      "id": 1,
+      "status": "approved_pending_vector",
+      "merged_into_id": null,
+      "knowledge_chunk_id": 1
+    },
+    {
+      "id": 2,
+      "status": "deferred",
+      "merged_into_id": null,
+      "knowledge_chunk_id": null
+    },
+    {
+      "id": 3,
+      "status": "rejected",
+      "merged_into_id": 2,
+      "knowledge_chunk_id": null
+    },
+    {
+      "id": 4,
+      "status": "rejected",
+      "merged_into_id": null,
+      "knowledge_chunk_id": null
+    }
+  ],
+  "knowledge": [
+    {
+      "id": 1,
+      "questions": "验收：猫粮可以退货吗？",
+      "vectorize_status": "done"
+    }
+  ]
+}

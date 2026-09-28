@@ -177,13 +177,16 @@ async def _cache_path() -> Path:
              settings.rerank_base_url, settings.rerank_model,
              settings.recall_top_k, K]
     digest = hashlib.sha256(json.dumps(scope, ensure_ascii=False, default=str).encode()).hexdigest()[:20]
-    return CACHE_DIR / f"retrieval-{digest}.jsonl"
+    target = CACHE_DIR / f"retrieval-{digest}.jsonl"
+    from scripts.ch04_cache_migration import migrate_legacy
+    migrate_legacy(ROOT, target, scope)
+    return target
 
 
 def _generation_cache_path(retrieval_cache: Path) -> Path:
     """Generation also depends on prompt wording and the model adapter."""
     scope = [retrieval_cache.name]
-    for name in ("app/core/prompts.py", "app/core/llm.py"):
+    for name in ("app/core/prompts.py", "app/core/llm.py", "app/core/model_guard.py"):
         scope.append(hashlib.sha256((ROOT / name).read_bytes()).hexdigest())
     digest = hashlib.sha256(json.dumps(scope).encode()).hexdigest()[:20]
     return retrieval_cache.with_name(f"generation-{digest}.jsonl")
@@ -297,6 +300,7 @@ async def _generation(
     samples: list[dict], hits: dict, lines: list[str], cache_path: Path | None = None,
     concurrency: int = 3,
 ) -> dict | None:
+    from app.core.model_guard import GUARD_VERSION, repair_once
     if not 1 <= concurrency <= 12:
         raise ValueError("generation concurrency must be between 1 and 12")
     settings = get_settings()
@@ -335,7 +339,7 @@ async def _generation(
     async def one(strategy: str, sample: dict):
         found = hits.get((strategy, sample["id"]), [])
         cache_key = "generation:" + hashlib.sha256(
-            json.dumps([strategy, sample, found], ensure_ascii=False, sort_keys=True, default=str).encode()
+            json.dumps([GUARD_VERSION, strategy, sample, found], ensure_ascii=False, sort_keys=True, default=str).encode()
         ).hexdigest()
         saved = cached.get(cache_key)
         if isinstance(saved, dict) and saved.get("strategy") == strategy and saved.get("id") == sample["id"]:
@@ -346,7 +350,9 @@ async def _generation(
             evidence = _evidence(found)
             record = {"id": sample["id"], "bucket": sample["bucket"], "strategy": strategy}
             if not found:
-                record.update(answer="暂时没有查到相关信息", covered=0, faithful=True)
+                record.update(answer="暂时没有查到相关信息", original_answer="暂时没有查到相关信息",
+                              unsupported_models=[], repair_status="not_needed", guard_passed=True,
+                              guard_version=GUARD_VERSION, covered=0, faithful=True)
                 records.append(record)
                 checkpoint(cache_key, record)
                 tick()
@@ -360,8 +366,15 @@ async def _generation(
                 records.append(record)
                 tick()
                 return
-            answer = str(response.content)
-            record["answer"] = answer
+            async def repair(hint):
+                repaired = await _try_call(
+                    answer_chain.ainvoke({'query': sample['query'] + '\n\n' + hint, 'evidence': evidence}),
+                    f"model repair {strategy}/{sample['id']}", errors,
+                )
+                return str(repaired.content) if repaired is not None else None
+
+            record.update(await repair_once(str(response.content), evidence, repair))
+            answer = record['answer']
             ledger_saved = True
             if not sample["should_refuse"]:
                 coverage = await _try_call(
@@ -380,11 +393,13 @@ async def _generation(
                         faith_chain.ainvoke({"evidence": evidence, "answer": answer}),
                         f"faith {sample['id']}", errors,
                     )
-                    record["faithful"] = faith.faithful if faith is not None else None
+                    record["faithful"] = (faith.faithful if faith is not None else None) if record['guard_passed'] else False
                     record["faith_reason"] = faith.reason if faith is not None else ""
-                    if faith is not None and not faith.faithful:
+                    if not record['guard_passed']:
+                        record['faith_reason'] = '型号机械校验失败；' + record['faith_reason']
+                    if record['faithful'] is False:
                         ledger_saved = await _save_unfaithful_case(
-                            sample, answer, faith.reason, found,
+                            sample, answer, record['faith_reason'], found,
                             settings.chat_model, errors,
                         )
             else:

@@ -3,7 +3,7 @@
 import argparse
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 from app.core.taxonomy import ID2LABEL, LABEL2ID, NUM_CLASSES, terminology_table
@@ -154,12 +154,31 @@ def train_from_dataset(dataset_dir: Path, model_dir: Path) -> TrainReport:
     return TrainReport("trained")
 
 
+def checkpoint_hash(directory: Path) -> str | None:
+    paths = sorted(path for path in directory.glob('*') if path.is_file() and
+                   (path.suffix in ('.safetensors', '.bin') or path.name in ('config.json', 'threshold.json', 'tokenizer.json')))
+    if not any(path.suffix in ('.safetensors', '.bin') for path in paths):
+        return None
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(path.name.encode())
+        with path.open('rb') as stream:
+            digest.update(hashlib.file_digest(stream, 'sha256').digest())
+    return digest.hexdigest()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, default=Path("data/ch10/dataset"))
     parser.add_argument("--out", type=Path, default=Path("data/ch10/model"))
     args = parser.parse_args()
     result = train_from_dataset(args.dataset, args.out)
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out/'train_report.json').write_text(json.dumps({**asdict(result), 'metadata': {
+        'taxonomy_hash': hashlib.sha256(terminology_table().encode()).hexdigest(),
+        'dataset_manifest_hash': hashlib.sha256((args.dataset/'manifest.json').read_bytes()).hexdigest(),
+        'checkpoint_hash': checkpoint_hash(args.out),
+    }}, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f"status={result.status} reason={result.reason}")
 
 

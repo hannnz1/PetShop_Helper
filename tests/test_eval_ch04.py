@@ -225,12 +225,54 @@ def test_generation_cache_scope_tracks_prompt_and_model_adapter(tmp_path, monkey
     (root / "app/core").mkdir(parents=True)
     (root / "app/core/prompts.py").write_text("first", encoding="utf-8")
     (root / "app/core/llm.py").write_text("adapter", encoding="utf-8")
+    (root / "app/core/model_guard.py").write_text("guard-v1", encoding="utf-8")
     monkeypatch.setattr(eval_ch04, "ROOT", root)
     retrieval_cache = root / "retrieval-abc.jsonl"
     first = eval_ch04._generation_cache_path(retrieval_cache)
     (root / "app/core/prompts.py").write_text("changed", encoding="utf-8")
     second = eval_ch04._generation_cache_path(retrieval_cache)
     assert first != second
+    (root / "app/core/model_guard.py").write_text("guard-v2", encoding="utf-8")
+    assert second != eval_ch04._generation_cache_path(retrieval_cache)
+
+
+@pytest.mark.asyncio
+async def test_model_guard_failure_cannot_be_overridden_by_judge(monkeypatch):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    calls, judged, saved = [], [], []
+
+    class FakeModel(RunnableLambda):
+        def __init__(self):
+            async def answer(prompt):
+                calls.append(prompt)
+                return AIMessage(content='MH-CAD1 原答' if len(calls) == 1 else 'MH-CAD1 修复仍错误')
+            super().__init__(answer)
+
+        def with_structured_output(self, schema, method=None):
+            async def judge(prompt):
+                judged.append(str(prompt))
+                if schema is eval_ch04._CoverageJudge:
+                    return schema(covered_count=1, reason='covered')
+                return schema(faithful=True, reason='incorrect PASS')
+            return RunnableLambda(judge)
+
+    async def ledger(sample, answer, reason, hits, model, errors):
+        saved.append((answer, reason))
+        return True
+
+    monkeypatch.setattr(eval_ch04, 'STRATEGIES', ['hybrid_rerank'])
+    monkeypatch.setattr(eval_ch04, 'get_chat_model', lambda **kwargs: FakeModel())
+    monkeypatch.setattr(eval_ch04, '_save_unfaithful_case', ledger)
+    sample = {'id': 'B1', 'bucket': 'B_model', 'query': '规格', 'expect_points': ['规格'], 'should_refuse': False}
+    hits = {('hybrid_rerank', 'B1'): [{'question': '规格', 'answer': 'MH-CAM1', 'section_path': '手册'}]}
+    report = await eval_ch04._generation([sample], hits, [])
+    assert len(calls) == 2  # one original answer, one repair, no loop
+    assert all('修复仍错误' in prompt for prompt in judged)
+    assert report['faithfulness'] == 0
+    assert saved[0][0] == 'MH-CAD1 修复仍错误'
+    assert '机械校验失败' in saved[0][1]
 
 
 @pytest.mark.asyncio

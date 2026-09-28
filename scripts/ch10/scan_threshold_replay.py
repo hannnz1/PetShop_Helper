@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import hashlib
 from pathlib import Path
 
 from app.core.taxonomy import TOPIC_NAMES
@@ -30,6 +31,7 @@ def main() -> None:
     runtime = load_runtime(args.model)
     scores = [item["scores"] for item in runtime.classify([row["text"] for row in rows])]
     report = replay(rows, scores, runtime.threshold)
+    report['metadata'] = {**runtime.metadata, 'val_hash': hashlib.sha256(args.val.read_bytes()).hexdigest()}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"status={report['status']} replayed_threshold={report['replayed_threshold']}")

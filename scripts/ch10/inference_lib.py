@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +25,7 @@ class Runtime:
     session: object
     tokenizer: object
     threshold: float
+    metadata: dict = field(default_factory=dict)
 
     def classify(self, texts: list[str]) -> list[dict]:
         if not texts:
@@ -50,6 +51,18 @@ class Runtime:
         return result
 
 
+def bundle_metadata(model_dir: Path, threshold: float) -> dict:
+    digest = hashlib.sha256()
+    for name in ('model.onnx', 'tokenizer.json', 'threshold.json'):
+        digest.update(name.encode())
+        with (model_dir / name).open('rb') as stream:
+            content_hash = hashlib.file_digest(stream, 'sha256').digest()
+        digest.update(content_hash)
+    return {'model_version': digest.hexdigest(),
+            'taxonomy_hash': hashlib.sha256(terminology_table().encode('utf-8')).hexdigest(),
+            'threshold': threshold}
+
+
 def load_runtime(model_dir: Path) -> Runtime:
     metadata = json.loads((model_dir / "threshold.json").read_text(encoding="utf-8"))
     expected_hash = hashlib.sha256(terminology_table().encode("utf-8")).hexdigest()
@@ -64,6 +77,10 @@ def load_runtime(model_dir: Path) -> Runtime:
     report = json.loads((model_dir / "export_report.json").read_text(encoding="utf-8"))
     if report.get("status") != "passed":
         raise ValueError("ONNX export agreement has not passed")
+    runtime_metadata = bundle_metadata(model_dir, float(metadata['threshold']))
+    exported = report.get('metadata', {})
+    if any(exported.get(key) != value for key, value in runtime_metadata.items()):
+        raise ValueError('ONNX export report version differs from bundle; re-export and verify')
     import onnxruntime as ort
     from tokenizers import Tokenizer
 
@@ -74,4 +91,5 @@ def load_runtime(model_dir: Path) -> Runtime:
         raise ValueError("tokenizer has no [PAD] token")
     tokenizer.enable_padding(pad_id=pad_id, pad_token="[PAD]")
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
-    return Runtime(session, tokenizer, float(metadata["threshold"]))
+    threshold = float(metadata['threshold'])
+    return Runtime(session, tokenizer, threshold, runtime_metadata)

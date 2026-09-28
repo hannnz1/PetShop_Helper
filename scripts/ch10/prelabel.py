@@ -1,6 +1,8 @@
 """Structured, privacy-masked topic prelabeling."""
 
 from dataclasses import dataclass
+import hashlib
+import json
 
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
@@ -28,6 +30,14 @@ class LabelResult:
     status: str
     labels: tuple[str, ...] = ()
     reason: str | None = None
+
+
+def prelabel_fingerprint() -> str:
+    settings = get_settings()
+    prompt = [message.content for message in PROMPT.invoke({'taxonomy': terminology_table(), 'question': '<question>'}).to_messages()]
+    return hashlib.sha256(json.dumps({'model': settings.chat_model, 'base': settings.chat_base_url,
+        'method': settings.structured_output_method, 'prompt': prompt,
+        'schema': _Labels.model_json_schema()}, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
 async def prelabel_one(text: str, model) -> LabelResult:

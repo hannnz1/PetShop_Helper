@@ -22,11 +22,19 @@ def create_app(runtime=None) -> FastAPI:
 
     app = FastAPI(title="MewHelp Topic Classifier", lifespan=lifespan)
 
+    @app.get('/healthz')
+    async def healthz():
+        metadata = getattr(app.state.runtime, 'metadata', {})
+        if not metadata:
+            raise HTTPException(503, 'classifier metadata unavailable')
+        return {'ready': True, **metadata}
+
     @app.post("/classify")
     async def classify(request: ClassifyRequest):
         if any(not text.strip() for text in request.texts):
             raise HTTPException(422, "texts must be nonblank")
-        return {"results": app.state.runtime.classify(request.texts)}
+        return {"results": app.state.runtime.classify(request.texts),
+                **getattr(app.state.runtime, 'metadata', {})}
 
     return app
 

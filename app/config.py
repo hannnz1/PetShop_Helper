@@ -1,5 +1,7 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlparse
+import ipaddress
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,6 +49,7 @@ class Settings(BaseSettings):
     recall_top_k: int = Field(default=50, gt=0)
     rerank_top_k: int = Field(default=10, gt=0)
     rerank_min_score: float = Field(default=0.3, ge=0, le=1)
+    evidence_calibration_path: str = "data/ch09/reports/confidence_calibration.json"
     mcp_logistics_url: str = "http://127.0.0.1:8101/mcp"
     mcp_aftersales_url: str = "http://127.0.0.1:8102/mcp"
     tool_default_timeout: float = Field(default=5.0, gt=0)
@@ -59,6 +62,22 @@ class Settings(BaseSettings):
     langfuse_secret_key: SecretStr | None = None
     observability_admin_token: SecretStr | None = None
     knowledge_review_token: SecretStr | None = None
+    classifier_base_url: str = 'http://127.0.0.1:8110'
+    classifier_timeout: float = Field(default=30, gt=0, le=120)
+
+    @field_validator('classifier_base_url')
+    @classmethod
+    def local_classifier_only(cls, value: str) -> str:
+        parsed = urlparse(value)
+        try:
+            local = parsed.hostname == 'localhost' or ipaddress.ip_address(parsed.hostname or '').is_loopback
+        except ValueError:
+            local = False
+        if not local or parsed.scheme != 'http' or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError('classifier must use a local HTTP endpoint without credentials')
+        if parsed.path not in ('', '/'):
+            raise ValueError('classifier base URL must not include a path')
+        return value.rstrip('/')
 
     @field_validator("chat_model", "chat_base_url", "chat_api_key", mode="before")
     @classmethod

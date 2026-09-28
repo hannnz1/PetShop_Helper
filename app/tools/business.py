@@ -93,51 +93,9 @@ async def query_logistics(order_id: str) -> dict:
 async def query_faq(keyword: str, category: str | None = None) -> dict:
     """查询常见问题、政策及商品手册/型号规格知识库；型号问题须在 keyword 中保留完整型号。"""
 
-    settings = get_settings()
-    if not settings.milvus_uri.startswith(("http://", "https://")):
-        hits = await retrieval.search_knowledge(keyword)
-        if not hits:
-            return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
-        return {"hits": [{"question": hit["question"], "answer": hit["answer"]} for hit in hits]}
+    from app.core.faq_pipeline import run_faq_pipeline
 
-    understood = await query_understanding.understand(keyword)
-    standard = understood["standard"]
-    expanded = understood["expanded"]
-    search_query = standard + (" " + " ".join(expanded) if expanded else "")
-    hits = await retrieval.search_knowledge(
-        standard, strategy="hybrid_rerank", category=category, bm25_query=search_query,
-    )
-    top_score = hits[0]["rerank_score"] if hits else 0.0
-    if not hits or top_score < settings.rerank_min_score:
-        return {
-            "sufficient": False, "source": "retrieval_low_conf",
-            "reason": f"检索证据不足(top={top_score:.3f})", "citations": [],
-        }
-
-    # Retrieval evaluates Top-10, but a 2k-token chat turn cannot carry ten
-    # full chunks (including duplicated citation metadata) to the answer model.
-    answer_hits = hits[:3]
-    evidence_texts = [f"{hit['question']} {hit['answer']}" for hit in answer_hits]
-    check = await selfcheck.check_sufficient(standard, evidence_texts)
-    if not check["useful"]:
-        return {
-            "sufficient": False, "source": "self_check",
-            "reason": check["reason"], "citations": [],
-        }
-
-    arranged = retrieval.arrange_head_tail(answer_hits)
-    citations = [
-        {
-            "n": index, "id": hit["id"], "section_path": hit["section_path"],
-            "question": hit["question"], "answer": hit["answer"],
-            "content_type": hit["content_type"],
-        }
-        for index, hit in enumerate(arranged, 1)
-    ]
-    evidence = "\n".join(
-        f"[{item['n']}] {item['question']}: {item['answer']}" for item in citations
-    )
-    return {"sufficient": True, "evidence": evidence, "citations": citations}
+    return await run_faq_pipeline(keyword, category, gate='top1', settings=get_settings())
 
 
 @tool

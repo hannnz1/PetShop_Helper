@@ -1,11 +1,13 @@
 """Build fixed multilabel splits before any training-only augmentation."""
 
 import argparse
+import asyncio
 import hashlib
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from app.core.taxonomy import LABEL2ID, terminology_table
@@ -68,7 +70,10 @@ def build_dataset(
                 continue
             seen.add(key)
             train.append({"text": variant, "labels": list(row["labels"]),
-                          "origin": "augmented", "reviewed": True})
+                          "origin": "augmented", "reviewed": False,
+                          "review_id": 'aug-' + key,
+                          "parent_review_id": row.get('review_id'),
+                          "parent_text_hash": fingerprint(row['text'])})
     for row in supplement or []:
         if not row.get("labels") or any(label not in LABEL2ID for label in row["labels"]):
             raise ValueError("invalid supplement label")
@@ -96,9 +101,30 @@ def build_dataset(
                          (("train", train), ("val", val), ("test", test))},
         "counts": {"train": len(train), "val": len(val), "test": len(test)},
         "class_counts_original": class_counts,
-        "status": "ready" if ready else "pending_data",
+        "status": 'pending_review' if any(row.get('reviewed') is not True for row in train) else "ready" if ready else "pending_data",
     }
     return DatasetBuild(tuple(train), tuple(val), tuple(test), manifest)
+
+
+def review_augmentation(build: DatasetBuild, decisions: list[dict]) -> DatasetBuild:
+    """Apply human decisions to train only; preserve the fixed holdout objects."""
+    augmented = {row['review_id'] for row in build.train if row.get('origin') == 'augmented'}
+    selected = {}
+    for row in decisions:
+        key = row.get('review_id')
+        if key not in augmented or key in selected or type(row.get('approved')) is not bool:
+            raise ValueError('invalid or duplicate augmentation decision')
+        selected[key] = row['approved']
+    train = tuple({**row, 'reviewed': True} if selected.get(row.get('review_id')) is True else row
+                  for row in build.train if selected.get(row.get('review_id')) is not False)
+    manifest = json.loads(json.dumps(build.manifest))
+    pending = any(row.get('reviewed') is not True for row in train)
+    ready = bool(build.val and build.test) and all(value >= 100 for value in manifest['class_counts_original'].values())
+    manifest['status'] = 'pending_review' if pending else 'ready' if ready else 'pending_data'
+    manifest['split_hashes']['train'] = _hash_json(train)
+    manifest['counts']['train'] = len(train)
+    manifest.setdefault('augmentation', {})['semantic_review'] = 'pending' if pending else 'complete'
+    return replace(build, train=train, manifest=manifest)
 
 
 def write_dataset(build: DatasetBuild, directory: Path) -> None:
@@ -114,16 +140,48 @@ def write_dataset(build: DatasetBuild, directory: Path) -> None:
     )
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=Path("data/ch10/corpus_labeled.jsonl"))
     parser.add_argument("--out", type=Path, default=Path("data/ch10/dataset"))
     parser.add_argument("--include-supplement", action="store_true")
-    args = parser.parse_args()
+    parser.add_argument('--augment', action='store_true')
+    parser.add_argument('--augmentation-cache', type=Path, default=Path('data/ch10/augmentation-cache.json'))
+    parser.add_argument('--augmentation-decisions', type=Path)
+    parser.add_argument('--allow-external-real-text', action='store_true')
+    args = parser.parse_args(argv)
     rows = [json.loads(line) for line in args.source.read_text(encoding="utf-8").splitlines() if line.strip()]
     supplement = ([json.loads(line) for line in SUPPLEMENT.read_text(encoding="utf-8").splitlines()
                    if line.strip()] if args.include_supplement else None)
-    build = build_dataset(rows, supplement=supplement)
+    augmentation = None
+    prepared = None
+    if args.augment:
+        from scripts.ch10.text_jobs import external_allowed, prepare_augmentation
+        if not external_allowed(args.allow_external_real_text):
+            print('status=pending_upstream augmentation requires explicit real-text permission')
+            return
+        from app.core.llm import get_chat_model
+        base = build_dataset(rows)
+        prepared = asyncio.run(prepare_augmentation(list(base.train), get_chat_model(temperature=0),
+                               args.augmentation_cache, allow_external_real_text=args.allow_external_real_text))
+        augmentation = lambda row: prepared[fingerprint(row['text'])].get('text')
+    build = build_dataset(rows, augment_fn=augmentation, supplement=supplement)
+    if prepared is not None:
+        counts = Counter(value['status'] for value in prepared.values())
+        unavailable = counts['failed'] + counts['pending_upstream']
+        build.manifest['augmentation'] = {
+            'status': 'pending_upstream' if unavailable else 'complete',
+            'counts': dict(counts),
+            'accepted': sum(row.get('origin') == 'augmented' for row in build.train),
+            'semantic_review': 'pending',
+        }
+        if unavailable and build.manifest['status'] == 'ready':
+            build.manifest['status'] = 'partial'
+    if args.augmentation_decisions:
+        decisions = [json.loads(line) for line in args.augmentation_decisions.read_text(encoding='utf-8').splitlines() if line.strip()]
+        build = review_augmentation(build, decisions)
+        if prepared is not None and build.manifest['augmentation'].get('status') == 'pending_upstream' and build.manifest['status'] == 'ready':
+            build.manifest['status'] = 'partial'
     write_dataset(build, args.out)
     print(f"status={build.manifest['status']} train={len(build.train)} "
           f"val={len(build.val)} test={len(build.test)}")

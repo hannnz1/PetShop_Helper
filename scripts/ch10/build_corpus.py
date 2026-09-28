@@ -6,7 +6,7 @@ import hashlib
 import ipaddress
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -47,6 +47,8 @@ class CorpusReport:
     failures: tuple[int, ...] = ()
     missing: dict[str, int] | None = None
     failed_rows: tuple[dict, ...] = ()
+    raw_rows: tuple[dict, ...] = ()
+    clean_rows: tuple[dict, ...] = ()
 
 
 def _local_url(value: str) -> bool:
@@ -98,15 +100,17 @@ def audit_sample(rows: list[dict], *, per_class: int = 5, seed: int = 42) -> lis
 
 async def build_corpus(
     raw_rows: list[dict], *, prelabel, golden_report: GoldenReport | None = None,
-    simulate=None, allow_external_real_text: bool = False, target_per_class: int = 100,
+    simulate=None, allow_external_real_text: bool = False, target_per_class: int = 100, clean_model=None,
 ) -> CorpusReport:
     """Prepare a batch only after privacy and reviewed-golden gates."""
     if not allow_external_real_text and not _local_url(get_settings().chat_base_url):
         return CorpusReport("pending_upstream")
     if golden_report is None or not golden_report.passed:
         return CorpusReport("pending_review")
-    masked = dedupe([{**row, "text": desensitize(row["text"]), "origin": row.get("origin", "pool")}
-                     for row in raw_rows])
+    from scripts.ch10.text_jobs import prepare_rows, clean_rows
+    prepared = prepare_rows(raw_rows)
+    masked = (await clean_rows(prepared, clean_model, allow_external_real_text=allow_external_real_text)
+              if clean_model is not None else prepared)
     labeled: list[dict] = []
     failures: list[int] = []
     failed_rows: list[dict] = []
@@ -136,7 +140,8 @@ async def build_corpus(
         labeled = dedupe(labeled)
         missing = missing_by_class(labeled, target=target_per_class)
     status = "partial" if failures else ("pending_data" if any(missing.values()) else "ready")
-    return CorpusReport(status, tuple(labeled), tuple(failures), missing, tuple(failed_rows))
+    return CorpusReport(status, tuple(labeled), tuple(failures), missing, tuple(failed_rows),
+                        tuple(prepared), tuple(masked))
 
 
 def write_corpus(report: CorpusReport, directory: Path) -> None:
@@ -146,7 +151,9 @@ def write_corpus(report: CorpusReport, directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     rows = []
     for row in (*report.labeled, *report.failed_rows):
-        if row.get("id") is not None:
+        if row.get('review_id'):
+            review_id = row['review_id']
+        elif row.get("id") is not None:
             review_id = f"pool-{row['id']}"
         else:
             digest = hashlib.sha256((row["origin"] + "\0" + row["text"]).encode("utf-8")).hexdigest()[:16]
@@ -157,7 +164,17 @@ def write_corpus(report: CorpusReport, directory: Path) -> None:
     (directory / "corpus_labeled.jsonl").write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows), encoding="utf-8",
     )
+    for name, stage in (('raw', report.raw_rows), ('clean', report.clean_rows)):
+        (directory / f'corpus_{name}.jsonl').write_text(
+            '\n'.join(json.dumps(row, ensure_ascii=False) for row in stage), encoding='utf-8',
+        )
     audit = audit_sample(rows)
+    (directory / 'corpus_report.json').write_text(json.dumps({
+        'status': report.status, 'counts': {'raw': len(report.raw_rows), 'clean': len(report.clean_rows),
+            'labeled': len(report.labeled), 'failed': len(report.failed_rows)}, 'missing_by_class': report.missing,
+        'metadata': {'taxonomy_hash': hashlib.sha256(terminology_table().encode()).hexdigest(),
+            'clean_hash': hashlib.sha256((directory/'corpus_clean.jsonl').read_bytes()).hexdigest()},
+    }, ensure_ascii=False, indent=2), encoding='utf-8')
     (directory / "audit.md").write_text(
         "\n".join(f"- {row['review_id']} [{','.join(row.get('labels', [])) or '待人工标注'}] {row['text']}"
                   for row in audit),
@@ -194,7 +211,7 @@ async def main() -> None:
     parser.add_argument("--synthetic-only", action="store_true")
     parser.add_argument("--allow-external-real-text", action="store_true")
     parser.add_argument("--limit", type=int, default=1000)
-    parser.add_argument("--out", type=Path, default=Path("data/ch10"))
+    parser.add_argument("--out", type=Path, default=Path("data/ch10/corpus"))
     args = parser.parse_args()
     if args.synthetic_only:
         report = run_synthetic(args.out)
@@ -208,12 +225,21 @@ async def main() -> None:
         print(f"status=pending_upstream pool_rows={len(rows)}")
         return
     from app.core.llm import get_chat_model
-    from scripts.ch10.prelabel import prelabel_one
+    from scripts.ch10.prelabel import prelabel_one, prelabel_fingerprint
 
     model = get_chat_model(temperature=0)
     golden = load_golden()
     predictions = [(await prelabel_one(row["text"], model)).labels for row in golden]
     golden_report = validate_golden(golden, predictions)
+    from scripts.ch10.validate_golden import GOLDEN
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out/'golden_report.json').write_text(json.dumps({
+        **asdict(golden_report), 'status': 'passed' if golden_report.passed else 'failed',
+        'metadata': {'golden_hash': hashlib.sha256(GOLDEN.read_bytes()).hexdigest(),
+                     'taxonomy_hash': hashlib.sha256(terminology_table().encode()).hexdigest(),
+                     'prelabel_model': get_settings().chat_model},
+        'prelabel_version': prelabel_fingerprint(),
+    }, ensure_ascii=False, indent=2), encoding='utf-8')
     if not golden_report.passed:
         print(f"status=pending_review golden_rate={golden_report.rate:.3f}")
         return
@@ -222,6 +248,7 @@ async def main() -> None:
         golden_report=golden_report,
         simulate=lambda label, need: simulate_class(model, label, need),
         allow_external_real_text=args.allow_external_real_text,
+        clean_model=model,
     )
     write_corpus(report, args.out)
     print(f"status={report.status} labeled={len(report.labeled)} failures={len(report.failures)}")

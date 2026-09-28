@@ -6,7 +6,7 @@ The DDL is applied independently; these classes never create or migrate tables.
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, String, Text, text
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, Numeric, String, Text, text, Float
 from sqlalchemy.dialects.mysql import BIGINT, ENUM, INTEGER, TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.schema import FetchedValue
@@ -379,3 +379,29 @@ class FaithCase(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     resolution: Mapped[str | None] = mapped_column(String(300))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class TopicClassification(Base):
+    __tablename__ = 'topic_classifications'
+    id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    question_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), ForeignKey('low_confidence_questions.id'), unique=True)
+    labels: Mapped[list] = mapped_column(JSON)
+    model_version: Mapped[str] = mapped_column(String(64))
+    taxonomy_hash: Mapped[str] = mapped_column(String(64))
+    threshold: Mapped[float] = mapped_column(Float)
+    input_hash: Mapped[str] = mapped_column(String(64))
+    run_id: Mapped[str] = mapped_column(String(64))
+    classified_at: Mapped[datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class TopicClassificationRun(Base):
+    __tablename__ = 'topic_classification_runs'
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_version: Mapped[str | None] = mapped_column(String(64))
+    started_at: Mapped[datetime] = mapped_column(DateTime, server_default=text('CURRENT_TIMESTAMP'))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    pending_count: Mapped[int] = mapped_column(INTEGER(unsigned=True))
+    success_count: Mapped[int] = mapped_column(INTEGER(unsigned=True))
+    failed_count: Mapped[int] = mapped_column(INTEGER(unsigned=True))
+    status: Mapped[str] = mapped_column(String(24))
+    report_path: Mapped[str | None] = mapped_column(String(255))

@@ -2,8 +2,9 @@
 
 import argparse
 import json
+import hashlib
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from app.core.taxonomy import LABEL2ID
@@ -17,6 +18,7 @@ class ExportReport:
     checked: int = 0
     mismatches: int = 0
     reason: str = ""
+    metadata: dict = field(default_factory=dict)
 
 
 def export_options() -> dict:
@@ -124,7 +126,20 @@ def _export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> Ex
 def export_and_verify(model_dir: Path, test_path: Path, output_dir: Path) -> ExportReport:
     """Persist a failure report even when export or runtime loading raises."""
     try:
-        return _export_and_verify(model_dir, test_path, output_dir)
+        result = _export_and_verify(model_dir, test_path, output_dir)
+        if result.status == 'passed':
+            from scripts.ch10.inference_lib import bundle_metadata
+            from scripts.ch10.train import checkpoint_hash
+            threshold = json.loads((output_dir/'threshold.json').read_text(encoding='utf-8'))['threshold']
+            source_hash = checkpoint_hash(model_dir)
+            if source_hash is None:
+                raise ValueError('source checkpoint missing')
+            meta = {**bundle_metadata(output_dir, threshold),
+                    'test_hash': hashlib.sha256(test_path.read_bytes()).hexdigest(),
+                    'checkpoint_hash': source_hash}
+            result = replace(result, metadata=meta)
+            _report(output_dir, result)
+        return result
     except Exception as exc:
         return _report(output_dir, ExportReport("failed", reason=type(exc).__name__))
 

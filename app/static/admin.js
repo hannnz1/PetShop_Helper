@@ -5,8 +5,10 @@
     { label: '知识库', href: '/kb', key: 'kb' },
     { label: '问题池', href: '/topics', key: 'topics' },
     { label: '审核队列', href: '/review', key: 'review' },
+    { label: '观测与用量', href: '/observability', key: 'observability' },
     { label: '验收看板', href: '/acceptance', key: 'acceptance' },
     { label: 'RAG 评估', href: '/rag-eval', key: 'rag-eval' },
+    { label: '逐章演示', href: '/manual-test-samples', key: 'manual-test-samples' },
   ];
   const subpages = {
     kb: [

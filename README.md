@@ -1,4 +1,14 @@
-# PetShop_Helper：电商智能客服（第 1–3 章开发中）
+# PetShop_Helper：电商智能客服（MewHelp 功能对齐中）
+
+私有远程仓库：[hannnz1/PetShop_Helper](https://github.com/hannnz1/PetShop_Helper)。GitHub主分支用于保存最新开发快照；上传代码不代表正式数据库、向量库或真实分类质量已经验收。密钥、数据库、模型权重及本地缓存不随Git上传，新机器须单独配置。
+
+当前最新开发入口为 `C:/Users/Administrator/Documents/Codex/2026-09-23/kai/PetShop_Helper/.worktrees/ch08-tool-system`。后续章节代码在该 worktree；上层主目录尚未最终集成。运行命令前先进入此目录，保留现有 `.env`，不要直接覆盖。
+
+第1–10章已有代码与本轮补齐/真实验收状态见 [执行状态](docs/mewhelp-alignment-status.md) 和 [21项清单](docs/mewhelp-feature-alignment-checklist.md)。下面早期章节说明保留作历史演示入口，不能据此认定最终版本已通过全部验收。
+
+本轮已接通反馈、审核/观测后台、分类持久化、主题分页与九项验收页面。最新启动方式、迁移和恢复命令见 [部署说明](docs/DEPLOY.md)，测试与具体阻塞见 [最终阶段验收记录](docs/mewhelp-alignment-final-acceptance.md)。仍缺真实训练产物与部分基础服务，不能宣称全部真实验收完成。
+
+在最新 worktree 中可复用上层配置而不复制密钥：`./scripts/start-alignment.ps1 -EnvFile ../../.env`。默认只监听本机8000，后台入口 `/admin`，逐章样例 `/manual-test-samples`；该命令不安装依赖、不重建数据库。
 
 FastAPI 服务通过 OpenAI 兼容的 **Chat Completions** 接口连接模型。`/api/chat` 返回带工具轨迹的 SSE 流，使用 MySQL 保存多轮会话；`/api/agent` 返回完整 JSON 及工具轨迹；`/api/extract` 将售后描述提取为固定字段。第 2 章包括五个 LangChain 工具：三个模拟数据查询、FAQ 查询和工单创建。第 3 章正在把 FAQ 内部查询切换为 BGE-M3 + Milvus Lite 的 dense 语义检索，并建设 `/kb` 知识库工作台。订单、商品、物流查询结果均为演示数据。
 

@@ -30,6 +30,12 @@ h1{font-size:clamp(28px,4vw,42px);line-height:1.2;margin:8px 0}p{color:var(--mut
   mountAdminNav('admin');
   const cards = document.getElementById('cards');
   const defaults = [
+    {id:'topics',name:'问题主题',href:'/topics'},
+    {id:'acceptance',name:'分类器验收',href:'/acceptance'},
+    {id:'manual-test-samples',name:'逐章演示',href:'/manual-test-samples'},
+    {id:'rag-eval',name:'RAG 评估',href:'/rag-eval'},
+    {id:'review',name:'人工审核',href:'/review'},
+    {id:'observability',name:'观测与用量',href:'/observability'},
     {id:'chat',name:'纯对话客服',href:'/'},
     {id:'agent',name:'工具客服',href:'/'},
     {id:'kb',name:'知识库',href:'/kb'},

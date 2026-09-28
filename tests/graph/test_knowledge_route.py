@@ -19,7 +19,11 @@ async def test_strong_numbered_evidence_enters_agent_without_low_confidence_writ
     async def save(*args):
         written.append(args)
 
-    monkeypatch.setattr(nodes, "query_faq", Faq())
+    async def pipeline(query, *, gate):
+        assert gate == 'calibrated'
+        return await Faq().ainvoke({'keyword': query})
+
+    monkeypatch.setattr(nodes, 'run_faq_pipeline', pipeline)
     monkeypatch.setattr(nodes.repository, "insert_low_confidence", save)
     update = await nodes.forced_rag({"query": "MH-W40 滤芯多久换", "conversation_id": 17})
     assert update["sufficient"] is True
@@ -47,7 +51,11 @@ async def test_weak_or_legacy_result_refuses_and_records_one_question(monkeypatc
     async def save(*args):
         written.append(args)
 
-    monkeypatch.setattr(nodes, "query_faq", Faq())
+    async def pipeline(query, *, gate):
+        assert gate == 'calibrated'
+        return await Faq().ainvoke({'keyword': query})
+
+    monkeypatch.setattr(nodes, 'run_faq_pipeline', pipeline)
     monkeypatch.setattr(nodes.repository, "insert_low_confidence", save)
     update = await nodes.forced_rag({"query": "火星车有货吗", "conversation_id": 17})
     assert update["sufficient"] is False
@@ -70,7 +78,11 @@ async def test_retrieval_error_fails_closed_and_records_reason(monkeypatch):
     async def save(*args):
         written.append(args)
 
-    monkeypatch.setattr(nodes, "query_faq", Faq())
+    async def pipeline(query, *, gate):
+        assert gate == 'calibrated'
+        return await Faq().ainvoke({'keyword': query})
+
+    monkeypatch.setattr(nodes, 'run_faq_pipeline', pipeline)
     monkeypatch.setattr(nodes.repository, "insert_low_confidence", save)
     update = await nodes.forced_rag({"query": "退款规定", "conversation_id": 17})
     assert update["sufficient"] is False
